@@ -1,7 +1,12 @@
-# SMC Monitor — run-monitor.sh
-# Versão: 0.1.0
+#!/bin/bash
+set -e
 
-# OBJETIVO: [a ser implementado]
-# FONTE DE DADOS: [a ser implementado]
-# LIMITAÇÕES CONHECIDAS: [a ser implementado]
-# NÃO FAZER: [a ser implementado]
+source ~/.bashrc
+
+export SMC_TELEGRAM_TOKEN="${SMC_TELEGRAM_TOKEN}"
+export SMC_TELEGRAM_CHAT_ID="${SMC_TELEGRAM_CHAT_ID}"
+
+source ~/SMC_Monitor/venv/bin/activate
+
+cd ~/SMC_Monitor
+exec python main.py
