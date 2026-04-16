@@ -1,7 +1,16 @@
-# SMC Monitor — smc-monitor.service
-# Versão: 0.1.0
+[Unit]
+Description=SMC Monitor — Smart Money Concepts trading daemon
+After=network.target
 
-# OBJETIVO: [a ser implementado]
-# FONTE DE DADOS: [a ser implementado]
-# LIMITAÇÕES CONHECIDAS: [a ser implementado]
-# NÃO FAZER: [a ser implementado]
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/SMC_Monitor
+ExecStart=/home/ubuntu/SMC_Monitor/deploy/run-monitor.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
