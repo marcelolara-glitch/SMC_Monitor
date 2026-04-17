@@ -346,10 +346,15 @@ class SMCEngine:
 
     def _update_premium_discount(self, token: str, timeframe: str) -> None:
         """
-        Range = swing_high - swing_low.
-        Equilibrium = 50% do range.
-        Premium: preço atual > equilibrium.
-        Discount: preço atual < equilibrium.
+        OBJETIVO: classificar o preço atual como premium, discount ou equilibrium
+                  em relação ao midpoint do range swing_high/swing_low.
+        FONTE DE DADOS: swing_high e swing_low já atualizados neste ciclo por
+                        _update_swings; último close do buffer circular.
+        LIMITAÇÕES CONHECIDAS: requer swing_high > swing_low para ser significativo;
+                               retorna equilibrium se swings ainda não estiverem
+                               disponíveis (estado inicial).
+        NÃO FAZER: não delegar à lib — cálculo trivial e próprio do projeto;
+                   não usar médias móveis ou outros indicadores para o range.
         """
         candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
