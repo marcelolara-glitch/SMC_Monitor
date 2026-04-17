@@ -164,62 +164,58 @@ class SMCEngine:
 
     def _update_bos_choch(self, token: str, timeframe: str) -> None:
         """
-        BOS: preço fecha além do último swing high/low na direção da tendência.
-        ChoCH: preço fecha além do swing oposto (reversão).
-        Usa fechamento de vela (body break), nunca wick.
+        OBJETIVO: detectar Break of Structure (BOS) e Change of Character (ChoCH)
+                  delegando à smc.bos_choch com close_break=True.
+        FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não derivar BOS/ChoCH de comparação manual de closes,
+                   não usar wick para confirmar quebra.
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        swing_highs, swing_lows = self._swing_points(candles)
-
-        if not swing_highs or not swing_lows:
+        if self._cycle_df is None or self._cycle_shl_df is None:
             return
+        try:
+            df = self._cycle_df
+            shl_df = self._cycle_shl_df
+            bos_df = smc.bos_choch(df, shl_df, close_break=True)
 
-        last_sh = swing_highs[-1]["price"]
-        last_sl = swing_lows[-1]["price"]
-        last_close = candles[-1]["close"]
-        last_ts = candles[-1]["ts"]
-        trend = state["trend"]
+            # Find last row with BOS or CHOCH signal
+            new_bos = None
+            for i in range(len(bos_df) - 1, -1, -1):
+                bos_val = bos_df["BOS"].iloc[i]
+                choch_val = bos_df["CHOCH"].iloc[i]
+                import math
+                bos_set = not (isinstance(bos_val, float) and math.isnan(bos_val))
+                choch_set = not (isinstance(choch_val, float) and math.isnan(choch_val))
+                if bos_set or choch_set:
+                    level = float(bos_df["Level"].iloc[i])
+                    ts_ms = int(df.index[i].timestamp() * 1000)
+                    if bos_set:
+                        sig_type = "BOS"
+                        direction = "bull" if float(bos_val) == 1 else "bear"
+                    else:
+                        sig_type = "ChoCH"
+                        direction = "bull" if float(choch_val) == 1 else "bear"
+                    new_bos = {
+                        "type": sig_type,
+                        "direction": direction,
+                        "price": level,
+                        "ts": ts_ms,
+                    }
+                    break
 
-        # Bootstrap trend from swing index positions when still neutral
-        if trend == "neutral":
-            if swing_highs[-1]["idx"] > swing_lows[-1]["idx"]:
-                trend = "bullish"
-            elif swing_lows[-1]["idx"] > swing_highs[-1]["idx"]:
-                trend = "bearish"
-
-        new_bos = None
-
-        if last_close > last_sh:
-            # break of the most recent swing high
-            bos_type = "BOS" if trend == "bullish" else "ChoCH"
-            new_bos = {
-                "type": bos_type,
-                "direction": "bull",
-                "price": last_sh,
-                "ts": last_ts,
-            }
-            trend = "bullish"
-
-        elif last_close < last_sl:
-            # break of the most recent swing low
-            bos_type = "BOS" if trend == "bearish" else "ChoCH"
-            new_bos = {
-                "type": bos_type,
-                "direction": "bear",
-                "price": last_sl,
-                "ts": last_ts,
-            }
-            trend = "bearish"
-
-        if new_bos:
-            state["last_bos"] = new_bos
-            logger.debug(
-                "%s/%s %s direction=%s price=%.4f",
-                token, timeframe, new_bos["type"], new_bos["direction"], new_bos["price"],
+            if new_bos:
+                state["last_bos"] = new_bos
+                state["trend"] = "bullish" if new_bos["direction"] == "bull" else "bearish"
+                logger.debug(
+                    "%s/%s %s direction=%s price=%.4f",
+                    token, timeframe, new_bos["type"], new_bos["direction"], new_bos["price"],
+                )
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_bos_choch failed: %s", token, timeframe, exc
             )
-
-        state["trend"] = trend
 
     def _update_order_blocks(self, token: str, timeframe: str) -> None:
         """
