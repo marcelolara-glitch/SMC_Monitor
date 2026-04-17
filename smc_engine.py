@@ -61,6 +61,10 @@ class SMCEngine:
         if len(self._buffers[token][timeframe]) < max_len:
             return  # buffer not yet full — not enough history to calculate
 
+        # Per-cycle DataFrame cache: set by _update_swings, consumed by siblings.
+        self._cycle_df = None
+        self._cycle_shl_df = None
+
         self._update_swings(token, timeframe)
         self._update_bos_choch(token, timeframe)
         self._update_order_blocks(token, timeframe)
@@ -128,18 +132,35 @@ class SMCEngine:
     # ─── SMC update methods ─────────────────────────────────────────────────────
 
     def _update_swings(self, token: str, timeframe: str) -> None:
-        """Detecta swing highs/lows usando SWING_LOOKBACK velas para cada lado."""
-        candles = self._candles(token, timeframe)
-        swing_highs, swing_lows = self._swing_points(candles)
-
+        """
+        OBJETIVO: detectar swing highs/lows delegando o cálculo à
+                  smartmoneyconcepts via smc.swing_highs_lows.
+        FONTE DE DADOS: buffer circular convertido em DataFrame.
+        LIMITAÇÕES CONHECIDAS: swing_length mínimo exige buffer suficiente;
+                               a lib retorna NaN nas bordas do DataFrame.
+        NÃO FAZER: não calcular swings manualmente, não usar wick sem
+                   confirmação de SWING_LOOKBACK velas em cada lado.
+        """
         state = self._states[token][timeframe]
+        try:
+            df = self._buffer_to_dataframe(self._buffers[token][timeframe])
+            shl_df = smc.swing_highs_lows(df, swing_length=config.SWING_LOOKBACK)
 
-        if swing_highs:
-            # most recent confirmed swing high
-            state["swing_high"] = swing_highs[-1]["price"]
+            highs = shl_df[shl_df["HighLow"] == 1]["Level"].dropna()
+            lows = shl_df[shl_df["HighLow"] == -1]["Level"].dropna()
 
-        if swing_lows:
-            state["swing_low"] = swing_lows[-1]["price"]
+            if not highs.empty:
+                state["swing_high"] = float(highs.iloc[-1])
+            if not lows.empty:
+                state["swing_low"] = float(lows.iloc[-1])
+
+            # cache for reuse in subsequent _update_* calls this cycle
+            self._cycle_df = df
+            self._cycle_shl_df = shl_df
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_swings failed: %s", token, timeframe, exc
+            )
 
     def _update_bos_choch(self, token: str, timeframe: str) -> None:
         """
