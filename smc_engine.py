@@ -426,6 +426,32 @@ class SMCEngine:
 
 # ─── Module-level helpers ────────────────────────────────────────────────────
 
+def _get_lib_version() -> str:
+    """
+    OBJETIVO: obter a versão instalada da smartmoneyconcepts de forma robusta,
+              tentando primeiro importlib.metadata (padrão moderno) e caindo
+              para atributo __version__ se necessário.
+    FONTE DE DADOS: metadados do pacote smartmoneyconcepts instalado pelo pip.
+    LIMITAÇÕES CONHECIDAS: retorna "unknown" se nenhum método conseguir obter
+                           a versão. Logar essa situação é responsabilidade do
+                           chamador.
+    NÃO FAZER: não consultar PyPI (isso é papel do lib_version_check),
+               não fazer cache (a função é chamada raramente).
+
+    Retorna string com a versão (ex: "0.0.27") ou "unknown".
+    """
+    import importlib.metadata
+    try:
+        return importlib.metadata.version("smartmoneyconcepts")
+    except importlib.metadata.PackageNotFoundError:
+        pass
+    try:
+        import smartmoneyconcepts
+        return getattr(smartmoneyconcepts, "__version__", None) or smc.__version__
+    except (AttributeError, ImportError):
+        return "unknown"
+
+
 def _smoke_test_library() -> tuple:
     """
     OBJETIVO: validar que a smartmoneyconcepts instalada retorna as colunas
