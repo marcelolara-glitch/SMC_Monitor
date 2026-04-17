@@ -10,6 +10,7 @@ NÃO FAZER: nenhum cálculo SMC, nenhuma lógica de sinal — apenas orquestraç
 """
 
 import collections
+import datetime
 import logging
 import sys
 import threading
@@ -18,6 +19,7 @@ import time
 import smartmoneyconcepts
 
 import config
+import lib_version_check
 import signals
 import smc_engine
 from smc_engine import _smoke_test_library
@@ -82,6 +84,21 @@ def _heartbeat_loop() -> None:
         telegram.send_heartbeat(msg)
 
 
+def _version_check_loop() -> None:
+    # Wakes every hour; fires check_for_updates on Monday 09:00–09:59 UTC.
+    _last_check_week: int | None = None
+
+    while True:
+        time.sleep(3600)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        # weekday() == 0 is Monday; check window 09:00–09:59 UTC
+        if now.weekday() == 0 and now.hour == 9:
+            iso_week = now.isocalendar()[1]
+            if iso_week != _last_check_week:
+                _last_check_week = iso_week
+                lib_version_check.check_for_updates()
+
+
 def main() -> None:
     global _candle_count
 
@@ -140,6 +157,9 @@ def main() -> None:
 
     hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True, name="heartbeat")
     hb_thread.start()
+
+    vc_thread = threading.Thread(target=_version_check_loop, daemon=True, name="version-check")
+    vc_thread.start()
 
     def on_candle(token: str, timeframe: str, candle: dict) -> None:
         global _candle_count
