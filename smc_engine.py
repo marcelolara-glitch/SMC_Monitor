@@ -1,5 +1,5 @@
 # SMC Monitor — smc_engine.py
-# Versão: 0.1.0
+# Versão: 0.1.1
 
 """
 OBJETIVO: Mantém estado SMC completo por token/timeframe.
@@ -11,7 +11,10 @@ NÃO FAZER: sem I/O, sem lógica de sinal, sem persistência.
 
 import collections
 import logging
-from typing import Dict, List
+from typing import Dict
+
+import pandas as pd
+from smartmoneyconcepts import smc
 
 import config
 
@@ -32,6 +35,9 @@ class SMCEngine:
         self._buffers: Dict[str, Dict[str, collections.deque]] = {}
         # _states[token][timeframe] -> SMC state dict
         self._states: Dict[str, Dict[str, dict]] = {}
+        ok, msg = _smoke_test_library()
+        if not ok:
+            raise RuntimeError(f"smartmoneyconcepts smoke test failed: {msg}")
 
     # ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -54,6 +60,10 @@ class SMCEngine:
 
         if len(self._buffers[token][timeframe]) < max_len:
             return  # buffer not yet full — not enough history to calculate
+
+        # Per-cycle DataFrame cache: set by _update_swings, consumed by siblings.
+        self._cycle_df = None
+        self._cycle_shl_df = None
 
         self._update_swings(token, timeframe)
         self._update_bos_choch(token, timeframe)
@@ -104,266 +114,247 @@ class SMCEngine:
         """Buffer como lista simples oldest → newest."""
         return list(self._buffers[token][timeframe])
 
-    def _swing_points(self, candles: list) -> tuple:
+    def _buffer_to_dataframe(self, buffer) -> pd.DataFrame:
         """
-        Retorna (swing_highs, swing_lows) como listas de dicts
-        {"price": float, "idx": int} em ordem cronológica.
-        Requer SWING_LOOKBACK velas confirmadas em cada lado.
+        OBJETIVO: converter deque de candles em DataFrame pandas pronto para
+                  uso com a smartmoneyconcepts lib.
+        FONTE DE DADOS: buffer circular mantido por on_candle.
+        LIMITAÇÕES CONHECIDAS: requer que os dicts no buffer tenham as keys
+                               ts, open, high, low, close, volume.
+        NÃO FAZER: não alterar a ordem dos candles, não filtrar candles.
         """
-        lb = config.SWING_LOOKBACK
-        swing_highs: List[dict] = []
-        swing_lows: List[dict] = []
-
-        for i in range(lb, len(candles) - lb):
-            high_i = candles[i]["high"]
-            low_i = candles[i]["low"]
-
-            if all(
-                candles[i + d]["high"] < high_i and candles[i - d]["high"] < high_i
-                for d in range(1, lb + 1)
-            ):
-                swing_highs.append({"price": high_i, "idx": i})
-
-            if all(
-                candles[i + d]["low"] > low_i and candles[i - d]["low"] > low_i
-                for d in range(1, lb + 1)
-            ):
-                swing_lows.append({"price": low_i, "idx": i})
-
-        return swing_highs, swing_lows
+        rows = list(buffer)
+        df = pd.DataFrame(rows)
+        df["datetime"] = pd.to_datetime(df["ts"], unit="ms", utc=True)
+        df = df.set_index("datetime")
+        return df[["open", "high", "low", "close", "volume"]]
 
     # ─── SMC update methods ─────────────────────────────────────────────────────
 
     def _update_swings(self, token: str, timeframe: str) -> None:
-        """Detecta swing highs/lows usando SWING_LOOKBACK velas para cada lado."""
-        candles = self._candles(token, timeframe)
-        swing_highs, swing_lows = self._swing_points(candles)
-
+        """
+        OBJETIVO: detectar swing highs/lows delegando o cálculo à
+                  smartmoneyconcepts via smc.swing_highs_lows.
+        FONTE DE DADOS: buffer circular convertido em DataFrame.
+        LIMITAÇÕES CONHECIDAS: swing_length mínimo exige buffer suficiente;
+                               a lib retorna NaN nas bordas do DataFrame.
+        NÃO FAZER: não calcular swings manualmente, não usar wick sem
+                   confirmação de SWING_LOOKBACK velas em cada lado.
+        """
         state = self._states[token][timeframe]
+        try:
+            df = self._buffer_to_dataframe(self._buffers[token][timeframe])
+            shl_df = smc.swing_highs_lows(df, swing_length=config.SWING_LOOKBACK)
 
-        if swing_highs:
-            # most recent confirmed swing high
-            state["swing_high"] = swing_highs[-1]["price"]
+            highs = shl_df[shl_df["HighLow"] == 1]["Level"].dropna()
+            lows = shl_df[shl_df["HighLow"] == -1]["Level"].dropna()
 
-        if swing_lows:
-            state["swing_low"] = swing_lows[-1]["price"]
+            if not highs.empty:
+                state["swing_high"] = float(highs.iloc[-1])
+            if not lows.empty:
+                state["swing_low"] = float(lows.iloc[-1])
+
+            # cache for reuse in subsequent _update_* calls this cycle
+            self._cycle_df = df
+            self._cycle_shl_df = shl_df
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_swings failed: %s", token, timeframe, exc
+            )
 
     def _update_bos_choch(self, token: str, timeframe: str) -> None:
         """
-        BOS: preço fecha além do último swing high/low na direção da tendência.
-        ChoCH: preço fecha além do swing oposto (reversão).
-        Usa fechamento de vela (body break), nunca wick.
+        OBJETIVO: detectar Break of Structure (BOS) e Change of Character (ChoCH)
+                  delegando à smc.bos_choch com close_break=True.
+        FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não derivar BOS/ChoCH de comparação manual de closes,
+                   não usar wick para confirmar quebra.
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        swing_highs, swing_lows = self._swing_points(candles)
-
-        if not swing_highs or not swing_lows:
+        if self._cycle_df is None or self._cycle_shl_df is None:
             return
+        try:
+            df = self._cycle_df
+            shl_df = self._cycle_shl_df
+            bos_df = smc.bos_choch(df, shl_df, close_break=True)
 
-        last_sh = swing_highs[-1]["price"]
-        last_sl = swing_lows[-1]["price"]
-        last_close = candles[-1]["close"]
-        last_ts = candles[-1]["ts"]
-        trend = state["trend"]
+            # Find last row with BOS or CHOCH signal
+            new_bos = None
+            for i in range(len(bos_df) - 1, -1, -1):
+                bos_val = bos_df["BOS"].iloc[i]
+                choch_val = bos_df["CHOCH"].iloc[i]
+                import math
+                bos_set = not (isinstance(bos_val, float) and math.isnan(bos_val))
+                choch_set = not (isinstance(choch_val, float) and math.isnan(choch_val))
+                if bos_set or choch_set:
+                    level = float(bos_df["Level"].iloc[i])
+                    ts_ms = int(df.index[i].timestamp() * 1000)
+                    if bos_set:
+                        sig_type = "BOS"
+                        direction = "bull" if float(bos_val) == 1 else "bear"
+                    else:
+                        sig_type = "ChoCH"
+                        direction = "bull" if float(choch_val) == 1 else "bear"
+                    new_bos = {
+                        "type": sig_type,
+                        "direction": direction,
+                        "price": level,
+                        "ts": ts_ms,
+                    }
+                    break
 
-        # Bootstrap trend from swing index positions when still neutral
-        if trend == "neutral":
-            if swing_highs[-1]["idx"] > swing_lows[-1]["idx"]:
-                trend = "bullish"
-            elif swing_lows[-1]["idx"] > swing_highs[-1]["idx"]:
-                trend = "bearish"
-
-        new_bos = None
-
-        if last_close > last_sh:
-            # break of the most recent swing high
-            bos_type = "BOS" if trend == "bullish" else "ChoCH"
-            new_bos = {
-                "type": bos_type,
-                "direction": "bull",
-                "price": last_sh,
-                "ts": last_ts,
-            }
-            trend = "bullish"
-
-        elif last_close < last_sl:
-            # break of the most recent swing low
-            bos_type = "BOS" if trend == "bearish" else "ChoCH"
-            new_bos = {
-                "type": bos_type,
-                "direction": "bear",
-                "price": last_sl,
-                "ts": last_ts,
-            }
-            trend = "bearish"
-
-        if new_bos:
-            state["last_bos"] = new_bos
-            logger.debug(
-                "%s/%s %s direction=%s price=%.4f",
-                token, timeframe, new_bos["type"], new_bos["direction"], new_bos["price"],
+            if new_bos:
+                state["last_bos"] = new_bos
+                state["trend"] = "bullish" if new_bos["direction"] == "bull" else "bearish"
+                logger.debug(
+                    "%s/%s %s direction=%s price=%.4f",
+                    token, timeframe, new_bos["type"], new_bos["direction"], new_bos["price"],
+                )
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_bos_choch failed: %s", token, timeframe, exc
             )
-
-        state["trend"] = trend
 
     def _update_order_blocks(self, token: str, timeframe: str) -> None:
         """
-        OB bullish: última vela de baixa antes de movimento de alta forte.
-        OB bearish: última vela de alta antes de movimento de baixa forte.
-        Score: volume relativo + magnitude do deslocamento subsequente.
-        Invalida OBs cujo range foi completamente mitigado pelo preço.
+        OBJETIVO: detectar Order Blocks delegando à smc.ob e mapear o resultado
+                  para o formato interno, preservando apenas OBs não-mitigados.
+        FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não re-implementar lógica de detecção de OB manualmente,
+                   não incluir OBs já mitigados na lista active_obs.
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        last_close = candles[-1]["close"]
-        min_disp = config.OB_MIN_DISPLACEMENT
+        if self._cycle_df is None or self._cycle_shl_df is None:
+            return
+        try:
+            import math
+            df = self._cycle_df
+            shl_df = self._cycle_shl_df
+            ob_df = smc.ob(df, shl_df, close_mitigation=False)
 
-        # Invalidate fully mitigated OBs
-        for ob in state["active_obs"]:
-            if ob["mitigated"]:
-                continue
-            if ob["type"] == "bull" and last_close < ob["bottom"]:
-                ob["mitigated"] = True
-            elif ob["type"] == "bear" and last_close > ob["top"]:
-                ob["mitigated"] = True
+            new_obs = []
+            for i in range(len(ob_df)):
+                ob_val = ob_df["OB"].iloc[i]
+                if isinstance(ob_val, float) and math.isnan(ob_val):
+                    continue
+                mitigated_idx = ob_df["MitigatedIndex"].iloc[i]
+                mitigated = not (isinstance(mitigated_idx, float) and math.isnan(mitigated_idx)) and float(mitigated_idx) > 0
+                if mitigated:
+                    continue
+                ob_type = "bull" if float(ob_val) == 1 else "bear"
+                pct = ob_df["Percentage"].iloc[i]
+                displacement = float(pct) / 100.0 if not (isinstance(pct, float) and math.isnan(pct)) else 0.0
+                ob_entry = {
+                    "ts": int(df.index[i].timestamp() * 1000),
+                    "type": ob_type,
+                    "top": float(ob_df["Top"].iloc[i]),
+                    "bottom": float(ob_df["Bottom"].iloc[i]),
+                    "volume": float(ob_df["OBVolume"].iloc[i]),
+                    "displacement": displacement,
+                    "mitigated": False,
+                }
+                new_obs.append(ob_entry)
+                logger.debug(
+                    "%s/%s OB %s %.4f-%.4f disp=%.4f",
+                    token, timeframe, ob_type, ob_entry["bottom"], ob_entry["top"], displacement,
+                )
 
-        state["active_obs"] = [ob for ob in state["active_obs"] if not ob["mitigated"]]
-
-        # Build index of already-tracked OBs to avoid duplicates
-        tracked: set = {(ob["ts"], ob["type"]) for ob in state["active_obs"]}
-
-        # Detect new OBs: scan pairs (candle[i], candle[i+1])
-        for i in range(len(candles) - 1):
-            c = candles[i]
-            c_next = candles[i + 1]
-
-            # Bullish OB: bearish candle followed by strong bullish impulse
-            if c["close"] < c["open"]:
-                displacement = (c_next["close"] - c_next["open"]) / c["close"]
-                if displacement > min_disp and (c["ts"], "bull") not in tracked:
-                    ob = {
-                        "ts": c["ts"],
-                        "type": "bull",
-                        "top": c["open"],
-                        "bottom": c["close"],
-                        "volume": c["volume"],
-                        "displacement": displacement,
-                        "mitigated": False,
-                    }
-                    state["active_obs"].append(ob)
-                    tracked.add((c["ts"], "bull"))
-                    logger.debug(
-                        "%s/%s New bull OB %.4f-%.4f disp=%.4f",
-                        token, timeframe, ob["bottom"], ob["top"], displacement,
-                    )
-
-            # Bearish OB: bullish candle followed by strong bearish impulse
-            elif c["close"] > c["open"]:
-                displacement = (c_next["open"] - c_next["close"]) / c["close"]
-                if displacement > min_disp and (c["ts"], "bear") not in tracked:
-                    ob = {
-                        "ts": c["ts"],
-                        "type": "bear",
-                        "top": c["close"],
-                        "bottom": c["open"],
-                        "volume": c["volume"],
-                        "displacement": displacement,
-                        "mitigated": False,
-                    }
-                    state["active_obs"].append(ob)
-                    tracked.add((c["ts"], "bear"))
-                    logger.debug(
-                        "%s/%s New bear OB %.4f-%.4f disp=%.4f",
-                        token, timeframe, ob["bottom"], ob["top"], displacement,
-                    )
+            state["active_obs"] = new_obs
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_order_blocks failed: %s", token, timeframe, exc
+            )
 
     def _update_fvgs(self, token: str, timeframe: str) -> None:
         """
-        FVG: gap entre low[i] e high[i-2] (bullish) ou high[i] e low[i-2] (bearish).
-        Tamanho mínimo: FVG_MIN_SIZE * preço atual.
-        Rastreia mitigação pela mediana (50% do FVG).
-        Status: "active" | "partial" | "mitigated".
+        OBJETIVO: detectar Fair Value Gaps delegando à smc.fvg e mapear o
+                  resultado para o formato interno, com status derivado de
+                  MitigatedIndex e posição relativa ao midpoint.
+        FONTE DE DADOS: cycle_df cacheado por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não re-implementar padrão de 3 velas, não aplicar filtro
+                   FVG_MIN_SIZE (a lib não usa threshold — alinhamento intencional).
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        last_close = candles[-1]["close"]
-        min_size = config.FVG_MIN_SIZE * last_close
+        if self._cycle_df is None:
+            return
+        try:
+            import math
+            df = self._cycle_df
+            fvg_df = smc.fvg(df, join_consecutive=False)
+            last_close = float(df["close"].iloc[-1])
 
-        # Update mitigation status on surviving FVGs
-        for fvg in state["active_fvgs"]:
-            if fvg["status"] == "mitigated":
-                continue
-            mid = fvg["midpoint"]
-            if fvg["type"] == "bull":
-                # Bullish FVG mitigated when price drops below its bottom
-                if last_close <= fvg["bottom"]:
-                    fvg["status"] = "mitigated"
-                elif last_close <= mid:
-                    fvg["status"] = "partial"
-            else:  # bear
-                # Bearish FVG mitigated when price rises above its top
-                if last_close >= fvg["top"]:
-                    fvg["status"] = "mitigated"
-                elif last_close >= mid:
-                    fvg["status"] = "partial"
+            new_fvgs = []
+            for i in range(len(fvg_df)):
+                fvg_val = fvg_df["FVG"].iloc[i]
+                if isinstance(fvg_val, float) and math.isnan(fvg_val):
+                    continue
+                top = float(fvg_df["Top"].iloc[i])
+                bottom = float(fvg_df["Bottom"].iloc[i])
+                midpoint = (top + bottom) / 2
+                fvg_type = "bull" if float(fvg_val) == 1 else "bear"
 
-        state["active_fvgs"] = [f for f in state["active_fvgs"] if f["status"] != "mitigated"]
+                mitigated_idx = fvg_df["MitigatedIndex"].iloc[i]
+                has_mitigation = not (isinstance(mitigated_idx, float) and math.isnan(mitigated_idx)) and float(mitigated_idx) > 0
 
-        # Build index to avoid duplicates
-        tracked: set = {(f["ts"], f["type"]) for f in state["active_fvgs"]}
+                if has_mitigation:
+                    # Determine partial vs fully mitigated from current price position
+                    if fvg_type == "bull":
+                        if last_close <= bottom:
+                            status = "mitigated"
+                        elif last_close <= midpoint:
+                            status = "partial"
+                        else:
+                            status = "active"
+                    else:
+                        if last_close >= top:
+                            status = "mitigated"
+                        elif last_close >= midpoint:
+                            status = "partial"
+                        else:
+                            status = "active"
+                else:
+                    status = "active"
 
-        # Detect new FVGs using three-candle pattern: c0, c1, c2
-        for i in range(2, len(candles)):
-            c0 = candles[i - 2]
-            c2 = candles[i]
+                if status == "mitigated":
+                    continue
 
-            # Bullish FVG: low[i] > high[i-2]
-            if c2["low"] > c0["high"]:
-                gap_bottom = c0["high"]
-                gap_top = c2["low"]
-                if (gap_top - gap_bottom) >= min_size and (c2["ts"], "bull") not in tracked:
-                    fvg = {
-                        "ts": c2["ts"],
-                        "type": "bull",
-                        "top": gap_top,
-                        "bottom": gap_bottom,
-                        "midpoint": (gap_top + gap_bottom) / 2,
-                        "status": "active",
-                    }
-                    state["active_fvgs"].append(fvg)
-                    tracked.add((c2["ts"], "bull"))
-                    logger.debug(
-                        "%s/%s New bull FVG %.4f-%.4f",
-                        token, timeframe, gap_bottom, gap_top,
-                    )
+                fvg_entry = {
+                    "ts": int(df.index[i].timestamp() * 1000),
+                    "type": fvg_type,
+                    "top": top,
+                    "bottom": bottom,
+                    "midpoint": midpoint,
+                    "status": status,
+                }
+                new_fvgs.append(fvg_entry)
+                logger.debug(
+                    "%s/%s FVG %s %.4f-%.4f status=%s",
+                    token, timeframe, fvg_type, bottom, top, status,
+                )
 
-            # Bearish FVG: high[i] < low[i-2]
-            elif c2["high"] < c0["low"]:
-                gap_top = c0["low"]
-                gap_bottom = c2["high"]
-                if (gap_top - gap_bottom) >= min_size and (c2["ts"], "bear") not in tracked:
-                    fvg = {
-                        "ts": c2["ts"],
-                        "type": "bear",
-                        "top": gap_top,
-                        "bottom": gap_bottom,
-                        "midpoint": (gap_top + gap_bottom) / 2,
-                        "status": "active",
-                    }
-                    state["active_fvgs"].append(fvg)
-                    tracked.add((c2["ts"], "bear"))
-                    logger.debug(
-                        "%s/%s New bear FVG %.4f-%.4f",
-                        token, timeframe, gap_bottom, gap_top,
-                    )
+            state["active_fvgs"] = new_fvgs
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_fvgs failed: %s", token, timeframe, exc
+            )
 
     def _update_premium_discount(self, token: str, timeframe: str) -> None:
         """
-        Range = swing_high - swing_low.
-        Equilibrium = 50% do range.
-        Premium: preço atual > equilibrium.
-        Discount: preço atual < equilibrium.
+        OBJETIVO: classificar o preço atual como premium, discount ou equilibrium
+                  em relação ao midpoint do range swing_high/swing_low.
+        FONTE DE DADOS: swing_high e swing_low já atualizados neste ciclo por
+                        _update_swings; último close do buffer circular.
+        LIMITAÇÕES CONHECIDAS: requer swing_high > swing_low para ser significativo;
+                               retorna equilibrium se swings ainda não estiverem
+                               disponíveis (estado inicial).
+        NÃO FAZER: não delegar à lib — cálculo trivial e próprio do projeto;
+                   não usar médias móveis ou outros indicadores para o range.
         """
         candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
@@ -387,50 +378,130 @@ class SMCEngine:
 
     def _update_sweeps(self, token: str, timeframe: str) -> None:
         """
-        Sweep: vela ultrapassa swing high/low E fecha de volta dentro do range.
-        Indica captura de liquidez — pré-condição de entrada.
+        OBJETIVO: detectar varreduras de liquidez (liquidity sweeps) delegando
+                  à smc.liquidity e mapeando o último pool varrido para last_sweep.
+        FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não detectar sweeps por comparação manual de wicks,
+                   não usar LIQUIDITY_SWEEP_LOOKBACK para este cálculo.
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-
-        lb = config.LIQUIDITY_SWEEP_LOOKBACK
-        if len(candles) <= lb:
+        if self._cycle_df is None or self._cycle_shl_df is None:
             return
+        try:
+            import math
+            df = self._cycle_df
+            shl_df = self._cycle_shl_df
+            liq_df = smc.liquidity(df, shl_df, range_percent=0.01)
 
-        last = candles[-1]
-        lookback = candles[-(lb + 1):-1]  # lb candles before the last
+            last_sweep = None
+            for i in range(len(liq_df) - 1, -1, -1):
+                liq_val = liq_df["Liquidity"].iloc[i]
+                swept_val = liq_df["Swept"].iloc[i]
+                if isinstance(liq_val, float) and math.isnan(liq_val):
+                    continue
+                if isinstance(swept_val, float) and math.isnan(swept_val):
+                    continue
+                if float(swept_val) <= 0:
+                    continue
+                level = float(liq_df["Level"].iloc[i])
+                direction = "high" if float(liq_val) == 1 else "low"
+                last_sweep = {
+                    "ts": int(df.index[i].timestamp() * 1000),
+                    "direction": direction,
+                    "swept_price": level,
+                    "close": float(df["close"].iloc[-1]),
+                }
+                logger.debug(
+                    "%s/%s Sweep %s swept_price=%.4f",
+                    token, timeframe, direction, level,
+                )
+                break
 
-        ref_high = max(c["high"] for c in lookback)
-        ref_low = min(c["low"] for c in lookback)
-
-        # Sweep of highs: wick pierces above ref_high but close falls back inside
-        if last["high"] > ref_high and last["close"] < ref_high:
-            state["last_sweep"] = {
-                "ts": last["ts"],
-                "direction": "high",
-                "swept_price": ref_high,
-                "close": last["close"],
-            }
-            logger.debug(
-                "%s/%s Sweep high ref=%.4f close=%.4f",
-                token, timeframe, ref_high, last["close"],
-            )
-
-        # Sweep of lows: wick pierces below ref_low but close recovers inside
-        elif last["low"] < ref_low and last["close"] > ref_low:
-            state["last_sweep"] = {
-                "ts": last["ts"],
-                "direction": "low",
-                "swept_price": ref_low,
-                "close": last["close"],
-            }
-            logger.debug(
-                "%s/%s Sweep low ref=%.4f close=%.4f",
-                token, timeframe, ref_low, last["close"],
+            if last_sweep is not None:
+                state["last_sweep"] = last_sweep
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_sweeps failed: %s", token, timeframe, exc
             )
 
 
 # ─── Module-level helpers ────────────────────────────────────────────────────
+
+def _smoke_test_library() -> tuple:
+    """
+    OBJETIVO: validar que a smartmoneyconcepts instalada retorna as colunas
+              esperadas pelo engine. Se a API da lib mudou entre versões,
+              detectar imediatamente e abortar o boot.
+    FONTE DE DADOS: DataFrame sintético com 60 candles gerados com seed fixa
+                    (42) para reprodutibilidade.
+    LIMITAÇÕES CONHECIDAS: não valida correção semântica dos cálculos,
+                           apenas a estrutura de retorno.
+    NÃO FAZER: não usar dados reais (depende de rede), não depender de
+               config.py (pode não estar carregado).
+
+    Retorna (success: bool, message: str).
+    """
+    import numpy as np
+    import importlib.metadata
+
+    try:
+        lib_version = importlib.metadata.version("smartmoneyconcepts")
+    except Exception:
+        lib_version = "unknown"
+
+    try:
+        rng = np.random.default_rng(42)
+        n = 60
+        base = 30000.0
+        closes = base + np.cumsum(rng.normal(0, 100, n))
+        opens = np.roll(closes, 1)
+        opens[0] = base
+        highs = np.maximum(opens, closes) + rng.uniform(10, 80, n)
+        lows = np.minimum(opens, closes) - rng.uniform(10, 80, n)
+        volumes = rng.uniform(100, 1000, n)
+
+        idx = pd.date_range("2024-01-01", periods=n, freq="1h", tz="UTC")
+        df = pd.DataFrame({
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        }, index=idx)
+
+        expected = {
+            "swing_highs_lows": ["HighLow", "Level"],
+            "bos_choch": ["BOS", "CHOCH", "Level", "BrokenIndex"],
+            "ob": ["OB", "Top", "Bottom", "OBVolume", "MitigatedIndex", "Percentage"],
+            "fvg": ["FVG", "Top", "Bottom", "MitigatedIndex"],
+            "liquidity": ["Liquidity", "Level", "End", "Swept"],
+        }
+
+        shl_df = smc.swing_highs_lows(df, swing_length=5)
+        results = {
+            "swing_highs_lows": shl_df,
+            "bos_choch": smc.bos_choch(df, shl_df, close_break=True),
+            "ob": smc.ob(df, shl_df, close_mitigation=False),
+            "fvg": smc.fvg(df, join_consecutive=False),
+            "liquidity": smc.liquidity(df, shl_df, range_percent=0.01),
+        }
+
+        for func_name, cols in expected.items():
+            result_df = results[func_name]
+            for col in cols:
+                if col not in result_df.columns:
+                    return (
+                        False,
+                        f"coluna '{col}' ausente em '{func_name}' na versão {lib_version} da lib",
+                    )
+
+        return (True, "ok")
+
+    except Exception as exc:
+        return (False, f"exceção durante smoke test (versão {lib_version}): {exc}")
+
 
 def _empty_state() -> dict:
     return {

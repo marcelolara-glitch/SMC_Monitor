@@ -1,5 +1,5 @@
 # SMC Monitor — telegram.py
-# Versão: 0.1.0
+# Versão: 0.1.1
 
 """
 OBJETIVO: Enviar notificações via Telegram Bot API.
@@ -68,3 +68,44 @@ def send_heartbeat(message: str) -> None:
         _post(message)
     except Exception as exc:
         logger.warning("Telegram send_heartbeat failed: %s", exc)
+
+
+def send_critical_alert(message: str) -> bool:
+    """
+    OBJETIVO: enviar mensagem crítica ao chat Telegram configurado.
+              Usado para alertas que exigem ação imediata do operador
+              (boot abortado, engine quebrada, etc.).
+    FONTE DE DADOS: variável `message` e credenciais Telegram do config.
+    LIMITAÇÕES CONHECIDAS: depende do Telegram estar online. Timeout
+                           reduzido (5s) porque é crítico — se falhar,
+                           segue em frente sem bloquear.
+    NÃO FAZER: não formatar com Markdown (pode falhar parse), não enviar
+               em loop (chamada única).
+
+    Retorna True se enviou com sucesso, False caso contrário.
+    """
+    if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
+        logger.warning("Telegram credentials not configured — critical alert not sent")
+        return False
+
+    url = _API_BASE.format(token=config.TELEGRAM_TOKEN)
+    payload = json.dumps({
+        "chat_id": config.TELEGRAM_CHAT_ID,
+        "text": message,
+    }).encode()
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                return True
+            logger.warning("Telegram send_critical_alert HTTP %d", resp.status)
+            return False
+    except Exception as exc:
+        logger.warning("Telegram send_critical_alert failed: %s", exc)
+        return False
