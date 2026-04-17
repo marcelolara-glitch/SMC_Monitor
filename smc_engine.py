@@ -219,74 +219,55 @@ class SMCEngine:
 
     def _update_order_blocks(self, token: str, timeframe: str) -> None:
         """
-        OB bullish: última vela de baixa antes de movimento de alta forte.
-        OB bearish: última vela de alta antes de movimento de baixa forte.
-        Score: volume relativo + magnitude do deslocamento subsequente.
-        Invalida OBs cujo range foi completamente mitigado pelo preço.
+        OBJETIVO: detectar Order Blocks delegando à smc.ob e mapear o resultado
+                  para o formato interno, preservando apenas OBs não-mitigados.
+        FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não re-implementar lógica de detecção de OB manualmente,
+                   não incluir OBs já mitigados na lista active_obs.
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        last_close = candles[-1]["close"]
-        min_disp = config.OB_MIN_DISPLACEMENT
+        if self._cycle_df is None or self._cycle_shl_df is None:
+            return
+        try:
+            import math
+            df = self._cycle_df
+            shl_df = self._cycle_shl_df
+            ob_df = smc.ob(df, shl_df, close_mitigation=False)
 
-        # Invalidate fully mitigated OBs
-        for ob in state["active_obs"]:
-            if ob["mitigated"]:
-                continue
-            if ob["type"] == "bull" and last_close < ob["bottom"]:
-                ob["mitigated"] = True
-            elif ob["type"] == "bear" and last_close > ob["top"]:
-                ob["mitigated"] = True
+            new_obs = []
+            for i in range(len(ob_df)):
+                ob_val = ob_df["OB"].iloc[i]
+                if isinstance(ob_val, float) and math.isnan(ob_val):
+                    continue
+                mitigated_idx = ob_df["MitigatedIndex"].iloc[i]
+                mitigated = not (isinstance(mitigated_idx, float) and math.isnan(mitigated_idx)) and float(mitigated_idx) > 0
+                if mitigated:
+                    continue
+                ob_type = "bull" if float(ob_val) == 1 else "bear"
+                pct = ob_df["Percentage"].iloc[i]
+                displacement = float(pct) / 100.0 if not (isinstance(pct, float) and math.isnan(pct)) else 0.0
+                ob_entry = {
+                    "ts": int(df.index[i].timestamp() * 1000),
+                    "type": ob_type,
+                    "top": float(ob_df["Top"].iloc[i]),
+                    "bottom": float(ob_df["Bottom"].iloc[i]),
+                    "volume": float(ob_df["OBVolume"].iloc[i]),
+                    "displacement": displacement,
+                    "mitigated": False,
+                }
+                new_obs.append(ob_entry)
+                logger.debug(
+                    "%s/%s OB %s %.4f-%.4f disp=%.4f",
+                    token, timeframe, ob_type, ob_entry["bottom"], ob_entry["top"], displacement,
+                )
 
-        state["active_obs"] = [ob for ob in state["active_obs"] if not ob["mitigated"]]
-
-        # Build index of already-tracked OBs to avoid duplicates
-        tracked: set = {(ob["ts"], ob["type"]) for ob in state["active_obs"]}
-
-        # Detect new OBs: scan pairs (candle[i], candle[i+1])
-        for i in range(len(candles) - 1):
-            c = candles[i]
-            c_next = candles[i + 1]
-
-            # Bullish OB: bearish candle followed by strong bullish impulse
-            if c["close"] < c["open"]:
-                displacement = (c_next["close"] - c_next["open"]) / c["close"]
-                if displacement > min_disp and (c["ts"], "bull") not in tracked:
-                    ob = {
-                        "ts": c["ts"],
-                        "type": "bull",
-                        "top": c["open"],
-                        "bottom": c["close"],
-                        "volume": c["volume"],
-                        "displacement": displacement,
-                        "mitigated": False,
-                    }
-                    state["active_obs"].append(ob)
-                    tracked.add((c["ts"], "bull"))
-                    logger.debug(
-                        "%s/%s New bull OB %.4f-%.4f disp=%.4f",
-                        token, timeframe, ob["bottom"], ob["top"], displacement,
-                    )
-
-            # Bearish OB: bullish candle followed by strong bearish impulse
-            elif c["close"] > c["open"]:
-                displacement = (c_next["open"] - c_next["close"]) / c["close"]
-                if displacement > min_disp and (c["ts"], "bear") not in tracked:
-                    ob = {
-                        "ts": c["ts"],
-                        "type": "bear",
-                        "top": c["close"],
-                        "bottom": c["open"],
-                        "volume": c["volume"],
-                        "displacement": displacement,
-                        "mitigated": False,
-                    }
-                    state["active_obs"].append(ob)
-                    tracked.add((c["ts"], "bear"))
-                    logger.debug(
-                        "%s/%s New bear OB %.4f-%.4f disp=%.4f",
-                        token, timeframe, ob["bottom"], ob["top"], displacement,
-                    )
+            state["active_obs"] = new_obs
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_order_blocks failed: %s", token, timeframe, exc
+            )
 
     def _update_fvgs(self, token: str, timeframe: str) -> None:
         """
