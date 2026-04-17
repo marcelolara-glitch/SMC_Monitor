@@ -373,46 +373,52 @@ class SMCEngine:
 
     def _update_sweeps(self, token: str, timeframe: str) -> None:
         """
-        Sweep: vela ultrapassa swing high/low E fecha de volta dentro do range.
-        Indica captura de liquidez — pré-condição de entrada.
+        OBJETIVO: detectar varreduras de liquidez (liquidity sweeps) delegando
+                  à smc.liquidity e mapeando o último pool varrido para last_sweep.
+        FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não detectar sweeps por comparação manual de wicks,
+                   não usar LIQUIDITY_SWEEP_LOOKBACK para este cálculo.
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-
-        lb = config.LIQUIDITY_SWEEP_LOOKBACK
-        if len(candles) <= lb:
+        if self._cycle_df is None or self._cycle_shl_df is None:
             return
+        try:
+            import math
+            df = self._cycle_df
+            shl_df = self._cycle_shl_df
+            liq_df = smc.liquidity(df, shl_df, range_percent=0.01)
 
-        last = candles[-1]
-        lookback = candles[-(lb + 1):-1]  # lb candles before the last
+            last_sweep = None
+            for i in range(len(liq_df) - 1, -1, -1):
+                liq_val = liq_df["Liquidity"].iloc[i]
+                swept_val = liq_df["Swept"].iloc[i]
+                if isinstance(liq_val, float) and math.isnan(liq_val):
+                    continue
+                if isinstance(swept_val, float) and math.isnan(swept_val):
+                    continue
+                if float(swept_val) <= 0:
+                    continue
+                level = float(liq_df["Level"].iloc[i])
+                direction = "high" if float(liq_val) == 1 else "low"
+                last_sweep = {
+                    "ts": int(df.index[i].timestamp() * 1000),
+                    "direction": direction,
+                    "swept_price": level,
+                    "close": float(df["close"].iloc[-1]),
+                }
+                logger.debug(
+                    "%s/%s Sweep %s swept_price=%.4f",
+                    token, timeframe, direction, level,
+                )
+                break
 
-        ref_high = max(c["high"] for c in lookback)
-        ref_low = min(c["low"] for c in lookback)
-
-        # Sweep of highs: wick pierces above ref_high but close falls back inside
-        if last["high"] > ref_high and last["close"] < ref_high:
-            state["last_sweep"] = {
-                "ts": last["ts"],
-                "direction": "high",
-                "swept_price": ref_high,
-                "close": last["close"],
-            }
-            logger.debug(
-                "%s/%s Sweep high ref=%.4f close=%.4f",
-                token, timeframe, ref_high, last["close"],
-            )
-
-        # Sweep of lows: wick pierces below ref_low but close recovers inside
-        elif last["low"] < ref_low and last["close"] > ref_low:
-            state["last_sweep"] = {
-                "ts": last["ts"],
-                "direction": "low",
-                "swept_price": ref_low,
-                "close": last["close"],
-            }
-            logger.debug(
-                "%s/%s Sweep low ref=%.4f close=%.4f",
-                token, timeframe, ref_low, last["close"],
+            if last_sweep is not None:
+                state["last_sweep"] = last_sweep
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_sweeps failed: %s", token, timeframe, exc
             )
 
 
