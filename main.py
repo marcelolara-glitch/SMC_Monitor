@@ -15,9 +15,12 @@ import sys
 import threading
 import time
 
+import smartmoneyconcepts
+
 import config
 import signals
 import smc_engine
+from smc_engine import _smoke_test_library
 import state
 import telegram
 import ws_feed
@@ -84,6 +87,43 @@ def main() -> None:
 
     _setup_logging()
     logger.info("SMC Monitor v%s iniciando", VERSION)
+
+    lib_version = getattr(smartmoneyconcepts, "__version__", None)
+    if lib_version is None:
+        try:
+            lib_version = smc_engine.smc.__version__
+        except AttributeError:
+            lib_version = "unknown"
+    logger.info("smartmoneyconcepts version: %s", lib_version)
+
+    ok, msg = _smoke_test_library()
+    if not ok:
+        alert_text = (
+            "🚨 SMC MONITOR — BOOT ABORTADO\n"
+            f"Motivo: smoke test da smartmoneyconcepts falhou\n"
+            f"Versão instalada: {lib_version}\n"
+            f"Exceção: {msg}\n\n"
+            "AÇÃO NECESSÁRIA:\n"
+            "1. Verificar operações em andamento na OKX manualmente\n"
+            # TODO Fase 3: quando executor estiver implementado, adicionar aqui:
+            #   open_positions = executor.list_open_positions()
+            #   if open_positions:
+            #       alert_text += f"\n⚠️ OPERAÇÕES ABERTAS: {len(open_positions)}\n"
+            #       for p in open_positions:
+            #           alert_text += f"  - {p['instId']} {p['side']} {p['sz']} @ {p['avgPx']}\n"
+            #       alert_text += "\nVocê precisa gerenciar estas posições manualmente.\n"
+            "2. Daemon não está rodando — não haverá novos sinais\n"
+            "3. Investigar compatibilidade da lib antes de reiniciar\n\n"
+            "Sistema offline até correção."
+        )
+        try:
+            telegram.send_critical_alert(alert_text)
+        except Exception as e:
+            logger.error("Failed to send critical alert: %s", e)
+        logger.critical("Smoke test failed: %s. Aborting boot.", msg)
+        sys.exit(1)
+
+    logger.info("Smoke test passed. Engine ready.")
 
     state.init_db()
 
