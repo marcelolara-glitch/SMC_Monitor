@@ -11,7 +11,10 @@ NÃO FAZER: sem I/O, sem lógica de sinal, sem persistência.
 
 import collections
 import logging
-from typing import Dict, List
+from typing import Dict
+
+import pandas as pd
+from smartmoneyconcepts import smc
 
 import config
 
@@ -104,33 +107,20 @@ class SMCEngine:
         """Buffer como lista simples oldest → newest."""
         return list(self._buffers[token][timeframe])
 
-    def _swing_points(self, candles: list) -> tuple:
+    def _buffer_to_dataframe(self, buffer) -> pd.DataFrame:
         """
-        Retorna (swing_highs, swing_lows) como listas de dicts
-        {"price": float, "idx": int} em ordem cronológica.
-        Requer SWING_LOOKBACK velas confirmadas em cada lado.
+        OBJETIVO: converter deque de candles em DataFrame pandas pronto para
+                  uso com a smartmoneyconcepts lib.
+        FONTE DE DADOS: buffer circular mantido por on_candle.
+        LIMITAÇÕES CONHECIDAS: requer que os dicts no buffer tenham as keys
+                               ts, open, high, low, close, volume.
+        NÃO FAZER: não alterar a ordem dos candles, não filtrar candles.
         """
-        lb = config.SWING_LOOKBACK
-        swing_highs: List[dict] = []
-        swing_lows: List[dict] = []
-
-        for i in range(lb, len(candles) - lb):
-            high_i = candles[i]["high"]
-            low_i = candles[i]["low"]
-
-            if all(
-                candles[i + d]["high"] < high_i and candles[i - d]["high"] < high_i
-                for d in range(1, lb + 1)
-            ):
-                swing_highs.append({"price": high_i, "idx": i})
-
-            if all(
-                candles[i + d]["low"] > low_i and candles[i - d]["low"] > low_i
-                for d in range(1, lb + 1)
-            ):
-                swing_lows.append({"price": low_i, "idx": i})
-
-        return swing_highs, swing_lows
+        rows = list(buffer)
+        df = pd.DataFrame(rows)
+        df["datetime"] = pd.to_datetime(df["ts"], unit="ms", utc=True)
+        df = df.set_index("datetime")
+        return df[["open", "high", "low", "close", "volume"]]
 
     # ─── SMC update methods ─────────────────────────────────────────────────────
 
