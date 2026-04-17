@@ -1,5 +1,5 @@
 # SMC Monitor — telegram.py
-# Versão: 0.1.0
+# Versão: 0.1.1
 
 """
 OBJETIVO: Enviar notificações via Telegram Bot API.

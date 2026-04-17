@@ -1,5 +1,5 @@
 # SMC Monitor — smc_engine.py
-# Versão: 0.1.0
+# Versão: 0.1.1
 
 """
 OBJETIVO: Mantém estado SMC completo por token/timeframe.

@@ -1,5 +1,5 @@
 # SMC Monitor — lib_version_check.py
-# Versão: 0.1.0
+# Versão: 0.1.1
 
 """
 OBJETIVO: Consultar PyPI semanalmente para detectar novas versões da
