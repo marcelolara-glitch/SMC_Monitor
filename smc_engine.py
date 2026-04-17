@@ -271,83 +271,78 @@ class SMCEngine:
 
     def _update_fvgs(self, token: str, timeframe: str) -> None:
         """
-        FVG: gap entre low[i] e high[i-2] (bullish) ou high[i] e low[i-2] (bearish).
-        Tamanho mínimo: FVG_MIN_SIZE * preço atual.
-        Rastreia mitigação pela mediana (50% do FVG).
-        Status: "active" | "partial" | "mitigated".
+        OBJETIVO: detectar Fair Value Gaps delegando à smc.fvg e mapear o
+                  resultado para o formato interno, com status derivado de
+                  MitigatedIndex e posição relativa ao midpoint.
+        FONTE DE DADOS: cycle_df cacheado por _update_swings.
+        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_df é None
+                               e este método é abortado sem alterar o estado.
+        NÃO FAZER: não re-implementar padrão de 3 velas, não aplicar filtro
+                   FVG_MIN_SIZE (a lib não usa threshold — alinhamento intencional).
         """
-        candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        last_close = candles[-1]["close"]
-        min_size = config.FVG_MIN_SIZE * last_close
+        if self._cycle_df is None:
+            return
+        try:
+            import math
+            df = self._cycle_df
+            fvg_df = smc.fvg(df, join_consecutive=False)
+            last_close = float(df["close"].iloc[-1])
 
-        # Update mitigation status on surviving FVGs
-        for fvg in state["active_fvgs"]:
-            if fvg["status"] == "mitigated":
-                continue
-            mid = fvg["midpoint"]
-            if fvg["type"] == "bull":
-                # Bullish FVG mitigated when price drops below its bottom
-                if last_close <= fvg["bottom"]:
-                    fvg["status"] = "mitigated"
-                elif last_close <= mid:
-                    fvg["status"] = "partial"
-            else:  # bear
-                # Bearish FVG mitigated when price rises above its top
-                if last_close >= fvg["top"]:
-                    fvg["status"] = "mitigated"
-                elif last_close >= mid:
-                    fvg["status"] = "partial"
+            new_fvgs = []
+            for i in range(len(fvg_df)):
+                fvg_val = fvg_df["FVG"].iloc[i]
+                if isinstance(fvg_val, float) and math.isnan(fvg_val):
+                    continue
+                top = float(fvg_df["Top"].iloc[i])
+                bottom = float(fvg_df["Bottom"].iloc[i])
+                midpoint = (top + bottom) / 2
+                fvg_type = "bull" if float(fvg_val) == 1 else "bear"
 
-        state["active_fvgs"] = [f for f in state["active_fvgs"] if f["status"] != "mitigated"]
+                mitigated_idx = fvg_df["MitigatedIndex"].iloc[i]
+                has_mitigation = not (isinstance(mitigated_idx, float) and math.isnan(mitigated_idx)) and float(mitigated_idx) > 0
 
-        # Build index to avoid duplicates
-        tracked: set = {(f["ts"], f["type"]) for f in state["active_fvgs"]}
+                if has_mitigation:
+                    # Determine partial vs fully mitigated from current price position
+                    if fvg_type == "bull":
+                        if last_close <= bottom:
+                            status = "mitigated"
+                        elif last_close <= midpoint:
+                            status = "partial"
+                        else:
+                            status = "active"
+                    else:
+                        if last_close >= top:
+                            status = "mitigated"
+                        elif last_close >= midpoint:
+                            status = "partial"
+                        else:
+                            status = "active"
+                else:
+                    status = "active"
 
-        # Detect new FVGs using three-candle pattern: c0, c1, c2
-        for i in range(2, len(candles)):
-            c0 = candles[i - 2]
-            c2 = candles[i]
+                if status == "mitigated":
+                    continue
 
-            # Bullish FVG: low[i] > high[i-2]
-            if c2["low"] > c0["high"]:
-                gap_bottom = c0["high"]
-                gap_top = c2["low"]
-                if (gap_top - gap_bottom) >= min_size and (c2["ts"], "bull") not in tracked:
-                    fvg = {
-                        "ts": c2["ts"],
-                        "type": "bull",
-                        "top": gap_top,
-                        "bottom": gap_bottom,
-                        "midpoint": (gap_top + gap_bottom) / 2,
-                        "status": "active",
-                    }
-                    state["active_fvgs"].append(fvg)
-                    tracked.add((c2["ts"], "bull"))
-                    logger.debug(
-                        "%s/%s New bull FVG %.4f-%.4f",
-                        token, timeframe, gap_bottom, gap_top,
-                    )
+                fvg_entry = {
+                    "ts": int(df.index[i].timestamp() * 1000),
+                    "type": fvg_type,
+                    "top": top,
+                    "bottom": bottom,
+                    "midpoint": midpoint,
+                    "status": status,
+                }
+                new_fvgs.append(fvg_entry)
+                logger.debug(
+                    "%s/%s FVG %s %.4f-%.4f status=%s",
+                    token, timeframe, fvg_type, bottom, top, status,
+                )
 
-            # Bearish FVG: high[i] < low[i-2]
-            elif c2["high"] < c0["low"]:
-                gap_top = c0["low"]
-                gap_bottom = c2["high"]
-                if (gap_top - gap_bottom) >= min_size and (c2["ts"], "bear") not in tracked:
-                    fvg = {
-                        "ts": c2["ts"],
-                        "type": "bear",
-                        "top": gap_top,
-                        "bottom": gap_bottom,
-                        "midpoint": (gap_top + gap_bottom) / 2,
-                        "status": "active",
-                    }
-                    state["active_fvgs"].append(fvg)
-                    tracked.add((c2["ts"], "bear"))
-                    logger.debug(
-                        "%s/%s New bear FVG %.4f-%.4f",
-                        token, timeframe, gap_bottom, gap_top,
-                    )
+            state["active_fvgs"] = new_fvgs
+        except Exception as exc:
+            logger.warning(
+                "%s/%s _update_fvgs failed: %s", token, timeframe, exc
+            )
 
     def _update_premium_discount(self, token: str, timeframe: str) -> None:
         """
