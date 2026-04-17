@@ -16,8 +16,6 @@ import sys
 import threading
 import time
 
-import smartmoneyconcepts
-
 import config
 import lib_version_check
 import signals
@@ -105,12 +103,7 @@ def main() -> None:
     _setup_logging()
     logger.info("SMC Monitor v%s iniciando", VERSION)
 
-    lib_version = getattr(smartmoneyconcepts, "__version__", None)
-    if lib_version is None:
-        try:
-            lib_version = smc_engine.smc.__version__
-        except AttributeError:
-            lib_version = "unknown"
+    lib_version = smc_engine._get_lib_version()
     logger.info("smartmoneyconcepts version: %s", lib_version)
 
     ok, msg = _smoke_test_library()

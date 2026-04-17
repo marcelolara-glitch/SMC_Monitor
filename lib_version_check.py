@@ -15,7 +15,6 @@ NÃO FAZER: não fazer upgrade automático, não bloquear o daemon em caso
 import logging
 
 import requests
-import smartmoneyconcepts
 
 import telegram
 
@@ -33,10 +32,8 @@ def check_for_updates() -> None:
     NÃO FAZER: não fazer upgrade automático, não abortar o daemon em caso de erro.
     """
     try:
-        installed = getattr(smartmoneyconcepts, "__version__", None)
-        if installed is None:
-            from smartmoneyconcepts import smc as _smc_mod
-            installed = getattr(_smc_mod, "__version__", "unknown")
+        import smc_engine
+        installed = smc_engine._get_lib_version()
 
         resp = requests.get(PYPI_URL, timeout=10)
         resp.raise_for_status()
@@ -54,7 +51,7 @@ def check_for_updates() -> None:
                 f"3. Atualizar requirements.txt após validação\n\n"
                 f"Sistema continua rodando na versão {installed}."
             )
-            telegram.send_heartbeat(msg)
+            telegram.send_signal(msg)
             logger.info("Library update available: %s -> %s", installed, latest)
         else:
             logger.debug("Library up to date: %s", installed)

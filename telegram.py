@@ -100,12 +100,20 @@ def send_critical_alert(message: str) -> bool:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            if resp.status == 200:
-                return True
-            logger.warning("Telegram send_critical_alert HTTP %d", resp.status)
-            return False
-    except Exception as exc:
-        logger.warning("Telegram send_critical_alert failed: %s", exc)
-        return False
+    for attempt in range(1, 3):  # 2 tentativas total: a primeira e 1 retry
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    return True
+                logger.warning(
+                    "Telegram send_critical_alert HTTP %d (attempt %d)",
+                    resp.status, attempt,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Telegram send_critical_alert attempt %d failed: %s",
+                attempt, exc,
+            )
+        if attempt < 2:
+            time.sleep(2)
+    return False

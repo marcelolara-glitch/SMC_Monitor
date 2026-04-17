@@ -11,6 +11,7 @@ NÃO FAZER: sem I/O, sem lógica de sinal, sem persistência.
 
 import collections
 import logging
+import math
 from typing import Dict
 
 import pandas as pd
@@ -185,7 +186,6 @@ class SMCEngine:
             for i in range(len(bos_df) - 1, -1, -1):
                 bos_val = bos_df["BOS"].iloc[i]
                 choch_val = bos_df["CHOCH"].iloc[i]
-                import math
                 bos_set = not (isinstance(bos_val, float) and math.isnan(bos_val))
                 choch_set = not (isinstance(choch_val, float) and math.isnan(choch_val))
                 if bos_set or choch_set:
@@ -231,7 +231,6 @@ class SMCEngine:
         if self._cycle_df is None or self._cycle_shl_df is None:
             return
         try:
-            import math
             df = self._cycle_df
             shl_df = self._cycle_shl_df
             ob_df = smc.ob(df, shl_df, close_mitigation=False)
@@ -284,7 +283,6 @@ class SMCEngine:
         if self._cycle_df is None:
             return
         try:
-            import math
             df = self._cycle_df
             fvg_df = smc.fvg(df, join_consecutive=False)
             last_close = float(df["close"].iloc[-1])
@@ -390,7 +388,6 @@ class SMCEngine:
         if self._cycle_df is None or self._cycle_shl_df is None:
             return
         try:
-            import math
             df = self._cycle_df
             shl_df = self._cycle_shl_df
             liq_df = smc.liquidity(df, shl_df, range_percent=0.01)
@@ -428,6 +425,32 @@ class SMCEngine:
 
 
 # ─── Module-level helpers ────────────────────────────────────────────────────
+
+def _get_lib_version() -> str:
+    """
+    OBJETIVO: obter a versão instalada da smartmoneyconcepts de forma robusta,
+              tentando primeiro importlib.metadata (padrão moderno) e caindo
+              para atributo __version__ se necessário.
+    FONTE DE DADOS: metadados do pacote smartmoneyconcepts instalado pelo pip.
+    LIMITAÇÕES CONHECIDAS: retorna "unknown" se nenhum método conseguir obter
+                           a versão. Logar essa situação é responsabilidade do
+                           chamador.
+    NÃO FAZER: não consultar PyPI (isso é papel do lib_version_check),
+               não fazer cache (a função é chamada raramente).
+
+    Retorna string com a versão (ex: "0.0.27") ou "unknown".
+    """
+    import importlib.metadata
+    try:
+        return importlib.metadata.version("smartmoneyconcepts")
+    except importlib.metadata.PackageNotFoundError:
+        pass
+    try:
+        import smartmoneyconcepts
+        return getattr(smartmoneyconcepts, "__version__", None) or smc.__version__
+    except (AttributeError, ImportError):
+        return "unknown"
+
 
 def _smoke_test_library() -> tuple:
     """
