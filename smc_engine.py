@@ -35,6 +35,9 @@ class SMCEngine:
         self._buffers: Dict[str, Dict[str, collections.deque]] = {}
         # _states[token][timeframe] -> SMC state dict
         self._states: Dict[str, Dict[str, dict]] = {}
+        ok, msg = _smoke_test_library()
+        if not ok:
+            raise RuntimeError(f"smartmoneyconcepts smoke test failed: {msg}")
 
     # ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -421,6 +424,80 @@ class SMCEngine:
 
 
 # ─── Module-level helpers ────────────────────────────────────────────────────
+
+def _smoke_test_library() -> tuple:
+    """
+    OBJETIVO: validar que a smartmoneyconcepts instalada retorna as colunas
+              esperadas pelo engine. Se a API da lib mudou entre versões,
+              detectar imediatamente e abortar o boot.
+    FONTE DE DADOS: DataFrame sintético com 60 candles gerados com seed fixa
+                    (42) para reprodutibilidade.
+    LIMITAÇÕES CONHECIDAS: não valida correção semântica dos cálculos,
+                           apenas a estrutura de retorno.
+    NÃO FAZER: não usar dados reais (depende de rede), não depender de
+               config.py (pode não estar carregado).
+
+    Retorna (success: bool, message: str).
+    """
+    import numpy as np
+    import importlib.metadata
+
+    try:
+        lib_version = importlib.metadata.version("smartmoneyconcepts")
+    except Exception:
+        lib_version = "unknown"
+
+    try:
+        rng = np.random.default_rng(42)
+        n = 60
+        base = 30000.0
+        closes = base + np.cumsum(rng.normal(0, 100, n))
+        opens = np.roll(closes, 1)
+        opens[0] = base
+        highs = np.maximum(opens, closes) + rng.uniform(10, 80, n)
+        lows = np.minimum(opens, closes) - rng.uniform(10, 80, n)
+        volumes = rng.uniform(100, 1000, n)
+
+        idx = pd.date_range("2024-01-01", periods=n, freq="1h", tz="UTC")
+        df = pd.DataFrame({
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        }, index=idx)
+
+        expected = {
+            "swing_highs_lows": ["HighLow", "Level"],
+            "bos_choch": ["BOS", "CHOCH", "Level", "BrokenIndex"],
+            "ob": ["OB", "Top", "Bottom", "OBVolume", "MitigatedIndex", "Percentage"],
+            "fvg": ["FVG", "Top", "Bottom", "MitigatedIndex"],
+            "liquidity": ["Liquidity", "Level", "End", "Swept"],
+        }
+
+        shl_df = smc.swing_highs_lows(df, swing_length=5)
+        results = {
+            "swing_highs_lows": shl_df,
+            "bos_choch": smc.bos_choch(df, shl_df, close_break=True),
+            "ob": smc.ob(df, shl_df, close_mitigation=False),
+            "fvg": smc.fvg(df, join_consecutive=False),
+            "liquidity": smc.liquidity(df, shl_df, range_percent=0.01),
+        }
+
+        for func_name, cols in expected.items():
+            result_df = results[func_name]
+            for col in cols:
+                if col not in result_df.columns:
+                    return (
+                        False,
+                        f"coluna '{col}' ausente em '{func_name}' na versão {lib_version} da lib",
+                    )
+
+        return (True, "ok")
+
+    except Exception as exc:
+        return (False, f"exceção durante smoke test (versão {lib_version}): {exc}")
+
 
 def _empty_state() -> dict:
     return {
