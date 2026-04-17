@@ -51,7 +51,7 @@ def check_for_updates() -> None:
                 f"3. Atualizar requirements.txt após validação\n\n"
                 f"Sistema continua rodando na versão {installed}."
             )
-            telegram.send_heartbeat(msg)
+            telegram.send_signal(msg)
             logger.info("Library update available: %s -> %s", installed, latest)
         else:
             logger.debug("Library up to date: %s", installed)
