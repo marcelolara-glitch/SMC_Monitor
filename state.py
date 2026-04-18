@@ -1,5 +1,5 @@
 # SMC Monitor — state.py
-# Versão: 0.1.2
+# Versão: 0.1.3
 
 """
 OBJETIVO: Persistência SQLite do estado SMC para crash-recovery.
@@ -16,6 +16,8 @@ import sqlite3
 import time
 
 import config
+
+VERSION = "0.1.3"
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,64 @@ CREATE TABLE IF NOT EXISTS event_tracking (
 )
 """
 
+_DDL_SIGNAL_LIFECYCLE = """
+CREATE TABLE IF NOT EXISTS signal_lifecycle (
+  signal_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  token              TEXT    NOT NULL,
+  direction          TEXT    NOT NULL CHECK(direction IN ('LONG', 'SHORT')),
+  timeframe_of_signal TEXT   NOT NULL,
+  emitted_at_ts      INTEGER NOT NULL,
+  score              INTEGER NOT NULL,
+  criteria_snapshot  TEXT    NOT NULL,
+  entry_low          REAL    NOT NULL,
+  entry_high         REAL    NOT NULL,
+  sl_price           REAL    NOT NULL,
+  tp1_price          REAL    NOT NULL,
+  tp2_price          REAL,
+  tp3_price          REAL,
+  timeout_at_ts      INTEGER NOT NULL,
+  status             TEXT    NOT NULL CHECK(status IN (
+                       'active', 'sl_hit', 'tp1_hit', 'timed_out'
+                     )),
+  resolved_at_ts     INTEGER,
+  resolved_price     REAL,
+  resolution_note    TEXT,
+  reconfirmations    INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(token, direction, emitted_at_ts)
+)
+"""
+
+_DDL_SIGNAL_LIFECYCLE_IDX1 = """
+CREATE INDEX IF NOT EXISTS idx_signal_lifecycle_status
+  ON signal_lifecycle(status)
+"""
+
+_DDL_SIGNAL_LIFECYCLE_IDX2 = """
+CREATE INDEX IF NOT EXISTS idx_signal_lifecycle_token_direction_status
+  ON signal_lifecycle(token, direction, status)
+"""
+
+_DDL_SIGNAL_EVENTS = """
+CREATE TABLE IF NOT EXISTS signal_events (
+  event_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  signal_id   INTEGER NOT NULL,
+  event_type  TEXT    NOT NULL CHECK(event_type IN (
+                'sl_hit', 'tp1_hit', 'timed_out', 'reconfirmation'
+              )),
+  event_ts    INTEGER NOT NULL,
+  candle_high REAL,
+  candle_low  REAL,
+  candle_close REAL,
+  note        TEXT,
+  FOREIGN KEY(signal_id) REFERENCES signal_lifecycle(signal_id)
+)
+"""
+
+_DDL_SIGNAL_EVENTS_IDX = """
+CREATE INDEX IF NOT EXISTS idx_signal_events_signal_id
+  ON signal_events(signal_id)
+"""
+
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -68,6 +128,11 @@ def init_db() -> None:
             conn.execute(_DDL_SMC_STATE)
             conn.execute(_DDL_CANDLE_BUFFER)
             conn.execute(_DDL_EVENT_TRACKING)
+            conn.execute(_DDL_SIGNAL_LIFECYCLE)
+            conn.execute(_DDL_SIGNAL_LIFECYCLE_IDX1)
+            conn.execute(_DDL_SIGNAL_LIFECYCLE_IDX2)
+            conn.execute(_DDL_SIGNAL_EVENTS)
+            conn.execute(_DDL_SIGNAL_EVENTS_IDX)
             conn.commit()
     except Exception as e:
         logger.warning("state.init_db falhou: %s", e)

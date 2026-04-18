@@ -1,5 +1,5 @@
 # SMC Monitor — config.py
-# Versão: 0.1.2
+# Versão: 0.1.3
 
 """
 OBJETIVO: Centraliza todos os parâmetros de configuração do SMC Monitor.
@@ -11,7 +11,7 @@ NÃO FAZER: nunca hardcodar credenciais neste arquivo.
 import os
 
 # ─── Versão ───────────────────────────────────────────────────────────────────
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 # ─── Tokens monitorados ───────────────────────────────────────────────────────
 TOKENS = [
@@ -44,6 +44,9 @@ HEARTBEAT_INTERVAL_SECONDS = 1800  # 30 minutos
 
 # ─── Score de confluência ─────────────────────────────────────────────────────
 SIGNAL_THRESHOLD = 4             # pontuação mínima para emitir sinal (max=6)
+
+# ─── Tracker ─────────────────────────────────────────────────────────────────
+SIGNAL_TIMEOUT_SECONDS = 86400   # 24 horas; timeout individual por sinal
 
 # ─── Telegram ────────────────────────────────────────────────────────────────
 # Carregado de variável de ambiente — nunca hardcodar

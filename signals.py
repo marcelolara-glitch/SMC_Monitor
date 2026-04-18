@@ -1,5 +1,5 @@
 # SMC Monitor — signals.py
-# Versão: 0.1.2
+# Versão: 0.1.3
 
 """
 OBJETIVO: Calcular score de confluência SMC, decidir emissão de sinal e
@@ -16,6 +16,8 @@ import time
 import config
 import state as _state
 from smc_engine import SMCEngine
+
+VERSION = "0.1.3"
 
 logger = logging.getLogger(__name__)
 
