@@ -1,17 +1,20 @@
 # SMC Monitor — signals.py
-# Versão: 0.1.0
+# Versão: 0.1.2
 
 """
-OBJETIVO: Calcular score de confluência SMC e decidir emissão de sinal.
+OBJETIVO: Calcular score de confluência SMC, decidir emissão de sinal e
+          detectar eventos relevantes (BOS/ChoCH, sweep, trend change 4H).
 FONTE DE DADOS: estados SMC entregues pelo SMCEngine via get_state().
 LIMITAÇÕES CONHECIDAS: requer todos os timeframes prontos (ready=True) para avaliar.
 NÃO FAZER: sem cálculo SMC, sem conexão WebSocket, sem envio de mensagens Telegram.
 """
 
+import datetime
 import logging
 import time
 
 import config
+import state as _state
 from smc_engine import SMCEngine
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,15 @@ _CRITERIA_LABELS: dict[str, str] = {
     "bos_choch_15m":       "BOS/ChoCH confirmado no 15m",
     "trend_4h_aligned":    "Tendência 4H alinhada",
 }
+
+# (token, timeframe, event_type) → {"ts": int, "value": str | None}
+_event_tracking: dict[tuple[str, str, str], dict] = {}
+
+
+def _ts_to_str(ts_ms: int) -> str:
+    if not ts_ms:
+        return "—"
+    return datetime.datetime.utcfromtimestamp(ts_ms / 1000.0).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def evaluate(token: str, engine: SMCEngine) -> dict | None:
@@ -64,6 +76,12 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
 
     now_ms = int(time.time() * 1_000)
 
+    # Current price from 15m buffer
+    try:
+        current_price = float(list(engine._buffers[token]["15m"])[-1]["close"])
+    except (KeyError, IndexError):
+        current_price = 0.0
+
     # ── Criterion 1: Active OB in 1H in the correct direction ────────────────
     active_obs_1h = [
         ob for ob in state_1h.get("active_obs", [])
@@ -81,6 +99,7 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
     ]
 
     fvg_adjacent = False
+    matched_fvg = None
     if ref_ob and active_fvgs_1h:
         ob_top    = ref_ob["top"]
         ob_bottom = ref_ob["bottom"]
@@ -88,16 +107,21 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
             # Zones overlap when neither is entirely above/below the other
             if fvg["bottom"] <= ob_top and fvg["top"] >= ob_bottom:
                 fvg_adjacent = True
+                matched_fvg = fvg
                 break
 
     # ── Criterion 3: Recent liquidity sweep in 1H or 15m ─────────────────────
     sweep_recent = False
+    ref_sweep = None
+    ref_sweep_tf = None
     for tf in ("1H", "15m"):
         sweep = engine.get_state(token, tf).get("last_sweep")
         if sweep:
             window_ms = 10 * _TF_DURATION_MS[tf]
             if (now_ms - sweep["ts"]) <= window_ms:
                 sweep_recent = True
+                ref_sweep = sweep
+                ref_sweep_tf = tf
                 break
 
     # ── Criterion 4: Price in Premium/Discount zone in 1H ────────────────────
@@ -171,15 +195,53 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         ]
         tp1 = max(candidates, key=lambda f: f["top"])["midpoint"] if candidates else None
 
+    # ── Premium/Discount details ──────────────────────────────────────────────
+    swing_high_1h = state_1h.get("swing_high", 0.0)
+    swing_low_1h  = state_1h.get("swing_low", 0.0)
+    if swing_high_1h > swing_low_1h and swing_high_1h > 0.0:
+        equilibrium_1h = (swing_high_1h + swing_low_1h) / 2.0
+        pd_position = (
+            (current_price - swing_low_1h) / (swing_high_1h - swing_low_1h)
+            if current_price > 0.0
+            else 0.5
+        )
+    else:
+        equilibrium_1h = 0.0
+        pd_position = 0.5
+
+    pd_details = {
+        "label":       pd_1h,
+        "position":    pd_position,
+        "swing_high":  swing_high_1h,
+        "swing_low":   swing_low_1h,
+        "equilibrium": equilibrium_1h,
+    }
+
+    # ── Trend states per TF ───────────────────────────────────────────────────
+    trend_states = {
+        tf: {
+            "trend":    st.get("trend", "neutral"),
+            "last_bos": st.get("last_bos"),
+        }
+        for tf, st in (("4H", state_4h), ("1H", state_1h), ("15m", state_15m))
+    }
+
     return {
-        "token":      token,
-        "direction":  direction,
-        "score":      score,
-        "criteria":   criteria,
-        "entry_zone": entry_zone,
-        "sl_price":   sl_price,
-        "tp1":        tp1,
-        "timestamp":  now_ms,
+        "token":        token,
+        "direction":    direction,
+        "score":        score,
+        "criteria":     criteria,
+        "entry_zone":   entry_zone,
+        "sl_price":     sl_price,
+        "tp1":          tp1,
+        "timestamp":    now_ms,
+        "ref_ob":       ref_ob,
+        "ref_fvg":      matched_fvg,
+        "ref_sweep":    ref_sweep,
+        "ref_sweep_tf": ref_sweep_tf,
+        "trend_states": trend_states,
+        "pd_details":   pd_details,
+        "current_price": current_price,
     }
 
 
@@ -188,31 +250,248 @@ def format_signal(signal: dict) -> str:
     Recebe o dict de sinal retornado por evaluate() e retorna string formatada
     pronta para envio via Telegram (Markdown Mode).
     """
-    direction = signal["direction"]
-    emoji     = "🟢" if direction == "LONG" else "🔴"
-    token     = signal["token"]
-    score     = signal["score"]
-    ez        = signal["entry_zone"]
-    sl        = signal["sl_price"]
-    tp1       = signal["tp1"]
-    criteria  = signal["criteria"]
+    direction     = signal["direction"]
+    emoji         = "🟢" if direction == "LONG" else "🔴"
+    token         = signal["token"]
+    score         = signal["score"]
+    ez            = signal["entry_zone"]
+    sl            = signal["sl_price"]
+    tp1           = signal["tp1"]
+    criteria      = signal["criteria"]
+    current_price = signal.get("current_price", 0.0)
+    trend_states  = signal.get("trend_states", {})
+    ref_ob        = signal.get("ref_ob")
+    ref_fvg       = signal.get("ref_fvg")
+    ref_sweep     = signal.get("ref_sweep")
+    ref_sweep_tf  = signal.get("ref_sweep_tf")
+    pd_details    = signal.get("pd_details", {})
+    now_ms        = signal.get("timestamp", int(time.time() * 1_000))
 
-    met_labels = [
-        label for key, label in _CRITERIA_LABELS.items()
-        if criteria.get(key)
-    ]
+    lines = []
 
-    lines = [
-        f"{emoji} *{direction} — {token}*",
-        f"Score: *{score}/6*",
-        "",
-        f"Entrada: `{ez['bottom']:.4f}` – `{ez['top']:.4f}`",
-        f"SL: `{sl:.4f}`",
-        f"TP1: `{tp1:.4f}`" if tp1 is not None else "TP1: —",
-        "",
-        "*Critérios atingidos:*",
-    ]
-    for label in met_labels:
-        lines.append(f"  ✅ {label}")
+    # ── Header ────────────────────────────────────────────────────────────────
+    lines.append(f"{emoji} *{direction} — {token}*")
+    cp_str = f"`{current_price:.4f}`" if current_price else "—"
+    lines.append(f"Score: *{score}/6*  | Preço atual: {cp_str}")
+    lines.append("")
+
+    # ── Trend Multi-Timeframe ─────────────────────────────────────────────────
+    lines.append("━━ Trend Multi-Timeframe ━━")
+    for tf in ("4H", "1H", "15m"):
+        ts_data  = trend_states.get(tf, {})
+        trend    = ts_data.get("trend", "neutral")
+        last_bos = ts_data.get("last_bos")
+        if last_bos:
+            bos_type  = last_bos.get("type", "BOS")
+            bos_dir   = last_bos.get("direction", "")
+            bos_price = last_bos.get("price", 0.0)
+            bos_ts    = _ts_to_str(last_bos.get("ts", 0))
+            bos_info  = f"(última {bos_type}: {bos_dir} @ {bos_price:.4f} em {bos_ts})"
+        else:
+            bos_info = "(—)"
+        lines.append(f"{tf}: {trend}  {bos_info}")
+    lines.append("")
+
+    # ── Zona de Entrada ───────────────────────────────────────────────────────
+    lines.append("━━ Zona de Entrada ━━")
+    lines.append(f"Entrada: `{ez['bottom']:.4f}` – `{ez['top']:.4f}`")
+    lines.append(f"SL: `{sl:.4f}`")
+    lines.append(f"TP1: `{tp1:.4f}`" if tp1 is not None else "TP1: —")
+    lines.append("")
+
+    # ── Indicadores 1H Detalhados ─────────────────────────────────────────────
+    lines.append("━━ Indicadores 1H Detalhados ━━")
+
+    if ref_ob:
+        ob_type_label = ref_ob.get("type", "")
+        disp_pct      = ref_ob.get("displacement", 0.0) * 100
+        lines.append(f"OB referência ({ob_type_label}):")
+        lines.append(f"  range: `{ref_ob['bottom']:.4f}` – `{ref_ob['top']:.4f}`")
+        lines.append(f"  volume: `{ref_ob.get('volume', 0.0):.4f}`")
+        lines.append(f"  displacement: `{disp_pct:.2f}%`")
+    else:
+        lines.append("OB referência: —")
+
+    if ref_fvg:
+        fvg_type_label = ref_fvg.get("type", "")
+        lines.append(f"FVG adjacente ({fvg_type_label}):")
+        lines.append(f"  range: `{ref_fvg['bottom']:.4f}` – `{ref_fvg['top']:.4f}`")
+        lines.append(f"  midpoint: `{ref_fvg.get('midpoint', 0.0):.4f}`")
+        lines.append(f"  status: {ref_fvg.get('status', 'active')}")
+    else:
+        lines.append("FVG adjacente: —")
+
+    if ref_sweep and ref_sweep_tf:
+        sweep_age = (now_ms - ref_sweep.get("ts", now_ms)) // _TF_DURATION_MS.get(ref_sweep_tf, 1)
+        lines.append(f"Sweep recente ({ref_sweep_tf}):")
+        lines.append(f"  direção: {ref_sweep.get('direction', '')}")
+        lines.append(f"  preço varrido: `{ref_sweep.get('swept_price', 0.0):.4f}`")
+        lines.append(f"  idade: {sweep_age} candles")
+    else:
+        lines.append("Sweep recente: —")
+
+    if pd_details:
+        pd_label = pd_details.get("label", "equilibrium")
+        pd_pos   = pd_details.get("position", 0.5)
+        pd_sh    = pd_details.get("swing_high", 0.0)
+        pd_sl    = pd_details.get("swing_low", 0.0)
+        pd_eq    = pd_details.get("equilibrium", 0.0)
+        lines.append("Premium/Discount (1H):")
+        lines.append(f"  posição: {pd_pos:.2f} ({pd_label})")
+        lines.append(f"  swing_high: `{pd_sh:.4f}`")
+        lines.append(f"  swing_low: `{pd_sl:.4f}`")
+        lines.append(f"  equilibrium: `{pd_eq:.4f}`")
+    lines.append("")
+
+    # ── Critérios atingidos ───────────────────────────────────────────────────
+    lines.append("━━ Critérios atingidos ━━")
+    for key, label in _CRITERIA_LABELS.items():
+        icon = "✅" if criteria.get(key) else "❌"
+        lines.append(f"  {icon} {label}")
 
     return "\n".join(lines)
+
+
+def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
+    """
+    OBJETIVO: detectar eventos novos (BOS/ChoCH, sweep, trend change 4H)
+              comparando estado atual do engine contra cache _event_tracking.
+    FONTE DE DADOS: engine.get_state() para cada TF; _event_tracking para
+                    último ts e valor notificado por chave.
+    LIMITAÇÕES CONHECIDAS:
+      - trend_change só considera transições causadas por BOS/ChoCH confirmado
+        (bootstrap neutral→bullish sem BOS ignorado);
+      - dedup é por event_ts, não por hash do dict;
+      - na primeira chamada por chave (cache None), priming silencioso:
+        inicializa cache sem notificação.
+    NÃO FAZER: não enviar Telegram aqui (responsabilidade do main.py);
+               não persistir cache aqui (main decide quando save).
+
+    Retorna lista de dicts de evento. Cada dict tem:
+      {"event_type": "bos_choch"|"sweep"|"trend_change",
+       "timeframe": "4H"|"1H"|"15m",
+       "data": {...}}
+    """
+    events: list[dict] = []
+
+    for tf in ("4H", "1H", "15m"):
+        st = engine.get_state(token, tf)
+        if not st.get("ready"):
+            continue
+
+        last_bos   = st.get("last_bos")
+        last_sweep = st.get("last_sweep")
+
+        # ── bos_choch ──────────────────────────────────────────────────────────
+        if last_bos is not None:
+            key    = (token, tf, "bos_choch")
+            cached = _event_tracking.get(key)
+            if cached is None:
+                _event_tracking[key] = {"ts": last_bos["ts"], "value": None}
+            elif last_bos["ts"] != cached["ts"]:
+                events.append({
+                    "event_type": "bos_choch",
+                    "timeframe":  tf,
+                    "data": {
+                        "type":      last_bos.get("type", "BOS"),
+                        "direction": last_bos.get("direction", ""),
+                        "price":     last_bos.get("price", 0.0),
+                        "ts":        last_bos["ts"],
+                    },
+                })
+                _event_tracking[key] = {"ts": last_bos["ts"], "value": None}
+
+        # ── sweep ──────────────────────────────────────────────────────────────
+        if last_sweep is not None:
+            key    = (token, tf, "sweep")
+            cached = _event_tracking.get(key)
+            if cached is None:
+                _event_tracking[key] = {"ts": last_sweep["ts"], "value": None}
+            elif last_sweep["ts"] != cached["ts"]:
+                events.append({
+                    "event_type": "sweep",
+                    "timeframe":  tf,
+                    "data": {
+                        "direction":   last_sweep.get("direction", ""),
+                        "swept_price": last_sweep.get("swept_price", 0.0),
+                        "close":       last_sweep.get("close", 0.0),
+                        "ts":          last_sweep["ts"],
+                    },
+                })
+                _event_tracking[key] = {"ts": last_sweep["ts"], "value": None}
+
+        # ── trend_change (4H only) ─────────────────────────────────────────────
+        if tf == "4H" and last_bos is not None:
+            current_trend = st.get("trend", "neutral")
+            key    = (token, "4H", "trend_change")
+            cached = _event_tracking.get(key)
+            if cached is None:
+                _event_tracking[key] = {"ts": last_bos["ts"], "value": current_trend}
+            elif last_bos["ts"] != cached["ts"]:
+                if current_trend != cached["value"]:
+                    events.append({
+                        "event_type": "trend_change",
+                        "timeframe":  "4H",
+                        "data": {
+                            "from_trend":    cached["value"],
+                            "to_trend":      current_trend,
+                            "bos_type":      last_bos.get("type", "BOS"),
+                            "bos_direction": last_bos.get("direction", ""),
+                            "bos_price":     last_bos.get("price", 0.0),
+                            "ts":            last_bos["ts"],
+                        },
+                    })
+                # Always sync ts when a new BOS arrives, regardless of direction change
+                _event_tracking[key] = {"ts": last_bos["ts"], "value": current_trend}
+
+    return events
+
+
+def format_event(event: dict, token: str) -> str:
+    """Formata dict de evento para mensagem Markdown pronta para Telegram."""
+    et   = event["event_type"]
+    tf   = event["timeframe"]
+    data = event["data"]
+
+    if et == "bos_choch":
+        ts_str = _ts_to_str(data["ts"])
+        return (
+            f"🔔 {data['type']} {tf} — {token}\n"
+            f"Direção: {data['direction']}\n"
+            f"Preço rompido: {data['price']:.4f}\n"
+            f"Timestamp: {ts_str}"
+        )
+
+    if et == "sweep":
+        ts_str = _ts_to_str(data["ts"])
+        return (
+            f"💧 Sweep {tf} — {token}\n"
+            f"Direção: {data['direction']}\n"
+            f"Preço varrido: {data['swept_price']:.4f}\n"
+            f"Close do candle: {data['close']:.4f}\n"
+            f"Timestamp: {ts_str}"
+        )
+
+    if et == "trend_change":
+        ts_str = _ts_to_str(data["ts"])
+        return (
+            f"🔄 Trend 4H mudou — {token}\n"
+            f"{data['from_trend']} → {data['to_trend']}\n"
+            f"Causado por: {data['bos_type']} {data['bos_direction']} @ {data['bos_price']:.4f}\n"
+            f"Timestamp: {ts_str}"
+        )
+
+    return f"[evento desconhecido: {et}]"
+
+
+def load_event_tracking() -> None:
+    """Popula _event_tracking a partir de state.load_event_tracking()."""
+    global _event_tracking
+    loaded = _state.load_event_tracking()
+    _event_tracking.update(loaded)
+    logger.info("event_tracking restaurado: %d entradas", len(loaded))
+
+
+def persist_event_tracking() -> None:
+    """Persiste _event_tracking via state.save_event_tracking()."""
+    _state.save_event_tracking(_event_tracking)
