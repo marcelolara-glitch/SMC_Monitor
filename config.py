@@ -1,5 +1,5 @@
 # SMC Monitor — config.py
-# Versão: 0.1.0
+# Versão: 0.1.2
 
 """
 OBJETIVO: Centraliza todos os parâmetros de configuração do SMC Monitor.
@@ -11,7 +11,7 @@ NÃO FAZER: nunca hardcodar credenciais neste arquivo.
 import os
 
 # ─── Versão ───────────────────────────────────────────────────────────────────
-VERSION = "0.1.0"
+VERSION = "0.1.2"
 
 # ─── Tokens monitorados ───────────────────────────────────────────────────────
 TOKENS = [
@@ -37,8 +37,10 @@ CANDLE_BUFFER = {
 # ─── Parâmetros SMC ───────────────────────────────────────────────────────────
 SWING_LOOKBACK = 5               # velas para cada lado na detecção de swing
 OB_MIN_DISPLACEMENT = 0.003      # deslocamento mínimo (0.3%) para OB válido
-FVG_MIN_SIZE = 0.001             # tamanho mínimo do FVG (0.1% do preço)
 LIQUIDITY_SWEEP_LOOKBACK = 10    # velas para trás na detecção de sweep
+
+# ─── Heartbeat ────────────────────────────────────────────────────────────────
+HEARTBEAT_INTERVAL_SECONDS = 1800  # 30 minutos
 
 # ─── Score de confluência ─────────────────────────────────────────────────────
 SIGNAL_THRESHOLD = 4             # pontuação mínima para emitir sinal (max=6)

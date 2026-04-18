@@ -1,5 +1,5 @@
 # SMC Monitor — main.py
-# Versão: 0.1.1
+# Versão: 0.1.2
 
 """
 OBJETIVO: Entry point e orquestrador do daemon SMC Monitor.
@@ -25,7 +25,7 @@ import state
 import telegram
 import ws_feed
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ def _restore_engine_state(
 
 def _heartbeat_loop() -> None:
     while True:
-        time.sleep(3600)
+        time.sleep(config.HEARTBEAT_INTERVAL_SECONDS)
         uptime_s = int(time.time() - _start_time)
         h, remainder = divmod(uptime_s, 3600)
         m, s = divmod(remainder, 60)
@@ -136,6 +136,7 @@ def main() -> None:
     logger.info("Smoke test passed. Engine ready.")
 
     state.init_db()
+    signals.load_event_tracking()
 
     engine = smc_engine.SMCEngine()
 
@@ -159,6 +160,10 @@ def main() -> None:
 
         engine.on_candle(token, timeframe, candle)
 
+        events = signals.evaluate_events(token, engine)
+        for event in events:
+            telegram.send_signal(signals.format_event(event, token))
+
         signal = signals.evaluate(token, engine)
         if signal is not None:
             telegram.send_signal(signals.format_signal(signal))
@@ -171,6 +176,7 @@ def main() -> None:
                     buf = engine._buffers.get(tok, {}).get(tf)
                     if buf is not None:
                         state.save_candle_buffer(tok, tf, list(buf))
+            signals.persist_event_tracking()
 
     ws_feed.start(on_candle)
 
