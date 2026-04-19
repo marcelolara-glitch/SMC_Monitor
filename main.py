@@ -1,5 +1,5 @@
 # SMC Monitor — main.py
-# Versão: 0.1.3
+# Versão: 0.1.4
 
 """
 OBJETIVO: Entry point e orquestrador do daemon SMC Monitor.
@@ -26,7 +26,7 @@ import telegram
 import tracker
 import ws_feed
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 
 logger = logging.getLogger(__name__)
 
