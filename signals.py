@@ -17,7 +17,7 @@ import config
 import state as _state
 from smc_engine import SMCEngine
 
-VERSION = "0.1.3"
+VERSION = "0.1.5"
 
 logger = logging.getLogger(__name__)
 

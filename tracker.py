@@ -44,7 +44,7 @@ import time
 
 import config
 
-VERSION = "v0.1.3"
+VERSION = "0.1.5"
 
 logger = logging.getLogger(__name__)
 

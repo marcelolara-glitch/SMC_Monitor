@@ -1,5 +1,5 @@
 # SMC Monitor — config.py
-# Versão: 0.1.3
+# Versão: 0.1.5
 
 """
 OBJETIVO: Centraliza todos os parâmetros de configuração do SMC Monitor.
@@ -11,7 +11,7 @@ NÃO FAZER: nunca hardcodar credenciais neste arquivo.
 import os
 
 # ─── Versão ───────────────────────────────────────────────────────────────────
-VERSION = "0.1.3"
+VERSION = "0.1.5"
 
 # ─── Tokens monitorados ───────────────────────────────────────────────────────
 TOKENS = [
@@ -52,6 +52,13 @@ SIGNAL_TIMEOUT_SECONDS = 86400   # 24 horas; timeout individual por sinal
 # Carregado de variável de ambiente — nunca hardcodar
 TELEGRAM_TOKEN = os.environ.get("SMC_TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("SMC_TELEGRAM_CHAT_ID", "")
+
+# ── Bot Telegram (Passo 11) ───────────────────────────────────────────────────
+TELEGRAM_AUTHORIZED_CHAT_IDS: list[int] = [
+    int(cid) for cid in os.environ.get("SMC_TELEGRAM_CHAT_ID", "0").split(",")
+    if cid.strip().isdigit() and int(cid.strip()) != 0
+]
+BOT_POLL_TIMEOUT: int = 60  # segundos
 
 # ─── OKX API (Fase 2) ────────────────────────────────────────────────────────
 OKX_API_KEY    = os.environ.get("SMC_OKX_API_KEY", "")
