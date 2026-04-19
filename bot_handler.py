@@ -47,7 +47,7 @@ import lib_version_check
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 BRT = timezone(timedelta(hours=-3))
 
 TELEGRAM_API_BASE = "https://api.telegram.org"

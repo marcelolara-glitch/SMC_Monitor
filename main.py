@@ -18,6 +18,7 @@ import time
 
 import bot_handler
 import config
+import historical_loader
 import lib_version_check
 import signals
 import smc_engine
@@ -27,7 +28,7 @@ import telegram
 import tracker
 import ws_feed
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,15 @@ def main() -> None:
         len(saved_states),
         len(saved_buffers),
     )
+
+    # NOVO (Passo 12): historical warm-up bloqueante antes do WebSocket
+    try:
+        dfs_by_tf = historical_loader.load_and_heal(config.TOKENS[0])
+        engine.bootstrap_from_history(dfs_by_tf)
+        logger.info("engine bootstrapped com dados históricos")
+    except RuntimeError as e:
+        logger.critical("boot abortado: %s", e)
+        sys.exit(1)
 
     hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True, name="heartbeat")
     hb_thread.start()

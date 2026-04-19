@@ -11,7 +11,7 @@ NÃO FAZER: nunca hardcodar credenciais neste arquivo.
 import os
 
 # ─── Versão ───────────────────────────────────────────────────────────────────
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 
 # ─── Tokens monitorados ───────────────────────────────────────────────────────
 TOKENS = [
@@ -64,6 +64,34 @@ BOT_POLL_TIMEOUT: int = 60  # segundos
 OKX_API_KEY    = os.environ.get("SMC_OKX_API_KEY", "")
 OKX_API_SECRET = os.environ.get("SMC_OKX_API_SECRET", "")
 OKX_PASSPHRASE = os.environ.get("SMC_OKX_PASSPHRASE", "")
+
+# ── Historical Loader (Passo 12) ──────────────────────────────────────────────
+HIST_OKX_REST_BASE: str = "https://www.okx.com"
+HIST_CANDLES_ENDPOINT: str = "/api/v5/market/candles"
+HIST_HISTORY_ENDPOINT: str = "/api/v5/market/history-candles"
+HIST_REQUEST_TIMEOUT_SECS: int = 10
+HIST_REQUEST_RETRY_BACKOFF_SECS: float = 2.0
+
+HIST_TARGET_BY_TF: dict = {
+    "15m": 500,
+    "1H":  500,
+    "4H":  300,
+}
+HIST_CATASTROPHIC_MIN_PCT: float = 0.5  # < 50% do alvo = falha catastrófica
+
+# Mapeamento TF interno → bar string da OKX
+HIST_TF_TO_OKX_BAR: dict = {
+    "15m": "15m",
+    "1H":  "1H",
+    "4H":  "4H",
+}
+
+# Delta entre candles em minutos (para detecção de gap)
+HIST_TF_DELTA_MINUTES: dict = {
+    "15m": 15,
+    "1H":  60,
+    "4H":  240,
+}
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
