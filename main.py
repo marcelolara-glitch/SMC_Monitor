@@ -1,5 +1,5 @@
 # SMC Monitor — main.py
-# Versão: 0.1.2
+# Versão: 0.1.3
 
 """
 OBJETIVO: Entry point e orquestrador do daemon SMC Monitor.
@@ -23,9 +23,10 @@ import smc_engine
 from smc_engine import _smoke_test_library
 import state
 import telegram
+import tracker
 import ws_feed
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 logger = logging.getLogger(__name__)
 
@@ -160,13 +161,50 @@ def main() -> None:
 
         engine.on_candle(token, timeframe, candle)
 
+        # Close stale tracker signals before evaluating new ones
+        if timeframe == "15m":
+            transitions = tracker.observe_candle_15m(token, candle)
+            for t in transitions:
+                telegram.send_signal_closed(
+                    signal_id=t["signal_id"],
+                    token=t["token"],
+                    direction=t["direction"],
+                    outcome=t["outcome"],
+                    resolved_price=t["resolved_price"],
+                    entry_mid=t["entry_mid"],
+                    sl_price=t["sl_price"],
+                    tp1_price=t["tp1_price"],
+                    r_multiple=t["r_multiple"],
+                    duration_seconds=t["duration_seconds"],
+                    candle_ts=candle["ts"],
+                )
+
         events = signals.evaluate_events(token, engine)
         for event in events:
             telegram.send_signal(signals.format_event(event, token))
 
         signal = signals.evaluate(token, engine)
         if signal is not None:
-            telegram.send_signal(signals.format_signal(signal))
+            tp1 = signal.get("tp1")
+            if tp1 is not None:
+                signal_id = tracker.register_signal(
+                    token=signal["token"],
+                    direction=signal["direction"],
+                    timeframe_of_signal="1H",
+                    emitted_at_ts=signal["timestamp"],
+                    score=signal["score"],
+                    criteria_snapshot=signal["criteria"],
+                    entry_low=signal["entry_zone"]["bottom"],
+                    entry_high=signal["entry_zone"]["top"],
+                    sl_price=signal["sl_price"],
+                    tp1_price=tp1,
+                )
+                # Only send Telegram for new signals; reconfirmations return None
+                if signal_id is not None:
+                    telegram.send_signal(signals.format_signal(signal))
+            else:
+                # No TP1 — cannot track; send Telegram unconditionally
+                telegram.send_signal(signals.format_signal(signal))
 
         _candle_count += 1
         if _candle_count % 100 == 0:
