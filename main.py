@@ -1,5 +1,5 @@
 # SMC Monitor — main.py
-# Versão: 0.1.3
+# Versão: 0.1.4
 
 """
 OBJETIVO: Entry point e orquestrador do daemon SMC Monitor.
@@ -26,7 +26,7 @@ import telegram
 import tracker
 import ws_feed
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ def main() -> None:
     _setup_logging()
     logger.info("SMC Monitor v%s iniciando", VERSION)
 
-    lib_version = smc_engine._get_lib_version()
+    lib_version = lib_version_check.get_lib_version()
     logger.info("smartmoneyconcepts version: %s", lib_version)
 
     ok, msg = _smoke_test_library()
