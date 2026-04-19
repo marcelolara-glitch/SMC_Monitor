@@ -8,6 +8,8 @@ LIMITAÇÕES CONHECIDAS: Apenas candles fechados (confirm == "1") são entregues
 NÃO FAZER: Nenhum cálculo SMC, nenhuma lógica de sinal, não manter estado de candles.
 """
 
+VERSION = "0.1.5"
+
 import asyncio
 import json
 import logging

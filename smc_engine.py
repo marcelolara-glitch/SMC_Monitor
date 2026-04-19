@@ -20,7 +20,7 @@ from smartmoneyconcepts import smc
 import config
 from lib_version_check import get_lib_version
 
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 
 logger = logging.getLogger(__name__)
 
