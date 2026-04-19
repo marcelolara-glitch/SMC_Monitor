@@ -17,7 +17,7 @@ import time
 
 import config
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +121,22 @@ CREATE TABLE IF NOT EXISTS bot_state (
 )
 """
 
+_DDL_HISTORICAL_SYNTHESIS = """
+CREATE TABLE IF NOT EXISTS historical_synthesis (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    token           TEXT NOT NULL,
+    timeframe       TEXT NOT NULL,
+    candle_ts       TEXT NOT NULL,
+    source          TEXT NOT NULL,
+    synthesized_at  TEXT NOT NULL
+)
+"""
+
+_DDL_HISTORICAL_SYNTHESIS_IDX = """
+CREATE INDEX IF NOT EXISTS idx_hist_synth_token_tf
+    ON historical_synthesis(token, timeframe)
+"""
+
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -132,6 +148,20 @@ def ensure_bot_state_table(conn: sqlite3.Connection) -> None:
     NÃO FAZER: não dropar tabela existente, não commitar (responsabilidade do chamador).
     """
     conn.execute(_DDL_BOT_STATE)
+    conn.commit()
+
+
+def ensure_historical_synthesis_table(conn: sqlite3.Connection) -> None:
+    """
+    OBJETIVO:
+        Garantir existência da tabela historical_synthesis e índice
+        associado. Migration idempotente.
+    FONTE DE DADOS: N/A (DDL).
+    LIMITAÇÕES CONHECIDAS: Nenhuma — CREATE TABLE IF NOT EXISTS é idempotente.
+    NÃO FAZER: Não dropar a tabela existente.
+    """
+    conn.execute(_DDL_HISTORICAL_SYNTHESIS)
+    conn.execute(_DDL_HISTORICAL_SYNTHESIS_IDX)
     conn.commit()
 
 
@@ -153,6 +183,7 @@ def init_db() -> None:
             conn.execute(_DDL_SIGNAL_EVENTS)
             conn.execute(_DDL_SIGNAL_EVENTS_IDX)
             ensure_bot_state_table(conn)
+            ensure_historical_synthesis_table(conn)
             conn.commit()
     except Exception as e:
         logger.warning("state.init_db falhou: %s", e)

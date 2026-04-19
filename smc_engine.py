@@ -20,7 +20,7 @@ from smartmoneyconcepts import smc
 import config
 from lib_version_check import get_lib_version
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,9 @@ class SMCEngine:
         self._buffers: Dict[str, Dict[str, collections.deque]] = {}
         # _states[token][timeframe] -> SMC state dict
         self._states: Dict[str, Dict[str, dict]] = {}
+        # True only during bootstrap_from_history(); guards on_candle against
+        # concurrent calls while historical data is being loaded.
+        self._bootstrapping: bool = False
         ok, msg = _smoke_test_library()
         if not ok:
             raise RuntimeError(f"smartmoneyconcepts smoke test failed: {msg}")
@@ -50,6 +53,9 @@ class SMCEngine:
         Recebe candle fechado, atualiza buffer e recalcula estado SMC.
         Chamado pelo ws_feed para cada candle com confirm==1.
         """
+        if self._bootstrapping:
+            return  # historical warm-up in progress; ignore live candles
+
         if token not in self._buffers:
             self._buffers[token] = {}
             self._states[token] = {}
@@ -111,6 +117,100 @@ class SMCEngine:
             token: dict(tf_states)
             for token, tf_states in self._states.items()
         }
+
+    # ─── Bootstrap (Passo 12) ────────────────────────────────────────────────────
+
+    def bootstrap_from_history(self, dfs_by_tf: dict) -> None:
+        """
+        OBJETIVO:
+            Popular o buffer circular do engine com candles históricos
+            pré-validados, antes do WebSocket começar a enviar candles
+            em tempo real. Recalcular todos os indicadores SMC baseado
+            nesse histórico.
+
+        FONTE DE DADOS:
+            DataFrames fornecidos pelo historical_loader — já auditados
+            e com lacunas preenchidas.
+
+        LIMITAÇÕES CONHECIDAS:
+            Assume que os DataFrames estão ordenados por timestamp
+            ascendente e têm schema OHLCV (Open, High, Low, Close, Volume).
+            Não revalida integridade — confia no historical_loader.
+            Usa config.TOKENS[0] como token canônico.
+
+        NÃO FAZER:
+            Não emitir sinais durante o bootstrap — apenas popular estado.
+            Não persistir candles no SQLite (são candles históricos,
+            não devem alimentar candle_buffer persistido).
+        """
+        self._bootstrapping = True
+        try:
+            token = config.TOKENS[0]
+            for tf, df in dfs_by_tf.items():
+                if df.empty:
+                    continue
+                self._populate_buffer(token, tf, df)
+
+            self._recompute_all_indicators(token)
+        finally:
+            self._bootstrapping = False
+
+    def _populate_buffer(self, token: str, tf: str, df: pd.DataFrame) -> None:
+        """
+        OBJETIVO: Popular buffer circular de token/tf a partir de DataFrame histórico.
+        FONTE DE DADOS: DataFrame com índice UTC e colunas OHLCV.
+        LIMITAÇÕES CONHECIDAS: Trunca df para os últimos maxlen candles (igual ao buffer).
+        NÃO FAZER: Não revalidar integridade — confia no historical_loader.
+        """
+        max_len = config.CANDLE_BUFFER.get(tf, 100)
+
+        if token not in self._buffers:
+            self._buffers[token] = {}
+            self._states[token] = {}
+        if tf not in self._buffers[token]:
+            self._buffers[token][tf] = collections.deque(maxlen=max_len)
+            self._states[token][tf] = _empty_state()
+
+        buf = self._buffers[token][tf]
+        recent = df.iloc[-max_len:]
+        for ts, row in recent.iterrows():
+            ts_ms = int(ts.timestamp() * 1000)
+            buf.append({
+                "ts": ts_ms,
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]),
+            })
+
+    def _recompute_all_indicators(self, token: str) -> None:
+        """
+        OBJETIVO: Recalcular todos os indicadores SMC para token após popular buffers.
+        FONTE DE DADOS: Buffers internos preenchidos por _populate_buffer.
+        LIMITAÇÕES CONHECIDAS: Só processa TFs com buffer completo (>= maxlen).
+        NÃO FAZER: Não emitir sinais — apenas atualizar estado interno.
+        """
+        for tf in config.TIMEFRAMES:
+            if token not in self._buffers or tf not in self._buffers[token]:
+                continue
+            buf = self._buffers[token][tf]
+            max_len = config.CANDLE_BUFFER.get(tf, 100)
+            if len(buf) < max_len:
+                continue
+
+            self._cycle_df = None
+            self._cycle_shl_df = None
+
+            self._update_swings(token, tf)
+            self._update_bos_choch(token, tf)
+            self._update_order_blocks(token, tf)
+            self._update_fvgs(token, tf)
+            self._update_premium_discount(token, tf)
+            self._update_sweeps(token, tf)
+
+            self._states[token][tf]["ready"] = True
+            logger.info("bootstrap: %s/%s ready após %d candles", token, tf, len(buf))
 
     # ─── Private helpers ────────────────────────────────────────────────────────
 
