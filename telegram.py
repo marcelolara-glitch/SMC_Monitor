@@ -1,5 +1,5 @@
 # SMC Monitor — telegram.py
-# Versão: 0.1.3
+# Versão: 0.1.4
 
 """
 OBJETIVO: Enviar notificações via Telegram Bot API.
@@ -17,7 +17,7 @@ import urllib.request
 
 import config
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +66,23 @@ def send_signal(message: str) -> None:
 
 
 def send_heartbeat(message: str) -> None:
-    """Send a heartbeat/status message. No retry — warning on failure."""
-    try:
-        _post(message)
-    except Exception as exc:
-        logger.warning("Telegram send_heartbeat failed: %s", exc)
+    """
+    OBJETIVO: enviar heartbeat periódico. Retry leve (2 tentativas, backoff 2s)
+              para sobreviver a blips momentâneos sem bloquear o loop principal.
+    NÃO FAZER: não subir para 3+ retries; não levantar exceção — retornar/logar apenas.
+    """
+    for attempt in range(1, 3):
+        try:
+            _post(message)
+            return
+        except Exception as exc:
+            if attempt < 2:
+                logger.warning(
+                    "Telegram send_heartbeat attempt %d failed: %s — retrying", attempt, exc
+                )
+                time.sleep(2)
+            else:
+                logger.warning("Telegram send_heartbeat failed after 2 attempts: %s", exc)
 
 
 def _format_duration(seconds: int) -> str:
@@ -194,7 +206,7 @@ def send_critical_alert(message: str) -> bool:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    for attempt in range(1, 3):  # 2 tentativas total: a primeira e 1 retry
+    for attempt in range(1, 4):  # 3 tentativas total: a primeira e 2 retries
         try:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 if resp.status == 200:
@@ -208,6 +220,6 @@ def send_critical_alert(message: str) -> bool:
                 "Telegram send_critical_alert attempt %d failed: %s",
                 attempt, exc,
             )
-        if attempt < 2:
+        if attempt < 3:
             time.sleep(2)
     return False
