@@ -1,5 +1,5 @@
 # SMC Monitor — state.py
-# Versão: 0.1.3
+# Versão: 0.1.5
 
 """
 OBJETIVO: Persistência SQLite do estado SMC para crash-recovery.
@@ -17,7 +17,7 @@ import time
 
 import config
 
-VERSION = "0.1.3"
+VERSION = "0.1.5"
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +113,27 @@ CREATE INDEX IF NOT EXISTS idx_signal_events_signal_id
   ON signal_events(signal_id)
 """
 
+_DDL_BOT_STATE = """
+CREATE TABLE IF NOT EXISTS bot_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
 
 # ─── Public API ──────────────────────────────────────────────────────────────
+
+def ensure_bot_state_table(conn: sqlite3.Connection) -> None:
+    """
+    OBJETIVO: Garantir tabela bot_state (migration idempotente).
+    FONTE DE DADOS: conexão SQLite existente passada pelo chamador.
+    LIMITAÇÕES CONHECIDAS: Nenhuma — CREATE TABLE IF NOT EXISTS é idempotente.
+    NÃO FAZER: não dropar tabela existente, não commitar (responsabilidade do chamador).
+    """
+    conn.execute(_DDL_BOT_STATE)
+    conn.commit()
+
 
 def init_db() -> None:
     """
@@ -133,6 +152,7 @@ def init_db() -> None:
             conn.execute(_DDL_SIGNAL_LIFECYCLE_IDX2)
             conn.execute(_DDL_SIGNAL_EVENTS)
             conn.execute(_DDL_SIGNAL_EVENTS_IDX)
+            ensure_bot_state_table(conn)
             conn.commit()
     except Exception as e:
         logger.warning("state.init_db falhou: %s", e)

@@ -1,5 +1,5 @@
 # SMC Monitor — main.py
-# Versão: 0.1.4
+# Versão: 0.1.5
 
 """
 OBJETIVO: Entry point e orquestrador do daemon SMC Monitor.
@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 
+import bot_handler
 import config
 import lib_version_check
 import signals
@@ -26,7 +27,7 @@ import telegram
 import tracker
 import ws_feed
 
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,10 @@ def main() -> None:
 
     vc_thread = threading.Thread(target=_version_check_loop, daemon=True, name="version-check")
     vc_thread.start()
+
+    bot_handler.set_engine(engine)
+    bot_handler.start_bot_thread()
+    logger.info("bot_handler thread iniciada")
 
     def on_candle(token: str, timeframe: str, candle: dict) -> None:
         global _candle_count
