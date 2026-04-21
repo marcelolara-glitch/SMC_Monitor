@@ -1,5 +1,5 @@
 # SMC Monitor — smc_engine.py
-# Versão: 0.1.4
+# Versão: 0.1.7 (draft)
 
 """
 OBJETIVO: Mantém estado SMC completo por token/timeframe.
@@ -97,9 +97,15 @@ class SMCEngine:
             "trend": str,            # "bullish" | "bearish" | "neutral"
             "last_bos": dict | None, # {"type": "BOS"|"ChoCH", "direction": "bull"|"bear",
                                      #  "price": float, "ts": int}
+            "all_bos": list,         # cronologicamente ordenado (oldest → newest)
             "active_obs": list,
             "active_fvgs": list,
             "premium_discount": str, # "premium" | "discount" | "equilibrium"
+            "pd_reference_range": dict | None,  # {"top": float, "bottom": float,
+                                                 #  "source": "ob" | "swing"}
+            "pd_position": float | None,        # clamp em [0.0, 1.0]
+            "pd_position_raw": float | None,    # valor antes do clamp (debug)
+            "pd_label": str,         # "premium" | "discount" | "equilibrium"
             "last_sweep": dict | None,
         }
         """
@@ -269,12 +275,16 @@ class SMCEngine:
     def _update_bos_choch(self, token: str, timeframe: str) -> None:
         """
         OBJETIVO: detectar Break of Structure (BOS) e Change of Character (ChoCH)
-                  delegando à smc.bos_choch com close_break=True.
+                  delegando à smc.bos_choch com close_break=True. Popula a lista
+                  cronológica state["all_bos"] e o atalho state["last_bos"].
         FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
         LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
                                e este método é abortado sem alterar o estado.
+                               state["all_bos"] reflete apenas os BOSes visíveis
+                               no buffer atual; BOSes fora da janela somem.
         NÃO FAZER: não derivar BOS/ChoCH de comparação manual de closes,
-                   não usar wick para confirmar quebra.
+                   não usar wick para confirmar quebra,
+                   não deduplicar aqui (isso é responsabilidade do signals).
         """
         state = self._states[token][timeframe]
         if self._cycle_df is None or self._cycle_shl_df is None:
@@ -284,36 +294,43 @@ class SMCEngine:
             shl_df = self._cycle_shl_df
             bos_df = smc.bos_choch(df, shl_df, close_break=True)
 
-            # Find last row with BOS or CHOCH signal
-            new_bos = None
-            for i in range(len(bos_df) - 1, -1, -1):
+            new_bos_list: list[dict] = []
+            for i in range(len(bos_df)):
                 bos_val = bos_df["BOS"].iloc[i]
                 choch_val = bos_df["CHOCH"].iloc[i]
-                bos_set = not (isinstance(bos_val, float) and math.isnan(bos_val))
-                choch_set = not (isinstance(choch_val, float) and math.isnan(choch_val))
-                if bos_set or choch_set:
-                    level = float(bos_df["Level"].iloc[i])
-                    ts_ms = int(df.index[i].timestamp() * 1000)
-                    if bos_set:
-                        sig_type = "BOS"
-                        direction = "bull" if float(bos_val) == 1 else "bear"
-                    else:
-                        sig_type = "ChoCH"
-                        direction = "bull" if float(choch_val) == 1 else "bear"
-                    new_bos = {
-                        "type": sig_type,
-                        "direction": direction,
-                        "price": level,
-                        "ts": ts_ms,
-                    }
-                    break
+                bos_set = not pd.isna(bos_val)
+                choch_set = not pd.isna(choch_val)
+                if not (bos_set or choch_set):
+                    continue
 
-            if new_bos:
-                state["last_bos"] = new_bos
-                state["trend"] = "bullish" if new_bos["direction"] == "bull" else "bearish"
+                level_val = bos_df["Level"].iloc[i]
+                if pd.isna(level_val):
+                    continue
+
+                ts_ms = int(df.index[i].timestamp() * 1000)
+                if bos_set:
+                    sig_type = "BOS"
+                    direction = "bull" if float(bos_val) == 1 else "bear"
+                else:
+                    sig_type = "ChoCH"
+                    direction = "bull" if float(choch_val) == 1 else "bear"
+
+                new_bos_list.append({
+                    "type": sig_type,
+                    "direction": direction,
+                    "price": float(level_val),
+                    "ts": ts_ms,
+                })
+
+            state["all_bos"] = new_bos_list
+            if new_bos_list:
+                last = new_bos_list[-1]
+                state["last_bos"] = last
+                state["trend"] = "bullish" if last["direction"] == "bull" else "bearish"
                 logger.debug(
-                    "%s/%s %s direction=%s price=%.4f",
-                    token, timeframe, new_bos["type"], new_bos["direction"], new_bos["price"],
+                    "%s/%s %s direction=%s price=%.4f total=%d",
+                    token, timeframe, last["type"], last["direction"], last["price"],
+                    len(new_bos_list),
                 )
         except Exception as exc:
             logger.warning(
@@ -448,44 +465,108 @@ class SMCEngine:
     def _update_premium_discount(self, token: str, timeframe: str) -> None:
         """
         OBJETIVO: classificar o preço atual como premium, discount ou equilibrium
-                  em relação ao midpoint do range swing_high/swing_low.
-        FONTE DE DADOS: swing_high e swing_low já atualizados neste ciclo por
-                        _update_swings; último close do buffer circular.
-        LIMITAÇÕES CONHECIDAS: requer swing_high > swing_low para ser significativo;
-                               retorna equilibrium se swings ainda não estiverem
-                               disponíveis (estado inicial).
-        NÃO FAZER: não delegar à lib — cálculo trivial e próprio do projeto;
-                   não usar médias móveis ou outros indicadores para o range.
+                  em relação ao range de referência do timeframe e gravar no state
+                  os campos consolidados pd_reference_range, pd_position,
+                  pd_position_raw e pd_label. O cálculo é centralizado aqui para
+                  que signals.py e bot_handler.py consumam a mesma fonte.
+        FONTE DE DADOS:
+            1) OB ativo não-mitigado mais recente do timeframe (preferência);
+            2) swing_high/swing_low do timeframe (fallback).
+            Último close do buffer circular do timeframe.
+        LIMITAÇÕES CONHECIDAS:
+            - Range dos swings pode capturar microswings curtos;
+              por isso preferimos OB quando disponível.
+            - Se nenhum range válido existe, pd_position fica None e o label
+              cai em equilibrium.
+            - pd_position é clampado em [0.0, 1.0]; o valor cru fica em
+              pd_position_raw para debug/inspeção.
+        NÃO FAZER: não delegar à lib (cálculo trivial);
+                   não usar médias móveis ou outros indicadores para o range;
+                   não recalcular em signals.py — consumir state consolidado.
         """
         candles = self._candles(token, timeframe)
         state = self._states[token][timeframe]
-        last_close = candles[-1]["close"]
+        last_close = float(candles[-1]["close"])
 
-        sh = state["swing_high"]
-        sl = state["swing_low"]
+        range_top = 0.0
+        range_bottom = 0.0
+        source = None
 
-        if sh <= sl or sh == 0.0:
+        # Preferência 1: OB ativo não-mitigado mais recente (qualquer direção)
+        active_obs = [
+            ob for ob in state.get("active_obs", [])
+            if not ob.get("mitigated", False)
+        ]
+        if active_obs:
+            ref_ob = max(active_obs, key=lambda o: o.get("ts", 0))
+            ob_top = float(ref_ob.get("top", 0.0))
+            ob_bottom = float(ref_ob.get("bottom", 0.0))
+            if ob_top > ob_bottom:
+                range_top = ob_top
+                range_bottom = ob_bottom
+                source = "ob"
+
+        # Preferência 2 (fallback): range dos swings
+        if source is None:
+            sh = float(state.get("swing_high", 0.0))
+            sl = float(state.get("swing_low", 0.0))
+            if sh > sl > 0.0:
+                range_top = sh
+                range_bottom = sl
+                source = "swing"
+
+        if source is None or range_top <= range_bottom:
+            state["pd_reference_range"] = None
+            state["pd_position"] = None
+            state["pd_position_raw"] = None
+            state["pd_label"] = "equilibrium"
             state["premium_discount"] = "equilibrium"
             return
 
-        equilibrium = (sh + sl) / 2
+        equilibrium = (range_top + range_bottom) / 2.0
+        raw_position = (last_close - range_bottom) / (range_top - range_bottom)
+        clamped_position = max(0.0, min(1.0, raw_position))
 
         if last_close > equilibrium:
-            state["premium_discount"] = "premium"
+            label = "premium"
         elif last_close < equilibrium:
-            state["premium_discount"] = "discount"
+            label = "discount"
         else:
-            state["premium_discount"] = "equilibrium"
+            label = "equilibrium"
+
+        state["pd_reference_range"] = {
+            "top": range_top,
+            "bottom": range_bottom,
+            "source": source,
+        }
+        state["pd_position"] = clamped_position
+        state["pd_position_raw"] = raw_position
+        state["pd_label"] = label
+        state["premium_discount"] = label
 
     def _update_sweeps(self, token: str, timeframe: str) -> None:
         """
         OBJETIVO: detectar varreduras de liquidez (liquidity sweeps) delegando
-                  à smc.liquidity e mapeando o último pool varrido para last_sweep.
+                  à smc.liquidity, filtrando apenas pools realmente varridas,
+                  e mapear o sweep mais recente (por timestamp do candle que
+                  consumou o sweep) para state["last_sweep"].
         FONTE DE DADOS: cycle_df e cycle_shl_df cacheados por _update_swings.
-        LIMITAÇÕES CONHECIDAS: se _update_swings falhou, cycle_shl_df é None
-                               e este método é abortado sem alterar o estado.
-        NÃO FAZER: não detectar sweeps por comparação manual de wicks,
-                   não usar LIQUIDITY_SWEEP_LOOKBACK para este cálculo.
+        LIMITAÇÕES CONHECIDAS:
+            - A coluna "Liquidity" retorna TODAS as pools identificadas,
+              não apenas as varridas — a distinção real vem de "Swept" não-NaN.
+            - "Swept" é o índice da vela onde o sweep foi consumado, não um
+              booleano. Pools não-varridas vêm com Swept=NaN.
+            - "Level" pode vir NaN quando a lib não resolveu o preço; essas
+              entradas são descartadas (evita propagar NaN como swept_price).
+            - Se nenhum sweep válido é encontrado no ciclo atual,
+              state["last_sweep"] é preservado (sweep antigo continua sendo o
+              último sweep conhecido).
+        NÃO FAZER:
+            - não detectar sweeps por comparação manual de wicks;
+            - não usar LIQUIDITY_SWEEP_LOOKBACK para este cálculo;
+            - não sobrescrever last_sweep com None se nada novo foi encontrado;
+            - não usar o timestamp da detecção da pool; usar o timestamp do
+              candle que fechou o sweep (df.index[int(Swept)]).
         """
         state = self._states[token][timeframe]
         if self._cycle_df is None or self._cycle_shl_df is None:
@@ -495,32 +576,37 @@ class SMCEngine:
             shl_df = self._cycle_shl_df
             liq_df = smc.liquidity(df, shl_df, range_percent=0.01)
 
-            last_sweep = None
-            for i in range(len(liq_df) - 1, -1, -1):
+            valid_sweeps: list[dict] = []
+            for i in range(len(liq_df)):
                 liq_val = liq_df["Liquidity"].iloc[i]
                 swept_val = liq_df["Swept"].iloc[i]
-                if isinstance(liq_val, float) and math.isnan(liq_val):
-                    continue
-                if isinstance(swept_val, float) and math.isnan(swept_val):
-                    continue
-                if float(swept_val) <= 0:
-                    continue
-                level = float(liq_df["Level"].iloc[i])
-                direction = "high" if float(liq_val) == 1 else "low"
-                last_sweep = {
-                    "ts": int(df.index[i].timestamp() * 1000),
-                    "direction": direction,
-                    "swept_price": level,
-                    "close": float(df["close"].iloc[-1]),
-                }
-                logger.debug(
-                    "%s/%s Sweep %s swept_price=%.4f",
-                    token, timeframe, direction, level,
-                )
-                break
+                level_val = liq_df["Level"].iloc[i]
 
-            if last_sweep is not None:
-                state["last_sweep"] = last_sweep
+                # Require all three non-NaN to consider this a real sweep
+                if pd.isna(liq_val) or pd.isna(swept_val) or pd.isna(level_val):
+                    continue
+
+                swept_idx = int(swept_val)
+                if swept_idx <= 0 or swept_idx >= len(df):
+                    continue
+
+                direction = "high" if float(liq_val) == 1 else "low"
+                valid_sweeps.append({
+                    "ts": int(df.index[swept_idx].timestamp() * 1000),
+                    "direction": direction,
+                    "swept_price": float(level_val),
+                    "close": float(df["close"].iloc[swept_idx]),
+                })
+
+            if valid_sweeps:
+                latest = max(valid_sweeps, key=lambda s: s["ts"])
+                state["last_sweep"] = latest
+                logger.debug(
+                    "%s/%s Sweep %s swept_price=%.4f total_valid=%d",
+                    token, timeframe, latest["direction"], latest["swept_price"],
+                    len(valid_sweeps),
+                )
+            # No-op when empty: preserve previously known last_sweep.
         except Exception as exc:
             logger.warning(
                 "%s/%s _update_sweeps failed: %s", token, timeframe, exc
@@ -606,8 +692,13 @@ def _empty_state() -> dict:
         "swing_low": 0.0,
         "trend": "neutral",
         "last_bos": None,
+        "all_bos": [],
         "active_obs": [],
         "active_fvgs": [],
         "premium_discount": "equilibrium",
+        "pd_reference_range": None,
+        "pd_position": None,
+        "pd_position_raw": None,
+        "pd_label": "equilibrium",
         "last_sweep": None,
     }
