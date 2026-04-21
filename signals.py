@@ -67,9 +67,10 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         logger.debug("%s: not all timeframes ready — skipping evaluation", token)
         return None
 
-    # ── Gate 1: Tendência 4H (viés macro) ────────────────────────────────────
-    # Direction DERIVA de trend_4h, logo 4H sempre alinha com a direção.
-    # 4H neutral bloqueia emissão (gate implícito).
+    # ── Gate 2: Tendência 4H (viés macro) ────────────────────────────────────
+    # Executa primeiro por necessidade — direction DERIVA de trend_4h e o
+    # Gate 1 (P/D) precisa de direction para decidir. 4H neutral bloqueia.
+    # (Numeração segue briefing: Gate 1 = P/D, Gate 2 = 4H.)
     trend_4h = state_4h.get("trend", "neutral")
     if trend_4h == "neutral":
         logger.debug("%s: gate 4H bloqueou — trend_4h=neutral", token)
@@ -78,7 +79,7 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
     direction = "LONG"  if trend_4h == "bullish" else "SHORT"
     ob_type   = "bull"  if direction == "LONG"   else "bear"
 
-    # ── Gate 2: Premium/Discount direcional ──────────────────────────────────
+    # ── Gate 1: Premium/Discount direcional ──────────────────────────────────
     # LONG só em Discount claro (<0.45); SHORT só em Premium claro (>0.55);
     # Equilibrium (0.45–0.55) passa, mas não pontua no score.
     pd_position = state_1h.get("pd_position")
@@ -224,7 +225,7 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         pd_swing_low   = float(state_1h.get("swing_low", 0.0))
         pd_equilibrium = (
             (pd_swing_high + pd_swing_low) / 2.0
-            if pd_swing_high > pd_swing_low > 0.0
+            if pd_swing_high > pd_swing_low and pd_swing_high > 0.0
             else 0.0
         )
 
