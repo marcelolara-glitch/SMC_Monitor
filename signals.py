@@ -1,5 +1,5 @@
 # SMC Monitor — signals.py
-# Versão: 0.1.10
+# Versão: 0.1.11
 
 """
 OBJETIVO: Calcular score de confluência SMC, decidir emissão de sinal e
@@ -9,15 +9,22 @@ LIMITAÇÕES CONHECIDAS: requer todos os timeframes prontos (ready=True) para av
 NÃO FAZER: sem cálculo SMC, sem conexão WebSocket, sem envio de mensagens Telegram.
 """
 
-import datetime
 import logging
 import time
 
 import config
 import state as _state
 from smc_engine import SMCEngine
+from telegram import (
+    _emission_header,
+    _escape_mdv2,
+    _fmt_pct,
+    _fmt_price,
+    _fmt_volume,
+    _ts_to_brt,
+)
 
-VERSION = "0.1.10"
+VERSION = "0.1.11"
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +80,8 @@ def _prune_expired_tracking(now_ms: int) -> None:
 
 
 def _ts_to_str(ts_ms: int) -> str:
-    if not ts_ms:
-        return "—"
-    return datetime.datetime.utcfromtimestamp(ts_ms / 1000.0).strftime("%Y-%m-%d %H:%M UTC")
+    """Wrapper histórico — timestamps agora são exibidos em BRT (PR C)."""
+    return _ts_to_brt(ts_ms)
 
 
 def evaluate(token: str, engine: SMCEngine) -> dict | None:
@@ -457,17 +463,20 @@ def format_signal(signal: dict) -> str:
     trend_1h_status     = signal.get("trend_1h_status", "aligned")
 
     lines = []
+    tok_esc = _escape_mdv2(token)
+    dir_esc = _escape_mdv2(direction)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    lines.append(f"{emoji} *{direction} — {token}*")
-    cp_str = f"`{current_price:.4f}`" if current_price else "—"
+    lines.append(f"{emoji} *{dir_esc} — {tok_esc}*")
+    lines.append(_emission_header())
+    cp_str = f"`{_escape_mdv2(_fmt_price(current_price))}`" if current_price else "—"
     if emission_tag == "upgrade" and previous_peak_score:
         lines.append(
-            f"Score: *{score}/5* ⬆️ (upgrade de {previous_peak_score}/5)  "
-            f"| Preço atual: {cp_str}"
+            f"Score: *{score}/5* ⬆️ \\(upgrade de {previous_peak_score}/5\\)  "
+            f"\\| Preço atual: {cp_str}"
         )
     else:
-        lines.append(f"Score: *{score}/5*  | Preço atual: {cp_str}")
+        lines.append(f"Score: *{score}/5*  \\| Preço atual: {cp_str}")
     lines.append("")
 
     # ── Gates aprovados (informativo — sinal só é emitido se ambos ok) ───────
@@ -475,25 +484,28 @@ def format_signal(signal: dict) -> str:
     pd_gate_pos   = pd_details.get("position", 0.5) if pd_details else 0.5
     trend_4h_val  = trend_states.get("4H", {}).get("trend", "neutral")
     lines.append("━━ Gates aprovados ━━")
-    lines.append(f"  ✅ Premium/Discount ({pd_gate_label}, {pd_gate_pos:.2f})")
-    lines.append(f"  ✅ Tendência 4H ({trend_4h_val})")
+    lines.append(
+        f"  ✅ Premium/Discount \\({_escape_mdv2(pd_gate_label)}, "
+        f"{_escape_mdv2(f'{pd_gate_pos:.2f}')}\\)"
+    )
+    lines.append(f"  ✅ Tendência 4H \\({_escape_mdv2(trend_4h_val)}\\)")
     lines.append("")
 
     # ── Trend Multi-Timeframe ─────────────────────────────────────────────────
-    lines.append("━━ Trend Multi-Timeframe ━━")
+    lines.append("━━ Trend Multi\\-Timeframe ━━")
     for tf in ("4H", "1H", "15m"):
         ts_data  = trend_states.get(tf, {})
         trend    = ts_data.get("trend", "neutral")
         last_bos = ts_data.get("last_bos")
         if last_bos:
-            bos_type  = last_bos.get("type", "BOS")
-            bos_dir   = last_bos.get("direction", "")
-            bos_price = last_bos.get("price", 0.0)
-            bos_ts    = _ts_to_str(last_bos.get("ts", 0))
-            bos_info  = f"(última {bos_type}: {bos_dir} @ {bos_price:.4f} em {bos_ts})"
+            bos_type  = _escape_mdv2(last_bos.get("type", "BOS"))
+            bos_dir   = _escape_mdv2(last_bos.get("direction", ""))
+            bos_price = _escape_mdv2(_fmt_price(last_bos.get("price", 0.0)))
+            bos_ts    = _escape_mdv2(_ts_to_brt(last_bos.get("ts", 0)))
+            bos_info  = f"\\(última {bos_type}: {bos_dir} @ `{bos_price}` em {bos_ts}\\)"
         else:
-            bos_info = "(—)"
-        lines.append(f"{tf}: {trend}  {bos_info}")
+            bos_info = "\\(—\\)"
+        lines.append(f"{tf}: {_escape_mdv2(trend)}  {bos_info}")
     lines.append("")
 
     # ── Zona de Entrada ───────────────────────────────────────────────────────
@@ -508,44 +520,58 @@ def format_signal(signal: dict) -> str:
     }.get(tp1_source, tp1_source)
 
     lines.append("━━ Zona de Entrada ━━")
-    lines.append(f"Entrada sugerida: `{entry:.4f}` ({entry_src_label})")
+    lines.append(
+        f"Entrada sugerida: `{_escape_mdv2(_fmt_price(entry))}` "
+        f"\\({_escape_mdv2(entry_src_label)}\\)"
+    )
     if entry_zone_valid:
         lines.append(
-            f"Zona válida: `{entry_zone_valid['bottom']:.4f}` – "
-            f"`{entry_zone_valid['top']:.4f}`"
+            f"Zona válida: `{_escape_mdv2(_fmt_price(entry_zone_valid['bottom']))}` – "
+            f"`{_escape_mdv2(_fmt_price(entry_zone_valid['top']))}`"
         )
-    lines.append(f"SL: `{sl:.4f}` (swing estrutural + buffer)")
-    lines.append(f"TP1: `{tp1:.4f}` ({tp1_src_label})")
-    lines.append(f"R:R: {rr:.2f}")
+    lines.append(f"SL: `{_escape_mdv2(_fmt_price(sl))}` \\(swing estrutural \\+ buffer\\)")
+    lines.append(
+        f"TP1: `{_escape_mdv2(_fmt_price(tp1))}` \\({_escape_mdv2(tp1_src_label)}\\)"
+    )
+    lines.append(f"R:R: {_escape_mdv2(f'{rr:.2f}')}")
     lines.append("")
 
     # ── Indicadores 1H Detalhados ─────────────────────────────────────────────
     lines.append("━━ Indicadores 1H Detalhados ━━")
 
     if ref_ob:
-        ob_type_label = ref_ob.get("type", "")
+        ob_type_label = _escape_mdv2(ref_ob.get("type", ""))
         disp_pct      = ref_ob.get("displacement", 0.0) * 100
-        lines.append(f"OB referência ({ob_type_label}):")
-        lines.append(f"  range: `{ref_ob['bottom']:.4f}` – `{ref_ob['top']:.4f}`")
-        lines.append(f"  volume: `{ref_ob.get('volume', 0.0):.4f}`")
-        lines.append(f"  displacement: `{disp_pct:.2f}%`")
+        ob_vol        = ref_ob.get("volume", 0.0)
+        lines.append(f"OB referência \\({ob_type_label}\\):")
+        lines.append(
+            f"  range: `{_escape_mdv2(_fmt_price(ref_ob['bottom']))}` – "
+            f"`{_escape_mdv2(_fmt_price(ref_ob['top']))}`"
+        )
+        lines.append(f"  volume: `{_escape_mdv2(_fmt_volume(ob_vol))}`")
+        lines.append(f"  displacement: `{_escape_mdv2(_fmt_pct(disp_pct))}`")
     else:
         lines.append("OB referência: —")
 
     if ref_fvg:
-        fvg_type_label = ref_fvg.get("type", "")
-        lines.append(f"FVG adjacente ({fvg_type_label}):")
-        lines.append(f"  range: `{ref_fvg['bottom']:.4f}` – `{ref_fvg['top']:.4f}`")
-        lines.append(f"  midpoint: `{ref_fvg.get('midpoint', 0.0):.4f}`")
-        lines.append(f"  status: {ref_fvg.get('status', 'active')}")
+        fvg_type_label = _escape_mdv2(ref_fvg.get("type", ""))
+        lines.append(f"FVG adjacente \\({fvg_type_label}\\):")
+        lines.append(
+            f"  range: `{_escape_mdv2(_fmt_price(ref_fvg['bottom']))}` – "
+            f"`{_escape_mdv2(_fmt_price(ref_fvg['top']))}`"
+        )
+        lines.append(f"  midpoint: `{_escape_mdv2(_fmt_price(ref_fvg.get('midpoint', 0.0)))}`")
+        lines.append(f"  status: {_escape_mdv2(ref_fvg.get('status', 'active'))}")
     else:
         lines.append("FVG adjacente: —")
 
     if ref_sweep and ref_sweep_tf:
         sweep_age = (now_ms - ref_sweep.get("ts", now_ms)) // _TF_DURATION_MS.get(ref_sweep_tf, 1)
-        lines.append(f"Sweep recente ({ref_sweep_tf}):")
-        lines.append(f"  direção: {ref_sweep.get('direction', '')}")
-        lines.append(f"  preço varrido: `{ref_sweep.get('swept_price', 0.0):.4f}`")
+        lines.append(f"Sweep recente \\({_escape_mdv2(ref_sweep_tf)}\\):")
+        lines.append(f"  direção: {_escape_mdv2(ref_sweep.get('direction', ''))}")
+        lines.append(
+            f"  preço varrido: `{_escape_mdv2(_fmt_price(ref_sweep.get('swept_price', 0.0)))}`"
+        )
         lines.append(f"  idade: {sweep_age} candles")
     else:
         lines.append("Sweep recente: —")
@@ -556,25 +582,28 @@ def format_signal(signal: dict) -> str:
         pd_sh    = pd_details.get("swing_high", 0.0)
         pd_sl    = pd_details.get("swing_low", 0.0)
         pd_eq    = pd_details.get("equilibrium", 0.0)
-        lines.append("Premium/Discount (1H):")
-        lines.append(f"  posição: {pd_pos:.2f} ({pd_label})")
-        lines.append(f"  swing_high: `{pd_sh:.4f}`")
-        lines.append(f"  swing_low: `{pd_sl:.4f}`")
-        lines.append(f"  equilibrium: `{pd_eq:.4f}`")
+        lines.append("Premium/Discount \\(1H\\):")
+        lines.append(
+            f"  posição: {_escape_mdv2(f'{pd_pos:.2f}')} \\({_escape_mdv2(pd_label)}\\)"
+        )
+        lines.append(f"  swing\\_high: `{_escape_mdv2(_fmt_price(pd_sh))}`")
+        lines.append(f"  swing\\_low: `{_escape_mdv2(_fmt_price(pd_sl))}`")
+        lines.append(f"  equilibrium: `{_escape_mdv2(_fmt_price(pd_eq))}`")
     lines.append("")
 
     # ── Critérios atingidos ───────────────────────────────────────────────────
     lines.append("━━ Critérios atingidos ━━")
     for key, label in _CRITERIA_LABELS.items():
         icon = "✅" if criteria.get(key) else "❌"
+        label_esc = _escape_mdv2(label)
         if (
             key == "trend_1h_aligned"
             and criteria.get(key)
             and trend_1h_status == "exhausted"
         ):
-            lines.append(f"  {icon} {label} (esgotamento)")
+            lines.append(f"  {icon} {label_esc} \\(esgotamento\\)")
         else:
-            lines.append(f"  {icon} {label}")
+            lines.append(f"  {icon} {label_esc}")
 
     return "\n".join(lines)
 
@@ -691,40 +720,48 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
 
 
 def format_event(event: dict, token: str) -> str:
-    """Formata dict de evento para mensagem Markdown pronta para Telegram."""
+    """Formata dict de evento para mensagem MarkdownV2 pronta para Telegram."""
     et   = event["event_type"]
     tf   = event["timeframe"]
     data = event["data"]
 
+    tok_esc = _escape_mdv2(token)
+    header = _emission_header()
+
     if et == "bos_choch":
-        ts_str = _ts_to_str(data["ts"])
+        ts_str = _escape_mdv2(_ts_to_brt(data["ts"]))
         return (
-            f"🔔 {data['type']} {tf} — {token}\n"
-            f"Direção: {data['direction']}\n"
-            f"Preço rompido: {data['price']:.4f}\n"
-            f"Timestamp: {ts_str}"
+            f"🔔 {_escape_mdv2(data['type'])} {tf} — {tok_esc}\n"
+            f"{header}\n"
+            f"Direção: {_escape_mdv2(data['direction'])}\n"
+            f"Preço rompido: `{_escape_mdv2(_fmt_price(data['price']))}`\n"
+            f"Timestamp do evento: {ts_str}"
         )
 
     if et == "sweep":
-        ts_str = _ts_to_str(data["ts"])
+        ts_str = _escape_mdv2(_ts_to_brt(data["ts"]))
         return (
-            f"💧 Sweep {tf} — {token}\n"
-            f"Direção: {data['direction']}\n"
-            f"Preço varrido: {data['swept_price']:.4f}\n"
-            f"Close do candle: {data['close']:.4f}\n"
-            f"Timestamp: {ts_str}"
+            f"💧 Sweep {tf} — {tok_esc}\n"
+            f"{header}\n"
+            f"Direção: {_escape_mdv2(data['direction'])}\n"
+            f"Preço varrido: `{_escape_mdv2(_fmt_price(data['swept_price']))}`\n"
+            f"Close do candle: `{_escape_mdv2(_fmt_price(data['close']))}`\n"
+            f"Timestamp do evento: {ts_str}"
         )
 
     if et == "trend_change":
-        ts_str = _ts_to_str(data["ts"])
+        ts_str = _escape_mdv2(_ts_to_brt(data["ts"]))
         return (
-            f"🔄 Trend 4H mudou — {token}\n"
-            f"{data['from_trend']} → {data['to_trend']}\n"
-            f"Causado por: {data['bos_type']} {data['bos_direction']} @ {data['bos_price']:.4f}\n"
-            f"Timestamp: {ts_str}"
+            f"🔄 Trend 4H mudou — {tok_esc}\n"
+            f"{header}\n"
+            f"{_escape_mdv2(data['from_trend'])} → {_escape_mdv2(data['to_trend'])}\n"
+            f"Causado por: {_escape_mdv2(data['bos_type'])} "
+            f"{_escape_mdv2(data['bos_direction'])} @ "
+            f"`{_escape_mdv2(_fmt_price(data['bos_price']))}`\n"
+            f"Timestamp do evento: {ts_str}"
         )
 
-    return f"[evento desconhecido: {et}]"
+    return f"\\[evento desconhecido: {_escape_mdv2(et)}\\]"
 
 
 def load_event_tracking() -> None:
