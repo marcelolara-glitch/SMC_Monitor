@@ -1,5 +1,5 @@
 # SMC Monitor — state.py
-# Versão: 0.1.5
+# Versão: 0.1.10
 
 """
 OBJETIVO: Persistência SQLite do estado SMC para crash-recovery.
@@ -17,7 +17,7 @@ import time
 
 import config
 
-VERSION = "0.1.6"
+VERSION = "0.1.10"
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,20 @@ CREATE INDEX IF NOT EXISTS idx_hist_synth_token_tf
     ON historical_synthesis(token, timeframe)
 """
 
+_DDL_SIGNAL_EMISSION_TRACKING = """
+CREATE TABLE IF NOT EXISTS signal_emission_tracking (
+    key_hash         TEXT    PRIMARY KEY,
+    token            TEXT    NOT NULL,
+    direction        TEXT    NOT NULL,
+    ob_range_hash    TEXT    NOT NULL,
+    fvg_range_hash   TEXT    NOT NULL,
+    first_emitted_ts INTEGER NOT NULL,
+    last_emitted_ts  INTEGER NOT NULL,
+    peak_score       INTEGER NOT NULL,
+    emission_count   INTEGER NOT NULL DEFAULT 1
+)
+"""
+
 
 # ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -182,6 +196,7 @@ def init_db() -> None:
             conn.execute(_DDL_SIGNAL_LIFECYCLE_IDX2)
             conn.execute(_DDL_SIGNAL_EVENTS)
             conn.execute(_DDL_SIGNAL_EVENTS_IDX)
+            conn.execute(_DDL_SIGNAL_EMISSION_TRACKING)
             ensure_bot_state_table(conn)
             ensure_historical_synthesis_table(conn)
             conn.commit()
@@ -345,3 +360,139 @@ def save_event_tracking(cache: dict) -> None:
             conn.commit()
     except Exception as e:
         logger.warning("state.save_event_tracking falhou: %s", e)
+
+
+# ─── Signal emission tracking (PR B3) ────────────────────────────────────────
+
+def get_emission_context(key_hash: str) -> dict | None:
+    """
+    OBJETIVO: recuperar contexto de emissão de sinal persistido por key_hash.
+    FONTE DE DADOS: tabela signal_emission_tracking.
+    LIMITAÇÕES CONHECIDAS: falhas de I/O são silenciosas — retorna None.
+    NÃO FAZER: sem cálculo SMC, sem acesso direto ao engine.
+
+    Retorna dict com campos token, direction, ob_range_hash, fvg_range_hash,
+    first_emitted_ts, last_emitted_ts, peak_score, emission_count — ou None
+    se a chave não existe.
+    """
+    try:
+        if not os.path.exists(config.DB_PATH):
+            return None
+        with sqlite3.connect(config.DB_PATH) as conn:
+            cursor = conn.execute(
+                "SELECT token, direction, ob_range_hash, fvg_range_hash, "
+                "first_emitted_ts, last_emitted_ts, peak_score, emission_count "
+                "FROM signal_emission_tracking WHERE key_hash = ?",
+                (key_hash,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return {
+                "token":            row[0],
+                "direction":        row[1],
+                "ob_range_hash":    row[2],
+                "fvg_range_hash":   row[3],
+                "first_emitted_ts": row[4],
+                "last_emitted_ts":  row[5],
+                "peak_score":       row[6],
+                "emission_count":   row[7],
+            }
+    except Exception as e:
+        logger.warning("state.get_emission_context falhou: %s", e)
+        return None
+
+
+def record_emission(
+    key_hash: str,
+    token: str,
+    direction: str,
+    ob_hash: str,
+    fvg_hash: str,
+    score: int,
+    ts: int,
+) -> None:
+    """
+    OBJETIVO: upsert de contexto de emissão. Se o key_hash é novo, insere
+              com emission_count=1 e first_emitted_ts=ts. Se já existe,
+              atualiza last_emitted_ts, peak_score (=max) e incrementa
+              emission_count.
+    FONTE DE DADOS: argumentos passados pelo chamador (signals.evaluate).
+    LIMITAÇÕES CONHECIDAS: falhas de I/O são silenciosas — warning.
+    NÃO FAZER: sem cálculo SMC; sem acesso direto ao engine.
+    """
+    try:
+        with sqlite3.connect(config.DB_PATH) as conn:
+            cursor = conn.execute(
+                "SELECT peak_score, emission_count, first_emitted_ts "
+                "FROM signal_emission_tracking WHERE key_hash = ?",
+                (key_hash,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                conn.execute(
+                    "INSERT INTO signal_emission_tracking "
+                    "(key_hash, token, direction, ob_range_hash, fvg_range_hash, "
+                    " first_emitted_ts, last_emitted_ts, peak_score, emission_count) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                    (key_hash, token, direction, ob_hash, fvg_hash,
+                     ts, ts, score),
+                )
+            else:
+                prev_peak, prev_count, first_ts = row
+                new_peak = max(int(prev_peak), int(score))
+                conn.execute(
+                    "UPDATE signal_emission_tracking "
+                    "SET last_emitted_ts = ?, peak_score = ?, "
+                    "    emission_count = ? "
+                    "WHERE key_hash = ?",
+                    (ts, new_peak, int(prev_count) + 1, key_hash),
+                )
+            conn.commit()
+    except Exception as e:
+        logger.warning("state.record_emission falhou: %s", e)
+
+
+def invalidate_emission_context(key_hash: str) -> None:
+    """
+    OBJETIVO: remover contexto de emissão (OB/FVG mitigado, preço escapou
+              da zona, ou outra invalidação imediata).
+    FONTE DE DADOS: key_hash do contexto a remover.
+    LIMITAÇÕES CONHECIDAS: falhas de I/O são silenciosas.
+    NÃO FAZER: sem cálculo SMC.
+    """
+    try:
+        with sqlite3.connect(config.DB_PATH) as conn:
+            conn.execute(
+                "DELETE FROM signal_emission_tracking WHERE key_hash = ?",
+                (key_hash,),
+            )
+            conn.commit()
+    except Exception as e:
+        logger.warning("state.invalidate_emission_context falhou: %s", e)
+
+
+def prune_emission_contexts(max_age_seconds: int = 21600) -> int:
+    """
+    OBJETIVO: remover contextos de emissão que não tiveram atividade nos
+              últimos max_age_seconds. Padrão: 6h (21600s).
+    FONTE DE DADOS: tabela signal_emission_tracking, comparando
+                    last_emitted_ts com o now atual.
+    LIMITAÇÕES CONHECIDAS: falhas de I/O são silenciosas — retorna 0.
+    NÃO FAZER: sem cálculo SMC.
+
+    Retorna a quantidade de linhas removidas.
+    """
+    try:
+        cutoff_ms = int(time.time() * 1000) - int(max_age_seconds) * 1000
+        with sqlite3.connect(config.DB_PATH) as conn:
+            cursor = conn.execute(
+                "DELETE FROM signal_emission_tracking "
+                "WHERE last_emitted_ts < ?",
+                (cutoff_ms,),
+            )
+            conn.commit()
+            return cursor.rowcount or 0
+    except Exception as e:
+        logger.warning("state.prune_emission_contexts falhou: %s", e)
+        return 0

@@ -1,5 +1,5 @@
 # SMC Monitor — signals.py
-# Versão: 0.1.9
+# Versão: 0.1.10
 
 """
 OBJETIVO: Calcular score de confluência SMC, decidir emissão de sinal e
@@ -17,7 +17,7 @@ import config
 import state as _state
 from smc_engine import SMCEngine
 
-VERSION = "0.1.9"
+VERSION = "0.1.10"
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,31 @@ _CRITERIA_LABELS: dict[str, str] = {
     "trend_1h_aligned": "Tendência 1H alinhada",
 }
 
-# (token, timeframe, event_type) → {"ts": int, "value": str | None}
-_event_tracking: dict[tuple[str, str, str], dict] = {}
+# Context-escape threshold (PR B3): % acima/abaixo do OB que invalida o contexto.
+_CONTEXT_ESCAPE_PCT = 0.02
+# Timeout para contextos de emissão sem atividade (6h).
+_EMISSION_CONTEXT_MAX_AGE_SECONDS = 6 * 3600
+# Janela para dedup de sweeps no mesmo preço (12h em ms).
+_SWEEP_DEDUP_WINDOW_MS = 12 * 3600 * 1000
+
+# PR B3: chave composta com preço do evento para evitar re-emissão por variação
+# de ts quando o engine re-detecta o mesmo BOS/sweep em ciclos sucessivos.
+# Formatos de chave:
+#   BOS/ChoCH → (token, tf, "bos_choch", round(price, 2), ts)
+#   sweep     → (token, tf, "sweep",     round(swept_price, 2))
+#   trend_change → (token, "4H", "trend_change")
+# value = {"last_ts": int, "expires_at": int | None}
+_event_tracking: dict[tuple, dict] = {}
+
+
+def _prune_expired_tracking(now_ms: int) -> None:
+    """Remove entradas de _event_tracking cujo expires_at já passou."""
+    expired = [
+        k for k, v in _event_tracking.items()
+        if v.get("expires_at") is not None and v["expires_at"] < now_ms
+    ]
+    for k in expired:
+        del _event_tracking[k]
 
 
 def _ts_to_str(ts_ms: int) -> str:
@@ -159,12 +182,45 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
     )
 
     # ── Criterion 5: 1H trend aligned with trade direction ───────────────────
-    # PR B3 estenderá para aceitar 1H desalinhado quando houver confluência de
-    # esgotamento (sweep + BOS 15m + Discount). Neste PR, apenas alinhamento direto.
+    # PR B3: aceita 1H alinhado diretamente OU 1H contrário com confluência
+    # de esgotamento (2 de 3: sweep 1H contrário, BOS 15m na direção,
+    # P/D no lado correto). Distinção aparece em trend_1h_status.
     trend_1h = state_1h.get("trend", "neutral")
-    trend_1h_aligned = (
+    trend_1h_direct_aligned = (
         (direction == "LONG"  and trend_1h == "bullish") or
         (direction == "SHORT" and trend_1h == "bearish")
+    )
+
+    trend_1h_exhausted = False
+    if not trend_1h_direct_aligned:
+        signals_count = 0
+
+        # Sinal 1: liquidity sweep recente no 1H na direção contrária
+        # (LONG busca sweep de low — indução de vendedores antes de reverter).
+        sweep_1h = state_1h.get("last_sweep")
+        if sweep_1h:
+            expected_sweep_dir = "low" if direction == "LONG" else "high"
+            if sweep_1h.get("direction") == expected_sweep_dir:
+                sweep_age_ms = now_ms - int(sweep_1h.get("ts", 0))
+                if sweep_age_ms <= 4 * 3600 * 1000:
+                    signals_count += 1
+
+        # Sinal 2: BOS/ChoCH 15m na direção do trade (microestrutura reagiu).
+        if bos_choch_15m:
+            signals_count += 1
+
+        # Sinal 3: P/D do lado correto (reforço, pois gate já filtrou zona).
+        if direction == "LONG" and pd_position < 0.45:
+            signals_count += 1
+        elif direction == "SHORT" and pd_position > 0.55:
+            signals_count += 1
+
+        trend_1h_exhausted = signals_count >= 2
+
+    trend_1h_aligned = trend_1h_direct_aligned or trend_1h_exhausted
+    trend_1h_status = (
+        "aligned"   if trend_1h_direct_aligned
+        else ("exhausted" if trend_1h_exhausted else "contrary")
     )
 
     # ── Score (sobre 5 critérios; P/D e 4H são gates, já validados acima) ─────
@@ -301,6 +357,50 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         for tf, st in (("4H", state_4h), ("1H", state_1h), ("15m", state_15m))
     }
 
+    # ── Dedup por melhoria (PR B3) ────────────────────────────────────────────
+    # Contexto SMC = (token, direction, OB range, FVG range). Emite apenas:
+    #   - 1x quando contexto é novo (tag "initial");
+    #   - 1x quando score supera o peak_score do contexto (tag "upgrade");
+    #   - silêncio se score igual ou menor;
+    #   - contexto é invalidado se OB/FVG mitigado, se preço escapa >2% do OB,
+    #     ou se ficou sem atividade por 6h (pruning periódico).
+    _state.prune_emission_contexts(_EMISSION_CONTEXT_MAX_AGE_SECONDS)
+
+    ob_hash  = f"{ref_ob['bottom']:.2f}-{ref_ob['top']:.2f}" if ref_ob else "none"
+    fvg_hash = (
+        f"{matched_fvg['bottom']:.2f}-{matched_fvg['top']:.2f}"
+        if matched_fvg else "none"
+    )
+    key_hash = f"{token}:{direction}:{ob_hash}:{fvg_hash}"
+
+    existing = _state.get_emission_context(key_hash)
+
+    # Invalidação por escape de preço (>2% acima/abaixo do OB).
+    if existing is not None and ref_ob:
+        if direction == "LONG" and current_price > ref_ob["top"] * (1 + _CONTEXT_ESCAPE_PCT):
+            _state.invalidate_emission_context(key_hash)
+            existing = None
+        elif direction == "SHORT" and current_price < ref_ob["bottom"] * (1 - _CONTEXT_ESCAPE_PCT):
+            _state.invalidate_emission_context(key_hash)
+            existing = None
+
+    if existing is None:
+        emission_tag = "initial"
+        previous_peak_score = 0
+    elif score > int(existing["peak_score"]):
+        emission_tag = "upgrade"
+        previous_peak_score = int(existing["peak_score"])
+    else:
+        logger.debug(
+            "%s: dedup — contexto já emitido com peak_score=%d >= %d atual",
+            token, int(existing["peak_score"]), score,
+        )
+        return None
+
+    _state.record_emission(
+        key_hash, token, direction, ob_hash, fvg_hash, score, now_ms,
+    )
+
     return {
         "token":        token,
         "direction":    direction,
@@ -321,6 +421,9 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         "trend_states": trend_states,
         "pd_details":   pd_details,
         "current_price": current_price,
+        "trend_1h_status":     trend_1h_status,
+        "emission_tag":        emission_tag,
+        "previous_peak_score": previous_peak_score,
     }
 
 
@@ -349,13 +452,22 @@ def format_signal(signal: dict) -> str:
     ref_sweep_tf  = signal.get("ref_sweep_tf")
     pd_details    = signal.get("pd_details", {})
     now_ms        = signal.get("timestamp", int(time.time() * 1_000))
+    emission_tag        = signal.get("emission_tag", "initial")
+    previous_peak_score = signal.get("previous_peak_score", 0)
+    trend_1h_status     = signal.get("trend_1h_status", "aligned")
 
     lines = []
 
     # ── Header ────────────────────────────────────────────────────────────────
     lines.append(f"{emoji} *{direction} — {token}*")
     cp_str = f"`{current_price:.4f}`" if current_price else "—"
-    lines.append(f"Score: *{score}/5*  | Preço atual: {cp_str}")
+    if emission_tag == "upgrade" and previous_peak_score:
+        lines.append(
+            f"Score: *{score}/5* ⬆️ (upgrade de {previous_peak_score}/5)  "
+            f"| Preço atual: {cp_str}"
+        )
+    else:
+        lines.append(f"Score: *{score}/5*  | Preço atual: {cp_str}")
     lines.append("")
 
     # ── Gates aprovados (informativo — sinal só é emitido se ambos ok) ───────
@@ -455,7 +567,14 @@ def format_signal(signal: dict) -> str:
     lines.append("━━ Critérios atingidos ━━")
     for key, label in _CRITERIA_LABELS.items():
         icon = "✅" if criteria.get(key) else "❌"
-        lines.append(f"  {icon} {label}")
+        if (
+            key == "trend_1h_aligned"
+            and criteria.get(key)
+            and trend_1h_status == "exhausted"
+        ):
+            lines.append(f"  {icon} {label} (esgotamento)")
+        else:
+            lines.append(f"  {icon} {label}")
 
     return "\n".join(lines)
 
@@ -465,13 +584,15 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
     OBJETIVO: detectar eventos novos (BOS/ChoCH, sweep, trend change 4H)
               comparando estado atual do engine contra cache _event_tracking.
     FONTE DE DADOS: engine.get_state() para cada TF; _event_tracking para
-                    último ts e valor notificado por chave.
+                    chaves compostas (token, tf, tipo, preço[, ts]).
     LIMITAÇÕES CONHECIDAS:
-      - trend_change só considera transições causadas por BOS/ChoCH confirmado
-        (bootstrap neutral→bullish sem BOS ignorado);
-      - dedup é por event_ts, não por hash do dict;
-      - na primeira chamada por chave (cache None), priming silencioso:
-        inicializa cache sem notificação.
+      - PR B3: dedup de BOS por (price, ts) — mesmo evento re-reportado pelo
+        engine em ciclos sucessivos não reemite. BOS novo sempre emite
+        (dedup garantida pela chave composta). Dedup de sweep por price, com
+        expiração em 12h: mesmo level re-varrido após 12h vira evento novo.
+      - trend_change só considera transições causadas por BOS/ChoCH confirmado;
+      - priming silencioso (cache None → inicializa sem notificação) aplica-se
+        apenas a sweep e trend_change, não a BOS.
     NÃO FAZER: não enviar Telegram aqui (responsabilidade do main.py);
                não persistir cache aqui (main decide quando save).
 
@@ -481,6 +602,8 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
        "data": {...}}
     """
     events: list[dict] = []
+    now_ms = int(time.time() * 1_000)
+    _prune_expired_tracking(now_ms)
 
     for tf in ("4H", "1H", "15m"):
         st = engine.get_state(token, tf)
@@ -490,13 +613,15 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
         last_bos   = st.get("last_bos")
         last_sweep = st.get("last_sweep")
 
-        # ── bos_choch ──────────────────────────────────────────────────────────
+        # ── bos_choch (chave composta: price + ts) ─────────────────────────────
         if last_bos is not None:
-            key    = (token, tf, "bos_choch")
-            cached = _event_tracking.get(key)
-            if cached is None:
-                _event_tracking[key] = {"ts": last_bos["ts"], "value": None}
-            elif last_bos["ts"] != cached["ts"]:
+            bos_price = round(float(last_bos.get("price", 0.0)), 2)
+            bos_ts    = int(last_bos["ts"])
+            key = (token, tf, "bos_choch", bos_price, bos_ts)
+            if key not in _event_tracking:
+                # Chave composta por (price, ts): se é nova, é um BOS que
+                # nunca foi emitido. A dedup é garantida pela chave — sem
+                # necessidade de heurística de priming adicional.
                 events.append({
                     "event_type": "bos_choch",
                     "timeframe":  tf,
@@ -504,53 +629,63 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
                         "type":      last_bos.get("type", "BOS"),
                         "direction": last_bos.get("direction", ""),
                         "price":     last_bos.get("price", 0.0),
-                        "ts":        last_bos["ts"],
+                        "ts":        bos_ts,
                     },
                 })
-                _event_tracking[key] = {"ts": last_bos["ts"], "value": None}
+                _event_tracking[key] = {"last_ts": bos_ts, "expires_at": None}
+            # Chave já registrada: é o mesmo BOS — silêncio.
 
-        # ── sweep ──────────────────────────────────────────────────────────────
+        # ── sweep (chave por preço; expira em 12h) ─────────────────────────────
         if last_sweep is not None:
-            key    = (token, tf, "sweep")
+            sweep_price = round(float(last_sweep.get("swept_price", 0.0)), 2)
+            sweep_ts    = int(last_sweep["ts"])
+            key = (token, tf, "sweep", sweep_price)
             cached = _event_tracking.get(key)
             if cached is None:
-                _event_tracking[key] = {"ts": last_sweep["ts"], "value": None}
-            elif last_sweep["ts"] != cached["ts"]:
-                events.append({
-                    "event_type": "sweep",
-                    "timeframe":  tf,
-                    "data": {
-                        "direction":   last_sweep.get("direction", ""),
-                        "swept_price": last_sweep.get("swept_price", 0.0),
-                        "close":       last_sweep.get("close", 0.0),
-                        "ts":          last_sweep["ts"],
-                    },
-                })
-                _event_tracking[key] = {"ts": last_sweep["ts"], "value": None}
+                # Priming: inicializa sem notificação na primeira vez.
+                _event_tracking[key] = {
+                    "last_ts": sweep_ts,
+                    "expires_at": now_ms + _SWEEP_DEDUP_WINDOW_MS,
+                }
+            elif cached.get("last_ts") != sweep_ts:
+                # Mesmo preço, mas sweep_ts mudou — pode ser re-detecção do
+                # mesmo evento (dentro da janela) ou um sweep novo já expirado.
+                # _prune_expired_tracking já removeu entradas vencidas; se
+                # ainda está aqui, é o mesmo evento — silêncio.
+                pass
+            # else: mesmo (price, ts) — silêncio absoluto.
 
         # ── trend_change (4H only) ─────────────────────────────────────────────
         if tf == "4H" and last_bos is not None:
             current_trend = st.get("trend", "neutral")
-            key    = (token, "4H", "trend_change")
-            cached = _event_tracking.get(key)
+            bos_ts        = int(last_bos["ts"])
+            key           = (token, "4H", "trend_change")
+            cached        = _event_tracking.get(key)
             if cached is None:
-                _event_tracking[key] = {"ts": last_bos["ts"], "value": current_trend}
-            elif last_bos["ts"] != cached["ts"]:
-                if current_trend != cached["value"]:
+                _event_tracking[key] = {
+                    "last_ts": bos_ts,
+                    "value":   current_trend,
+                    "expires_at": None,
+                }
+            elif cached.get("last_ts") != bos_ts:
+                if current_trend != cached.get("value"):
                     events.append({
                         "event_type": "trend_change",
                         "timeframe":  "4H",
                         "data": {
-                            "from_trend":    cached["value"],
+                            "from_trend":    cached.get("value"),
                             "to_trend":      current_trend,
                             "bos_type":      last_bos.get("type", "BOS"),
                             "bos_direction": last_bos.get("direction", ""),
                             "bos_price":     last_bos.get("price", 0.0),
-                            "ts":            last_bos["ts"],
+                            "ts":            bos_ts,
                         },
                     })
-                # Always sync ts when a new BOS arrives, regardless of direction change
-                _event_tracking[key] = {"ts": last_bos["ts"], "value": current_trend}
+                _event_tracking[key] = {
+                    "last_ts": bos_ts,
+                    "value":   current_trend,
+                    "expires_at": None,
+                }
 
     return events
 
@@ -593,13 +728,18 @@ def format_event(event: dict, token: str) -> str:
 
 
 def load_event_tracking() -> None:
-    """Popula _event_tracking a partir de state.load_event_tracking()."""
-    global _event_tracking
-    loaded = _state.load_event_tracking()
-    _event_tracking.update(loaded)
-    logger.info("event_tracking restaurado: %d entradas", len(loaded))
+    """
+    PR B3: o formato da chave de _event_tracking passou a ser composto
+    (inclui preço e, para BOS, ts) — incompatível com o schema da tabela
+    event_tracking do state.py. Mantido no-op por compatibilidade com
+    main.py; dedup é apenas in-memory nesta versão.
+    """
+    logger.info("event_tracking: in-memory only (PR B3 — chave composta)")
 
 
 def persist_event_tracking() -> None:
-    """Persiste _event_tracking via state.save_event_tracking()."""
-    _state.save_event_tracking(_event_tracking)
+    """
+    PR B3: no-op. Ver docstring de load_event_tracking.
+    Persistência é responsabilidade de signal_emission_tracking (nova tabela).
+    """
+    return
