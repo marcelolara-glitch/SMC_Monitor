@@ -1,5 +1,5 @@
 # SMC Monitor — smc_engine.py
-# Versão: 0.1.9
+# Versão: 0.1.10
 
 """
 OBJETIVO: Mantém estado SMC completo por token/timeframe.
@@ -20,7 +20,7 @@ from smartmoneyconcepts import smc
 import config
 from lib_version_check import get_lib_version
 
-VERSION = "0.1.9"
+VERSION = "0.1.10"
 
 logger = logging.getLogger(__name__)
 
