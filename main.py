@@ -1,5 +1,5 @@
 # SMC Monitor — main.py
-# Versão: 0.1.5
+# Versão: 0.1.11
 
 """
 OBJETIVO: Entry point e orquestrador do daemon SMC Monitor.
@@ -25,10 +25,11 @@ import smc_engine
 from smc_engine import _smoke_test_library
 import state
 import telegram
+from telegram import _emission_header, _escape_mdv2, _format_duration
 import tracker
 import ws_feed
 
-VERSION = "0.1.6"
+VERSION = "0.1.11"
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +76,11 @@ def _heartbeat_loop() -> None:
     while True:
         time.sleep(config.HEARTBEAT_INTERVAL_SECONDS)
         uptime_s = int(time.time() - _start_time)
-        h, remainder = divmod(uptime_s, 3600)
-        m, s = divmod(remainder, 60)
+        uptime_str = _format_duration(uptime_s)
         msg = (
-            f"SMC Monitor v{VERSION} — heartbeat\n"
-            f"Uptime: {h:02d}h{m:02d}m{s:02d}s\n"
-            f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"
+            f"SMC Monitor v{_escape_mdv2(VERSION)} — heartbeat\n"
+            f"{_emission_header()}\n"
+            f"Uptime: {_escape_mdv2(uptime_str)}"
         )
         telegram.send_heartbeat(msg)
 
