@@ -587,11 +587,12 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
                     chaves compostas (token, tf, tipo, preço[, ts]).
     LIMITAÇÕES CONHECIDAS:
       - PR B3: dedup de BOS por (price, ts) — mesmo evento re-reportado pelo
-        engine em ciclos sucessivos não reemite. Dedup de sweep por price,
-        com expiração em 12h: mesmo level re-varrido após 12h vira evento novo.
+        engine em ciclos sucessivos não reemite. BOS novo sempre emite
+        (dedup garantida pela chave composta). Dedup de sweep por price, com
+        expiração em 12h: mesmo level re-varrido após 12h vira evento novo.
       - trend_change só considera transições causadas por BOS/ChoCH confirmado;
-      - na primeira chamada por chave (cache None), priming silencioso:
-        inicializa cache sem notificação.
+      - priming silencioso (cache None → inicializa sem notificação) aplica-se
+        apenas a sweep e trend_change, não a BOS.
     NÃO FAZER: não enviar Telegram aqui (responsabilidade do main.py);
                não persistir cache aqui (main decide quando save).
 
@@ -618,26 +619,19 @@ def evaluate_events(token: str, engine: SMCEngine) -> list[dict]:
             bos_ts    = int(last_bos["ts"])
             key = (token, tf, "bos_choch", bos_price, bos_ts)
             if key not in _event_tracking:
-                # Primeira vez que vemos exatamente este (price, ts): evento novo.
-                # Priming silencioso só acontece na entrada do processo — aqui
-                # a chave inclui ts, então "priming" degeneraria em re-emissão.
-                # Para evitar flood no startup, só emitimos se houver algum
-                # histórico de BOS no mesmo token/tf já registrado.
-                has_prior = any(
-                    (k[0], k[1], k[2]) == (token, tf, "bos_choch")
-                    for k in _event_tracking.keys()
-                )
-                if has_prior:
-                    events.append({
-                        "event_type": "bos_choch",
-                        "timeframe":  tf,
-                        "data": {
-                            "type":      last_bos.get("type", "BOS"),
-                            "direction": last_bos.get("direction", ""),
-                            "price":     last_bos.get("price", 0.0),
-                            "ts":        bos_ts,
-                        },
-                    })
+                # Chave composta por (price, ts): se é nova, é um BOS que
+                # nunca foi emitido. A dedup é garantida pela chave — sem
+                # necessidade de heurística de priming adicional.
+                events.append({
+                    "event_type": "bos_choch",
+                    "timeframe":  tf,
+                    "data": {
+                        "type":      last_bos.get("type", "BOS"),
+                        "direction": last_bos.get("direction", ""),
+                        "price":     last_bos.get("price", 0.0),
+                        "ts":        bos_ts,
+                    },
+                })
                 _event_tracking[key] = {"last_ts": bos_ts, "expires_at": None}
             # Chave já registrada: é o mesmo BOS — silêncio.
 
