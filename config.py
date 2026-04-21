@@ -1,5 +1,5 @@
 # SMC Monitor — config.py
-# Versão: 0.1.5
+# Versão: 0.1.8
 
 """
 OBJETIVO: Centraliza todos os parâmetros de configuração do SMC Monitor.
@@ -11,7 +11,7 @@ NÃO FAZER: nunca hardcodar credenciais neste arquivo.
 import os
 
 # ─── Versão ───────────────────────────────────────────────────────────────────
-VERSION = "0.1.6"
+VERSION = "0.1.8"
 
 # ─── Tokens monitorados ───────────────────────────────────────────────────────
 TOKENS = [
@@ -43,7 +43,10 @@ LIQUIDITY_SWEEP_LOOKBACK = 10    # velas para trás na detecção de sweep
 HEARTBEAT_INTERVAL_SECONDS = 1800  # 30 minutos
 
 # ─── Score de confluência ─────────────────────────────────────────────────────
-SIGNAL_THRESHOLD = 4             # pontuação mínima para emitir sinal (max=6)
+# PR B1 (v0.1.8): Premium/Discount e Tendência 4H viraram gates obrigatórios
+# (early return em signals.evaluate). Score é calculado sobre 5 critérios:
+# OB ativo, FVG adjacente, Sweep recente, BOS/ChoCH 15m e Tendência 1H alinhada.
+SIGNAL_THRESHOLD = 3             # pontuação mínima para emitir sinal (escala 0-5)
 
 # ─── Tracker ─────────────────────────────────────────────────────────────────
 SIGNAL_TIMEOUT_SECONDS = 86400   # 24 horas; timeout individual por sinal

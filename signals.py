@@ -1,5 +1,5 @@
 # SMC Monitor — signals.py
-# Versão: 0.1.3
+# Versão: 0.1.8
 
 """
 OBJETIVO: Calcular score de confluência SMC, decidir emissão de sinal e
@@ -17,7 +17,7 @@ import config
 import state as _state
 from smc_engine import SMCEngine
 
-VERSION = "0.1.6"
+VERSION = "0.1.8"
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +31,14 @@ _TF_DURATION_MS: dict[str, int] = {
 # SL margin: 0.1% beyond the OB edge
 _SL_MARGIN = 0.001
 
-# Human-readable labels for each criterion (insertion-ordered)
+# Human-readable labels for each scorable criterion (insertion-ordered).
+# Premium/Discount e Tendência 4H são GATES (bloqueiam emissão), não pontuáveis.
 _CRITERIA_LABELS: dict[str, str] = {
-    "ob_active":           "OB ativo no 1H",
-    "fvg_adjacent":        "FVG adjacente ao OB (1H)",
-    "sweep_recent":        "Liquidity Sweep recente",
-    "premium_discount_ok": "Zona Premium/Discount correta",
-    "bos_choch_15m":       "BOS/ChoCH confirmado no 15m",
-    "trend_4h_aligned":    "Tendência 4H alinhada",
+    "ob_active":        "OB ativo no 1H",
+    "fvg_adjacent":     "FVG adjacente ao OB (1H)",
+    "sweep_recent":     "Liquidity Sweep recente",
+    "bos_choch_15m":    "BOS/ChoCH confirmado no 15m",
+    "trend_1h_aligned": "Tendência 1H alinhada",
 }
 
 # (token, timeframe, event_type) → {"ts": int, "value": str | None}
@@ -67,14 +67,36 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         logger.debug("%s: not all timeframes ready — skipping evaluation", token)
         return None
 
-    # Direction is determined exclusively by the 4H trend
+    # ── Gate 2: Tendência 4H (viés macro) ────────────────────────────────────
+    # Executa primeiro por necessidade — direction DERIVA de trend_4h e o
+    # Gate 1 (P/D) precisa de direction para decidir. 4H neutral bloqueia.
+    # (Numeração segue briefing: Gate 1 = P/D, Gate 2 = 4H.)
     trend_4h = state_4h.get("trend", "neutral")
     if trend_4h == "neutral":
-        logger.debug("%s: 4H trend neutral — no signal evaluated", token)
+        logger.debug("%s: gate 4H bloqueou — trend_4h=neutral", token)
         return None
 
     direction = "LONG"  if trend_4h == "bullish" else "SHORT"
     ob_type   = "bull"  if direction == "LONG"   else "bear"
+
+    # ── Gate 1: Premium/Discount direcional ──────────────────────────────────
+    # LONG só em Discount claro (<0.45); SHORT só em Premium claro (>0.55);
+    # Equilibrium (0.45–0.55) passa, mas não pontua no score.
+    pd_position = state_1h.get("pd_position")
+    if pd_position is None:
+        pd_position = 0.5
+    if direction == "LONG" and pd_position > 0.55:
+        logger.debug(
+            "%s: gate P/D bloqueou LONG — pd_position=%.2f > 0.55 (Premium)",
+            token, pd_position,
+        )
+        return None
+    if direction == "SHORT" and pd_position < 0.45:
+        logger.debug(
+            "%s: gate P/D bloqueou SHORT — pd_position=%.2f < 0.45 (Discount)",
+            token, pd_position,
+        )
+        return None
 
     now_ms = int(time.time() * 1_000)
 
@@ -126,38 +148,33 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
                 ref_sweep_tf = tf
                 break
 
-    # ── Criterion 4: Price in Premium/Discount zone in 1H ────────────────────
-    pd_1h = state_1h.get("premium_discount", "equilibrium")
-    if direction == "LONG":
-        premium_discount_ok = pd_1h == "discount"
-    else:
-        premium_discount_ok = pd_1h == "premium"
-
-    # ── Criterion 5: BOS or ChoCH confirmed in 15m in trade direction ─────────
+    # ── Criterion 4: BOS or ChoCH confirmed in 15m in trade direction ─────────
     bos_15m      = state_15m.get("last_bos")
     bos_choch_15m = (
         bos_15m is not None and bos_15m.get("direction") == ob_type
     )
 
-    # ── Criterion 6: 4H trend aligned with trade direction ───────────────────
-    trend_4h_aligned = (
-        (direction == "LONG"  and trend_4h == "bullish") or
-        (direction == "SHORT" and trend_4h == "bearish")
+    # ── Criterion 5: 1H trend aligned with trade direction ───────────────────
+    # PR B3 estenderá para aceitar 1H desalinhado quando houver confluência de
+    # esgotamento (sweep + BOS 15m + Discount). Neste PR, apenas alinhamento direto.
+    trend_1h = state_1h.get("trend", "neutral")
+    trend_1h_aligned = (
+        (direction == "LONG"  and trend_1h == "bullish") or
+        (direction == "SHORT" and trend_1h == "bearish")
     )
 
-    # ── Score ─────────────────────────────────────────────────────────────────
+    # ── Score (sobre 5 critérios; P/D e 4H são gates, já validados acima) ─────
     criteria: dict[str, bool] = {
-        "ob_active":           ob_active,
-        "fvg_adjacent":        fvg_adjacent,
-        "sweep_recent":        sweep_recent,
-        "premium_discount_ok": premium_discount_ok,
-        "bos_choch_15m":       bos_choch_15m,
-        "trend_4h_aligned":    trend_4h_aligned,
+        "ob_active":        ob_active,
+        "fvg_adjacent":     fvg_adjacent,
+        "sweep_recent":     sweep_recent,
+        "bos_choch_15m":    bos_choch_15m,
+        "trend_1h_aligned": trend_1h_aligned,
     }
     score = sum(criteria.values())
 
     logger.info(
-        "%s direction=%s score=%d/6 criteria=%s",
+        "%s direction=%s score=%d/5 criteria=%s",
         token, direction, score, criteria,
     )
 
@@ -197,26 +214,27 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         ]
         tp1 = max(candidates, key=lambda f: f["top"])["midpoint"] if candidates else None
 
-    # ── Premium/Discount details ──────────────────────────────────────────────
-    swing_high_1h = state_1h.get("swing_high", 0.0)
-    swing_low_1h  = state_1h.get("swing_low", 0.0)
-    if swing_high_1h > swing_low_1h and swing_high_1h > 0.0:
-        equilibrium_1h = (swing_high_1h + swing_low_1h) / 2.0
-        pd_position = (
-            (current_price - swing_low_1h) / (swing_high_1h - swing_low_1h)
-            if current_price > 0.0
-            else 0.5
-        )
+    # ── Premium/Discount details (do state consolidado — PR A) ───────────────
+    pd_ref_range = state_1h.get("pd_reference_range")
+    if pd_ref_range:
+        pd_swing_high  = float(pd_ref_range.get("top", 0.0))
+        pd_swing_low   = float(pd_ref_range.get("bottom", 0.0))
+        pd_equilibrium = (pd_swing_high + pd_swing_low) / 2.0
     else:
-        equilibrium_1h = 0.0
-        pd_position = 0.5
+        pd_swing_high  = float(state_1h.get("swing_high", 0.0))
+        pd_swing_low   = float(state_1h.get("swing_low", 0.0))
+        pd_equilibrium = (
+            (pd_swing_high + pd_swing_low) / 2.0
+            if pd_swing_high > pd_swing_low and pd_swing_high > 0.0
+            else 0.0
+        )
 
     pd_details = {
-        "label":       pd_1h,
+        "label":       state_1h.get("pd_label", "equilibrium"),
         "position":    pd_position,
-        "swing_high":  swing_high_1h,
-        "swing_low":   swing_low_1h,
-        "equilibrium": equilibrium_1h,
+        "swing_high":  pd_swing_high,
+        "swing_low":   pd_swing_low,
+        "equilibrium": pd_equilibrium,
     }
 
     # ── Trend states per TF ───────────────────────────────────────────────────
@@ -274,7 +292,16 @@ def format_signal(signal: dict) -> str:
     # ── Header ────────────────────────────────────────────────────────────────
     lines.append(f"{emoji} *{direction} — {token}*")
     cp_str = f"`{current_price:.4f}`" if current_price else "—"
-    lines.append(f"Score: *{score}/6*  | Preço atual: {cp_str}")
+    lines.append(f"Score: *{score}/5*  | Preço atual: {cp_str}")
+    lines.append("")
+
+    # ── Gates aprovados (informativo — sinal só é emitido se ambos ok) ───────
+    pd_gate_label = pd_details.get("label", "equilibrium") if pd_details else "equilibrium"
+    pd_gate_pos   = pd_details.get("position", 0.5) if pd_details else 0.5
+    trend_4h_val  = trend_states.get("4H", {}).get("trend", "neutral")
+    lines.append("━━ Gates aprovados ━━")
+    lines.append(f"  ✅ Premium/Discount ({pd_gate_label}, {pd_gate_pos:.2f})")
+    lines.append(f"  ✅ Tendência 4H ({trend_4h_val})")
     lines.append("")
 
     # ── Trend Multi-Timeframe ─────────────────────────────────────────────────
