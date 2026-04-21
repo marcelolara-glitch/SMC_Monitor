@@ -1,5 +1,5 @@
 # SMC Monitor — smc_engine.py
-# Versão: 0.1.7 (draft)
+# Versão: 0.1.9
 
 """
 OBJETIVO: Mantém estado SMC completo por token/timeframe.
@@ -20,7 +20,7 @@ from smartmoneyconcepts import smc
 import config
 from lib_version_check import get_lib_version
 
-VERSION = "0.1.6"
+VERSION = "0.1.9"
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ class SMCEngine:
         self._update_fvgs(token, timeframe)
         self._update_premium_discount(token, timeframe)
         self._update_sweeps(token, timeframe)
+        self._update_atr(token, timeframe)
 
         self._states[token][timeframe]["ready"] = True
 
@@ -214,6 +215,7 @@ class SMCEngine:
             self._update_fvgs(token, tf)
             self._update_premium_discount(token, tf)
             self._update_sweeps(token, tf)
+            self._update_atr(token, tf)
 
             self._states[token][tf]["ready"] = True
             logger.info("bootstrap: %s/%s ready após %d candles", token, tf, len(buf))
@@ -544,6 +546,28 @@ class SMCEngine:
         state["pd_label"] = label
         state["premium_discount"] = label
 
+    def _update_atr(self, token: str, timeframe: str) -> None:
+        """
+        OBJETIVO: calcular ATR_14 sobre o buffer do timeframe.
+        FONTE DE DADOS: buffer circular.
+        LIMITAÇÕES CONHECIDAS: retorna 0.0 se buffer < 15 candles.
+        NÃO FAZER: não usar lib externa (cálculo trivial).
+        """
+        state = self._states[token][timeframe]
+        candles = list(self._buffers[token][timeframe])
+        if len(candles) < 15:
+            state["atr_14"] = 0.0
+            return
+        trs = []
+        for i in range(1, len(candles)):
+            high = candles[i]["high"]
+            low = candles[i]["low"]
+            prev_close = candles[i - 1]["close"]
+            tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+            trs.append(tr)
+        recent_trs = trs[-14:]
+        state["atr_14"] = sum(recent_trs) / len(recent_trs)
+
     def _update_sweeps(self, token: str, timeframe: str) -> None:
         """
         OBJETIVO: detectar varreduras de liquidez (liquidity sweeps) delegando
@@ -701,4 +725,5 @@ def _empty_state() -> dict:
         "pd_position_raw": None,
         "pd_label": "equilibrium",
         "last_sweep": None,
+        "atr_14": 0.0,
     }

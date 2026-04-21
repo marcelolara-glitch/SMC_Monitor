@@ -1,5 +1,5 @@
 # SMC Monitor — signals.py
-# Versão: 0.1.8
+# Versão: 0.1.9
 
 """
 OBJETIVO: Calcular score de confluência SMC, decidir emissão de sinal e
@@ -17,7 +17,7 @@ import config
 import state as _state
 from smc_engine import SMCEngine
 
-VERSION = "0.1.8"
+VERSION = "0.1.9"
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,12 @@ _TF_DURATION_MS: dict[str, int] = {
     "4H":  4  * 60 * 60 * 1_000,
 }
 
-# SL margin: 0.1% beyond the OB edge
-_SL_MARGIN = 0.001
+# Minimum R:R ratio required for signal emission (final gate)
+_MIN_RR = 1.5
+
+# SL buffer: max(0.3% of swing base, 1.5 * ATR_14 15m)
+_SL_BUFFER_PCT = 0.003
+_SL_BUFFER_ATR_MULT = 1.5
 
 # Human-readable labels for each scorable criterion (insertion-ordered).
 # Premium/Discount e Tendência 4H são GATES (bloqueiam emissão), não pontuáveis.
@@ -181,38 +185,89 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
     if score < config.SIGNAL_THRESHOLD:
         return None
 
-    # ── Entry zone ────────────────────────────────────────────────────────────
-    if ref_ob:
-        entry_zone = {"top": ref_ob["top"], "bottom": ref_ob["bottom"]}
+    # ── Entry sugerido (cascata: FVG mid → borda interna do OB → preço atual) ─
+    if matched_fvg:
+        entry = matched_fvg["midpoint"]
+        entry_source = "fvg"
+    elif ref_ob:
+        entry = ref_ob["top"] if direction == "LONG" else ref_ob["bottom"]
+        entry_source = "ob_edge"
     else:
-        # Fallback when no OB found in the correct direction
+        entry = current_price
+        entry_source = "current_price"
+
+    entry_zone_valid = (
+        {"top": ref_ob["top"], "bottom": ref_ob["bottom"]} if ref_ob else None
+    )
+
+    # ── SL structural: swing low/high + buffer max(0.3%, 1.5×ATR_14 15m) ─────
+    atr_14 = state_15m.get("atr_14", 0.0)
+    if direction == "LONG":
+        sl_base = state_1h.get("swing_low", 0.0)
+        if sl_base <= 0.0:
+            logger.debug("%s: bloqueado — swing_low indisponível para SL", token)
+            return None
+        buffer = max(_SL_BUFFER_PCT * sl_base, _SL_BUFFER_ATR_MULT * atr_14)
+        sl_price = sl_base - buffer
+    else:
+        sl_base = state_1h.get("swing_high", 0.0)
+        if sl_base <= 0.0:
+            logger.debug("%s: bloqueado — swing_high indisponível para SL", token)
+            return None
+        buffer = max(_SL_BUFFER_PCT * sl_base, _SL_BUFFER_ATR_MULT * atr_14)
+        sl_price = sl_base + buffer
+
+    risk = abs(entry - sl_price)
+    if risk <= 0.0:
+        logger.debug("%s: bloqueado — risk=0 (entry == sl)", token)
+        return None
+
+    # ── TP1: próximo target estrutural à frente do entry, com piso R:R ≥ 1.5 ─
+    tp_candidates: list[float] = []
+
+    for fvg in active_fvgs_1h:
+        if fvg.get("type") != ob_type:
+            continue
+        mp = fvg.get("midpoint", 0.0)
+        if direction == "LONG" and mp > entry:
+            tp_candidates.append(mp)
+        elif direction == "SHORT" and mp < entry:
+            tp_candidates.append(mp)
+
+    swing_target = (
+        state_1h.get("swing_high") if direction == "LONG"
+        else state_1h.get("swing_low")
+    )
+    if swing_target:
+        if (direction == "LONG" and swing_target > entry) or \
+           (direction == "SHORT" and swing_target < entry):
+            tp_candidates.append(swing_target)
+
+    tp_candidates.sort(key=lambda c: abs(c - entry))
+
+    tp1 = None
+    tp1_source = None
+    for cand in tp_candidates:
+        rr = abs(cand - entry) / risk
+        if rr >= _MIN_RR:
+            tp1 = cand
+            tp1_source = "structural"
+            break
+
+    if tp1 is None:
         if direction == "LONG":
-            ref_price  = state_1h.get("swing_low", 0.0)
+            tp1 = entry + _MIN_RR * risk
         else:
-            ref_price  = state_1h.get("swing_high", 0.0)
-        entry_zone = {"top": ref_price, "bottom": ref_price}
+            tp1 = entry - _MIN_RR * risk
+        tp1_source = "math"
 
-    # ── Stop-loss price ───────────────────────────────────────────────────────
-    if direction == "LONG":
-        sl_price = entry_zone["bottom"] * (1.0 - _SL_MARGIN)
-    else:
-        sl_price = entry_zone["top"]    * (1.0 + _SL_MARGIN)
-
-    # ── TP1: nearest FVG midpoint beyond the entry zone ───────────────────────
-    if direction == "LONG":
-        # Bull FVGs whose bottom sits above the entry zone top
-        candidates = [
-            fvg for fvg in active_fvgs_1h
-            if fvg["bottom"] > entry_zone["top"]
-        ]
-        tp1 = min(candidates, key=lambda f: f["bottom"])["midpoint"] if candidates else None
-    else:
-        # Bear FVGs whose top sits below the entry zone bottom
-        candidates = [
-            fvg for fvg in active_fvgs_1h
-            if fvg["top"] < entry_zone["bottom"]
-        ]
-        tp1 = max(candidates, key=lambda f: f["top"])["midpoint"] if candidates else None
+    # ── Gate R:R final ───────────────────────────────────────────────────────
+    rr_final = abs(tp1 - entry) / risk
+    if rr_final < _MIN_RR:
+        logger.debug(
+            "%s: bloqueado por R:R final=%.2f < %.2f", token, rr_final, _MIN_RR
+        )
+        return None
 
     # ── Premium/Discount details (do state consolidado — PR A) ───────────────
     pd_ref_range = state_1h.get("pd_reference_range")
@@ -251,9 +306,13 @@ def evaluate(token: str, engine: SMCEngine) -> dict | None:
         "direction":    direction,
         "score":        score,
         "criteria":     criteria,
-        "entry_zone":   entry_zone,
+        "entry":             entry,
+        "entry_source":      entry_source,
+        "entry_zone_valid":  entry_zone_valid,
         "sl_price":     sl_price,
         "tp1":          tp1,
+        "tp1_source":   tp1_source,
+        "rr":           rr_final,
         "timestamp":    now_ms,
         "ref_ob":       ref_ob,
         "ref_fvg":      matched_fvg,
@@ -274,9 +333,13 @@ def format_signal(signal: dict) -> str:
     emoji         = "🟢" if direction == "LONG" else "🔴"
     token         = signal["token"]
     score         = signal["score"]
-    ez            = signal["entry_zone"]
+    entry         = signal["entry"]
+    entry_source  = signal.get("entry_source", "")
+    entry_zone_valid = signal.get("entry_zone_valid")
     sl            = signal["sl_price"]
     tp1           = signal["tp1"]
+    tp1_source    = signal.get("tp1_source", "")
+    rr            = signal.get("rr", 0.0)
     criteria      = signal["criteria"]
     current_price = signal.get("current_price", 0.0)
     trend_states  = signal.get("trend_states", {})
@@ -322,10 +385,26 @@ def format_signal(signal: dict) -> str:
     lines.append("")
 
     # ── Zona de Entrada ───────────────────────────────────────────────────────
+    entry_src_label = {
+        "fvg":           "via FVG midpoint",
+        "ob_edge":       "via borda interna do OB",
+        "current_price": "via preço atual (fallback)",
+    }.get(entry_source, entry_source)
+    tp1_src_label = {
+        "structural": "via target estrutural",
+        "math":       f"via R:R 1:{_MIN_RR}",
+    }.get(tp1_source, tp1_source)
+
     lines.append("━━ Zona de Entrada ━━")
-    lines.append(f"Entrada: `{ez['bottom']:.4f}` – `{ez['top']:.4f}`")
-    lines.append(f"SL: `{sl:.4f}`")
-    lines.append(f"TP1: `{tp1:.4f}`" if tp1 is not None else "TP1: —")
+    lines.append(f"Entrada sugerida: `{entry:.4f}` ({entry_src_label})")
+    if entry_zone_valid:
+        lines.append(
+            f"Zona válida: `{entry_zone_valid['bottom']:.4f}` – "
+            f"`{entry_zone_valid['top']:.4f}`"
+        )
+    lines.append(f"SL: `{sl:.4f}` (swing estrutural + buffer)")
+    lines.append(f"TP1: `{tp1:.4f}` ({tp1_src_label})")
+    lines.append(f"R:R: {rr:.2f}")
     lines.append("")
 
     # ── Indicadores 1H Detalhados ─────────────────────────────────────────────

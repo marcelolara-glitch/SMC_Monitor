@@ -209,8 +209,8 @@ def main() -> None:
                     emitted_at_ts=signal["timestamp"],
                     score=signal["score"],
                     criteria_snapshot=signal["criteria"],
-                    entry_low=signal["entry_zone"]["bottom"],
-                    entry_high=signal["entry_zone"]["top"],
+                    entry_low=signal["entry"],
+                    entry_high=signal["entry"],
                     sl_price=signal["sl_price"],
                     tp1_price=tp1,
                 )
