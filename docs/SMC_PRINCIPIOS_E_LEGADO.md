@@ -334,7 +334,7 @@ A decisão de migrar para freqtrade é **alinhamento entre objetivo declarado e 
 Confirmados via documentação oficial e issues do GitHub (abril 2026):
 
 1. **OKX é suportado oficialmente** para perpetual swap (`BTC/USDT:USDT` em notação CCXT)
-2. **Apenas cross margin** — isolated margin para futures não é suportado (issue #11478, ainda aberto). Para 1 pair, irrelevante na prática.
+2. **Apenas isolated margin** — `cross` para futures não é suportado em freqtrade 2026.3 (validado empiricamente em 2026-04-26 contra OKX, comportamento inverso ao reportado na issue #11478 de março/2025). Para 1 pair, irrelevante na prática.
 3. **One-way mode** recomendado (não hedge mode). Configuração feita na conta OKX antes de iniciar bot.
 4. **Backtest preciso apenas nos últimos ~3 meses** — antes disso, MARK candles ausentes geram leve imprecisão em funding fees. Workaround: `futures_funding_rate: 0` no config para janelas mais longas, com aproximação aceitável.
 5. **Position mode não pode ser trocado mid-trading** — se trocar, o bot trava.
