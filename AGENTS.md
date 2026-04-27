@@ -71,10 +71,10 @@ Serve como documentação viva para futuras mudanças.
 
 ### 1.6 Entregáveis
 
-Toda análise ou decisão feito pelo CLaude.ai termina com:
+Toda análise ou decisão feito pelo CLaude.ai deve considerar:
 
-a) Briefing completo pronto para Claude Code (se aplicável), **ou**
-b) Script/comando para VM ready-to-run (se aplicável).
+a) Briefing completo pronto para Claude Code (se aplicável),
+b) Script/comando para VM ready-to-run (se aplicável),
 c) Nunca assumir schema de dados, bases ou códigos com base em aproximações 
    estimativas, consultas a conversas antigas ou a artefatos do projeto.
    QUando há dúvidas sobre o código para gerar briefings ou propostas
