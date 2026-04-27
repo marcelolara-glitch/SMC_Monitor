@@ -75,6 +75,11 @@ Toda análise ou decisão feito pelo CLaude.ai termina com:
 
 a) Briefing completo pronto para Claude Code (se aplicável), **ou**
 b) Script/comando para VM ready-to-run (se aplicável).
+c) Nunca assumir schema de dados, bases ou códigos com base em aproximações 
+   estimativas, consultas a conversas antigas ou a artefatos do projeto.
+   QUando há dúvidas sobre o código para gerar briefings ou propostas
+   de melhorias, sempre pegar posição mais ataulizada da VM ou do
+   repositório (se aplicável). Caso contrário, valide com o Marcelo antes
 
 Briefings para Claude Code tem que ser feitos em arquivos markdown
 e devem seguir as instruções acima
