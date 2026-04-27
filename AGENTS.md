@@ -20,6 +20,12 @@ Em caso de conflito entre seções, **Governança** prevalece sobre
    (`marcelolara-glitch/SMC_Monitor`, branch `main`).
 4. Output revisado no chat antes de aprovar merge em `main`.
 5. Merge em `main` apenas com instrução explícita do Marcelo.
+6. Nunca assumir schema de dados, estados da VM ou repositórios, bases 
+   ou códigos com base em aproximações, estimativas, consultas a
+   conversas antigas ou a artefatos do projeto. Quando há dúvidas
+   sobre o código para gerar briefings ou propostas
+   de melhorias, sempre pegar posição mais ataulizada da VM ou do
+   repositório (se aplicável). Caso contrário, valide com o Marcelo antes
 
 ### 1.2 Regras de PR e merge
 
@@ -73,13 +79,8 @@ Serve como documentação viva para futuras mudanças.
 
 Toda análise ou decisão feito pelo CLaude.ai deve considerar:
 
-a) Briefing completo pronto para Claude Code (se aplicável),
+a) Briefing completo pronto para Claude Code (se aplicável), **ou**
 b) Script/comando para VM ready-to-run (se aplicável),
-c) Nunca assumir schema de dados, bases ou códigos com base em aproximações 
-   estimativas, consultas a conversas antigas ou a artefatos do projeto.
-   QUando há dúvidas sobre o código para gerar briefings ou propostas
-   de melhorias, sempre pegar posição mais ataulizada da VM ou do
-   repositório (se aplicável). Caso contrário, valide com o Marcelo antes
 
 Briefings para Claude Code tem que ser feitos em arquivos markdown
 e devem seguir as instruções acima
