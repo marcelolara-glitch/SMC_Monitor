@@ -15,17 +15,11 @@ Em caso de conflito entre seções, **Governança** prevalece sobre
 1. Decisões arquiteturais e conceituais são alinhadas no chat (Claude.ai)
    antes de ir para o Claude Code.
 2. Briefing completo entregue ao Claude Code em mensagem única —
-   nunca piecemeal. 
+   nunca piecemeal.
 3. Claude Code executa implementação contra o repositório GitHub
    (`marcelolara-glitch/SMC_Monitor`, branch `main`).
 4. Output revisado no chat antes de aprovar merge em `main`.
 5. Merge em `main` apenas com instrução explícita do Marcelo.
-6. Nunca assumir schema de dados, estados da VM ou repositórios, bases 
-   ou códigos com base em aproximações, estimativas, consultas a
-   conversas antigas ou a artefatos do projeto. Quando há dúvidas
-   sobre o código para gerar briefings ou propostas
-   de melhorias, sempre pegar posição mais ataulizada da VM ou do
-   repositório (se aplicável). Caso contrário, valide com o Marcelo antes
 
 ### 1.2 Regras de PR e merge
 
@@ -101,11 +95,20 @@ pelo Claude Code durante execução.
   antes de implementar a versão pedida.
 - Ambiguidade real → perguntar. Preferência estilística → seguir
   o briefing sem perguntar.
+- Nunca assumir schema de dados, estados da VM ou repositórios, bases 
+  ou códigos com base em aproximações, estimativas, consultas a
+  conversas antigas ou a artefatos do projeto. Quando há dúvidas
+  sobre o código para gerar briefings ou propostas
+  de melhorias, sempre pegar posição mais ataulizada na VM ou no
+  repositório (se aplicável). Caso contrário, valide com o Marcelo antes
+- Não  inferir mecanismos causais sem teste explícito
+- Não prescrever sem antes mostrar de onde a recomendação saiu
+   (referência, número, contexto) 
 
 **Conflito briefing vs. realidade:** se o Claude Code identificar
 problema no briefing (lacuna, contradição, premissa incorreta), ele
-**para e pergunta antes de executar** — não inventa premissa para
-destravar nem executa parcialmente.
+**para e pergunta antes de executar** — não invente premissa para
+destravar nem execute parcialmente.
 
 ### 2.2 Simplicidade primeiro
 
