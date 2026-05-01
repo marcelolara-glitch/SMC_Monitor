@@ -1,0 +1,287 @@
+// LuxAlgo Smart Money Concepts - compute-only version
+// Removed: visual elements (box, line, label, plotcandle, colors)
+// Kept: full SMC calculation logic + 16 alertconditions for validation
+// Original (c) LuxAlgo - CC BY-NC-SA 4.0
+
+//@version=6
+indicator('SMC Compute Only', 'SMC-CO', overlay = true)
+
+BULLISH_LEG = 1
+BEARISH_LEG = 0
+BULLISH = +1
+BEARISH = -1
+
+ATR = 'Atr'
+RANGE = 'Cumulative Mean Range'
+CLOSE = 'Close'
+HIGHLOW = 'High/Low'
+
+internalFilterConfluenceInput = input(false, 'Confluence Filter')
+swingsLengthInput = input.int(50, 'Swings Length', minval = 10)
+internalOrderBlocksSizeInput = input.int(5, 'Internal OB Size', minval = 1, maxval = 20)
+swingOrderBlocksSizeInput = input.int(5, 'Swing OB Size', minval = 1, maxval = 20)
+orderBlockFilterInput = input.string('Atr', 'OB Filter', options = [ATR, RANGE])
+orderBlockMitigationInput = input.string(HIGHLOW, 'OB Mitigation', options = [CLOSE, HIGHLOW])
+equalHighsLowsLengthInput = input.int(3, 'EQH/EQL Bars', minval = 1)
+equalHighsLowsThresholdInput = input.float(0.1, 'EQH/EQL Threshold', minval = 0, maxval = 0.5)
+fairValueGapsThresholdInput = input(true, 'FVG Auto Threshold')
+fairValueGapsTimeframeInput = input.timeframe('', 'FVG Timeframe')
+
+type alerts
+    bool internalBullishBOS = false
+    bool internalBearishBOS = false
+    bool internalBullishCHoCH = false
+    bool internalBearishCHoCH = false
+    bool swingBullishBOS = false
+    bool swingBearishBOS = false
+    bool swingBullishCHoCH = false
+    bool swingBearishCHoCH = false
+    bool internalBullishOrderBlock = false
+    bool internalBearishOrderBlock = false
+    bool swingBullishOrderBlock = false
+    bool swingBearishOrderBlock = false
+    bool equalHighs = false
+    bool equalLows = false
+    bool bullishFairValueGap = false
+    bool bearishFairValueGap = false
+
+type trailingExtremes
+    float top
+    float bottom
+    int barTime
+    int barIndex
+    int lastTopTime
+    int lastBottomTime
+
+type fairValueGap
+    float top
+    float bottom
+    int bias
+
+type trend
+    int bias
+
+type pivot
+    float currentLevel
+    float lastLevel
+    bool crossed
+    int barTime = time
+    int barIndex = bar_index
+
+type orderBlock
+    float barHigh
+    float barLow
+    int barTime
+    int bias
+
+var pivot swingHigh = pivot.new(na, na, false)
+var pivot swingLow = pivot.new(na, na, false)
+var pivot internalHigh = pivot.new(na, na, false)
+var pivot internalLow = pivot.new(na, na, false)
+var pivot equalHigh = pivot.new(na, na, false)
+var pivot equalLow = pivot.new(na, na, false)
+var trend swingTrend = trend.new(0)
+var trend internalTrend = trend.new(0)
+var array<fairValueGap> fairValueGaps = array.new<fairValueGap>()
+var array<float> parsedHighs = array.new<float>()
+var array<float> parsedLows = array.new<float>()
+var array<float> highs = array.new<float>()
+var array<float> lows = array.new<float>()
+var array<int> times = array.new<int>()
+var trailingExtremes trailing = trailingExtremes.new()
+var array<orderBlock> swingOrderBlocks = array.new<orderBlock>()
+var array<orderBlock> internalOrderBlocks = array.new<orderBlock>()
+alerts currentAlerts = alerts.new()
+
+bearishOrderBlockMitigationSource = orderBlockMitigationInput == CLOSE ? close : high
+bullishOrderBlockMitigationSource = orderBlockMitigationInput == CLOSE ? close : low
+atrMeasure = ta.atr(200)
+volatilityMeasure = orderBlockFilterInput == ATR ? atrMeasure : ta.cum(ta.tr) / bar_index
+highVolatilityBar = high - low >= 2 * volatilityMeasure
+parsedHigh = highVolatilityBar ? low : high
+parsedLow = highVolatilityBar ? high : low
+
+parsedHighs.push(parsedHigh)
+parsedLows.push(parsedLow)
+highs.push(high)
+lows.push(low)
+times.push(time)
+
+leg(int size) =>
+    var leg = 0
+    newLegHigh = high[size] > ta.highest(size)
+    newLegLow = low[size] < ta.lowest(size)
+    if newLegHigh
+        leg := BEARISH_LEG
+    else if newLegLow
+        leg := BULLISH_LEG
+    leg
+
+startOfNewLeg(int leg) =>
+    ta.change(leg) != 0
+
+startOfBearishLeg(int leg) =>
+    ta.change(leg) == -1
+
+startOfBullishLeg(int leg) =>
+    ta.change(leg) == +1
+
+getCurrentStructure(int size, bool equalHighLow = false, bool internal = false) =>
+    currentLeg = leg(size)
+    newPivot = startOfNewLeg(currentLeg)
+    pivotLow = startOfBullishLeg(currentLeg)
+    pivotHigh = startOfBearishLeg(currentLeg)
+    if newPivot
+        if pivotLow
+            pivot p_ivot = equalHighLow ? equalLow : internal ? internalLow : swingLow
+            if equalHighLow and math.abs(p_ivot.currentLevel - low[size]) < equalHighsLowsThresholdInput * atrMeasure
+                currentAlerts.equalLows := true
+            p_ivot.lastLevel := p_ivot.currentLevel
+            p_ivot.currentLevel := low[size]
+            p_ivot.crossed := false
+            p_ivot.barTime := time[size]
+            p_ivot.barIndex := bar_index[size]
+            if not equalHighLow and not internal
+                trailing.bottom := p_ivot.currentLevel
+                trailing.barTime := p_ivot.barTime
+                trailing.barIndex := p_ivot.barIndex
+                trailing.lastBottomTime := p_ivot.barTime
+        else
+            pivot p_ivot = equalHighLow ? equalHigh : internal ? internalHigh : swingHigh
+            if equalHighLow and math.abs(p_ivot.currentLevel - high[size]) < equalHighsLowsThresholdInput * atrMeasure
+                currentAlerts.equalHighs := true
+            p_ivot.lastLevel := p_ivot.currentLevel
+            p_ivot.currentLevel := high[size]
+            p_ivot.crossed := false
+            p_ivot.barTime := time[size]
+            p_ivot.barIndex := bar_index[size]
+            if not equalHighLow and not internal
+                trailing.top := p_ivot.currentLevel
+                trailing.barTime := p_ivot.barTime
+                trailing.barIndex := p_ivot.barIndex
+                trailing.lastTopTime := p_ivot.barTime
+
+deleteOrderBlocks(bool internal = false) =>
+    array<orderBlock> orderBlocks = internal ? internalOrderBlocks : swingOrderBlocks
+    for [index, eachOrderBlock] in orderBlocks
+        bool crossedOderBlock = false
+        if bearishOrderBlockMitigationSource > eachOrderBlock.barHigh and eachOrderBlock.bias == BEARISH
+            crossedOderBlock := true
+            if internal
+                currentAlerts.internalBearishOrderBlock := true
+            else
+                currentAlerts.swingBearishOrderBlock := true
+        else if bullishOrderBlockMitigationSource < eachOrderBlock.barLow and eachOrderBlock.bias == BULLISH
+            crossedOderBlock := true
+            if internal
+                currentAlerts.internalBullishOrderBlock := true
+            else
+                currentAlerts.swingBullishOrderBlock := true
+        if crossedOderBlock
+            orderBlocks.remove(index)
+
+storeOrdeBlock(pivot p_ivot, bool internal = false, int bias) =>
+    array<float> a_rray = na
+    int parsedIndex = na
+    if bias == BEARISH
+        a_rray := parsedHighs.slice(p_ivot.barIndex, bar_index)
+        parsedIndex := p_ivot.barIndex + a_rray.indexof(a_rray.max())
+    else
+        a_rray := parsedLows.slice(p_ivot.barIndex, bar_index)
+        parsedIndex := p_ivot.barIndex + a_rray.indexof(a_rray.min())
+    orderBlock o_rderBlock = orderBlock.new(parsedHighs.get(parsedIndex), parsedLows.get(parsedIndex), times.get(parsedIndex), bias)
+    array<orderBlock> orderBlocks = internal ? internalOrderBlocks : swingOrderBlocks
+    if orderBlocks.size() >= 100
+        orderBlocks.pop()
+    orderBlocks.unshift(o_rderBlock)
+
+displayStructure(bool internal = false) =>
+    var bullishBar = true
+    var bearishBar = true
+    if internalFilterConfluenceInput
+        bullishBar := high - math.max(close, open) > math.min(close, open - low)
+        bearishBar := high - math.max(close, open) < math.min(close, open - low)
+    pivot p_ivot = internal ? internalHigh : swingHigh
+    trend t_rend = internal ? internalTrend : swingTrend
+    extraCondition = internal ? internalHigh.currentLevel != swingHigh.currentLevel and bullishBar : true
+    if ta.crossover(close, p_ivot.currentLevel) and not p_ivot.crossed and extraCondition
+        string tag = t_rend.bias == BEARISH ? 'CHoCH' : 'BOS'
+        if internal
+            currentAlerts.internalBullishCHoCH := tag == 'CHoCH'
+            currentAlerts.internalBullishBOS := tag == 'BOS'
+        else
+            currentAlerts.swingBullishCHoCH := tag == 'CHoCH'
+            currentAlerts.swingBullishBOS := tag == 'BOS'
+        p_ivot.crossed := true
+        t_rend.bias := BULLISH
+        storeOrdeBlock(p_ivot, internal, BULLISH)
+    p_ivot := internal ? internalLow : swingLow
+    extraCondition := internal ? internalLow.currentLevel != swingLow.currentLevel and bearishBar : true
+    if ta.crossunder(close, p_ivot.currentLevel) and not p_ivot.crossed and extraCondition
+        string tag = t_rend.bias == BULLISH ? 'CHoCH' : 'BOS'
+        if internal
+            currentAlerts.internalBearishCHoCH := tag == 'CHoCH'
+            currentAlerts.internalBearishBOS := tag == 'BOS'
+        else
+            currentAlerts.swingBearishCHoCH := tag == 'CHoCH'
+            currentAlerts.swingBearishBOS := tag == 'BOS'
+        p_ivot.crossed := true
+        t_rend.bias := BEARISH
+        storeOrdeBlock(p_ivot, internal, BEARISH)
+
+deleteFairValueGaps() =>
+    for [index, eachFairValueGap] in fairValueGaps
+        if low < eachFairValueGap.bottom and eachFairValueGap.bias == BULLISH or high > eachFairValueGap.top and eachFairValueGap.bias == BEARISH
+            fairValueGaps.remove(index)
+
+drawFairValueGaps() =>
+    [lastClose, lastOpen, lastTime, currentHigh, currentLow, currentTime, last2High, last2Low] = request.security(syminfo.tickerid, fairValueGapsTimeframeInput, [close[1], open[1], time[1], high[0], low[0], time[0], high[2], low[2]], lookahead = barmerge.lookahead_on)
+    barDeltaPercent = (lastClose - lastOpen) / (lastOpen * 100)
+    newTimeframe = timeframe.change(fairValueGapsTimeframeInput)
+    threshold = fairValueGapsThresholdInput ? ta.cum(math.abs(newTimeframe ? barDeltaPercent : 0)) / bar_index * 2 : 0
+    bullishFairValueGap = currentLow > last2High and lastClose > last2High and barDeltaPercent > threshold and newTimeframe
+    bearishFairValueGap = currentHigh < last2Low and lastClose < last2Low and -barDeltaPercent > threshold and newTimeframe
+    if bullishFairValueGap
+        currentAlerts.bullishFairValueGap := true
+        fairValueGaps.unshift(fairValueGap.new(currentLow, last2High, BULLISH))
+    if bearishFairValueGap
+        currentAlerts.bearishFairValueGap := true
+        fairValueGaps.unshift(fairValueGap.new(currentHigh, last2Low, BEARISH))
+
+updateTrailingExtremes() =>
+    trailing.top := math.max(high, trailing.top)
+    trailing.lastTopTime := trailing.top == high ? time : trailing.lastTopTime
+    trailing.bottom := math.min(low, trailing.bottom)
+    trailing.lastBottomTime := trailing.bottom == low ? time : trailing.lastBottomTime
+
+updateTrailingExtremes()
+deleteFairValueGaps()
+
+getCurrentStructure(swingsLengthInput, false)
+getCurrentStructure(5, false, true)
+getCurrentStructure(equalHighsLowsLengthInput, true)
+
+displayStructure(true)
+displayStructure()
+
+deleteOrderBlocks(true)
+deleteOrderBlocks()
+
+drawFairValueGaps()
+
+alertcondition(currentAlerts.internalBullishBOS, 'Internal Bullish BOS', 'Internal Bullish BOS formed')
+alertcondition(currentAlerts.internalBullishCHoCH, 'Internal Bullish CHoCH', 'Internal Bullish CHoCH formed')
+alertcondition(currentAlerts.internalBearishBOS, 'Internal Bearish BOS', 'Internal Bearish BOS formed')
+alertcondition(currentAlerts.internalBearishCHoCH, 'Internal Bearish CHoCH', 'Internal Bearish CHoCH formed')
+alertcondition(currentAlerts.swingBullishBOS, 'Bullish BOS', 'Bullish BOS formed')
+alertcondition(currentAlerts.swingBullishCHoCH, 'Bullish CHoCH', 'Bullish CHoCH formed')
+alertcondition(currentAlerts.swingBearishBOS, 'Bearish BOS', 'Bearish BOS formed')
+alertcondition(currentAlerts.swingBearishCHoCH, 'Bearish CHoCH', 'Bearish CHoCH formed')
+alertcondition(currentAlerts.internalBullishOrderBlock, 'Bullish Internal OB Breakout', 'Price broke bullish internal OB')
+alertcondition(currentAlerts.internalBearishOrderBlock, 'Bearish Internal OB Breakout', 'Price broke bearish internal OB')
+alertcondition(currentAlerts.swingBullishOrderBlock, 'Bullish Swing OB Breakout', 'Price broke bullish swing OB')
+alertcondition(currentAlerts.swingBearishOrderBlock, 'Bearish Swing OB Breakout', 'Price broke bearish swing OB')
+alertcondition(currentAlerts.equalHighs, 'Equal Highs', 'Equal highs detected')
+alertcondition(currentAlerts.equalLows, 'Equal Lows', 'Equal lows detected')
+alertcondition(currentAlerts.bullishFairValueGap, 'Bullish FVG', 'Bullish FVG formed')
+alertcondition(currentAlerts.bearishFairValueGap, 'Bearish FVG', 'Bearish FVG formed')

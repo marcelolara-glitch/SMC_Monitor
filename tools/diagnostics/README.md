@@ -21,6 +21,12 @@ sistema.
 |---------------------------|----------------------------------------------|
 | `diagnose_freqtrade.sh`   | Diagnóstico completo do chassi Freqtrade     |
 
+## Outras pastas em tools/
+
+- `tools/pynecore-validation/` — experimento de validação cruzada do
+  LuxAlgo SMC traduzido para Python via PyneCore (lateral ao runtime
+  de produção; não interfere)
+
 ## Uso típico
 
 ```bash
