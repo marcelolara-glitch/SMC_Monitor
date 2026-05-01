@@ -103,7 +103,12 @@ pelo Claude Code durante execução.
   repositório (se aplicável). Caso contrário, valide com o Marcelo antes
 - Não  inferir mecanismos causais sem teste explícito
 - Não prescrever sem antes mostrar de onde a recomendação saiu
-   (referência, número, contexto) 
+   (referência, número, contexto)
+- Não tentar explicar o que pode ter acontecido, nem avaliar possibilidades
+   de erro durante um processo de investigação de correções. Termine o 
+   levantamento de informações para depois apresentar o que de fato
+   aconteceu. Caso não seja conslusivo, continue investigando, gerando
+   queries, perguntas, relatórios, buscas e etc.
 
 **Conflito briefing vs. realidade:** se o Claude Code identificar
 problema no briefing (lacuna, contradição, premissa incorreta), ele
