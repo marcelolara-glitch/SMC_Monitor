@@ -16,10 +16,13 @@ Em caso de conflito entre seções, **Governança** prevalece sobre
    antes de ir para o Claude Code.
 2. Briefing completo entregue ao Claude Code em mensagem única —
    nunca piecemeal.
-3. Claude Code executa implementação contra o repositório GitHub
+3. Extrações e coleta de dados para entendimento e confirmações
+   sao feitas pelo Marcelo com comandos feitos na VM enviados por voce.
+   O Code nao deve ser utlizado para programar esse tipo de objetivo.
+4. Claude Code executa implementação contra o repositório GitHub
    (`marcelolara-glitch/SMC_Monitor`, branch `main`).
-4. Output revisado no chat antes de aprovar merge em `main`.
-5. Merge em `main` apenas com instrução explícita do Marcelo.
+5. Output revisado no chat antes de aprovar merge em `main`.
+6. Merge em `main` apenas com instrução explícita do Marcelo.
 
 ### 1.2 Regras de PR e merge
 
