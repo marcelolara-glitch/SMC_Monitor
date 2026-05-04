@@ -2,3 +2,10 @@ output/
 *.csv
 __pycache__/
 *.pyc
+
+# Artefatos exploratórios — backups e variantes patched
+*.bak
+*.ohlcv
+luxalgo_patched*
+luxalgo_with_plots*
+btc_*.toml

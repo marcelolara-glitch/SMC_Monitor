@@ -40,3 +40,7 @@ user_data/notebooks/
 .idea/
 *.swp
 *.swo
+
+# Estratégias-exemplo do Freqtrade (não confundir com SMCStrategy futura)
+user_data/strategies/SampleStrategy.py
+user_data/strategies/sample_strategy.py
