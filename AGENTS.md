@@ -10,6 +10,50 @@ Em caso de conflito entre seções, **Governança** prevalece sobre
 
 ## 1. Governança
 
+### 1.0 Prevalência do AGENTS.md e tratamento de conflitos
+
+Este documento é a **constituição operacional** do projeto. Suas regras
+prevalecem sobre:
+
+- Conveniência operacional ("seria mais rápido se...")
+- Limitações ambientais aparentes ("o ambiente do Code não suporta...")
+- Justificativas de mérito técnico ("X é melhor que Y porque...")
+- Sugestões do Claude.ai ou Claude Code que conflitem com regras aqui
+- Memória do projeto / contexto histórico que conflite com regras aqui
+
+**Quando uma regra não puder ser seguida no ambiente atual:**
+
+1. PARAR a execução da tarefa em andamento
+2. REPORTAR ao Marcelo: qual regra, por que não pode ser seguida, qual
+   evidência (output de comando, mensagem de erro, screenshot)
+3. AGUARDAR decisão explícita do Marcelo: (a) investigar e corrigir o
+   ambiente, (b) atualizar a regra via PR dedicado, ou (c) outra
+   instrução específica
+4. NÃO criar fallback ad-hoc, NÃO propor alternativa "só desta vez",
+   NÃO bypassar a regra com justificativa pragmática
+
+**Bypass é o problema, não a solução.** Toda exceção vira novo padrão
+por inércia.
+
+**Mudanças no AGENTS.md acontecem exclusivamente via PR dedicado**, com
+discussão prévia no Claude.ai antes do briefing para o Code, e merge
+manual pelo Marcelo. Nunca em PR misto com código operacional.
+
+### 1.0.1 Hierarquia de fontes de verdade
+
+Em caso de conflito entre instruções, prevalece nesta ordem:
+
+1. **AGENTS.md** (constituição)
+2. **Documentos canônicos** referenciados no AGENTS (ex.:
+   `docs/SMC_PRINCIPIOS_E_LEGADO.md`, `docs/MAPA_LUXALGO_CAMADA_1_v1.1.md`,
+   `docs/VERIFICACAO_FREQTRADE.md`)
+3. **Briefing específico da tarefa** (deve ser consistente com 1 e 2)
+4. **Conversa em andamento no Claude.ai**
+5. **Memória do projeto / contexto histórico**
+
+Conflito identificado em qualquer nível inferior contra um superior:
+parar e reportar (vide §1.0).
+
 ### 1.1 Workflow de desenvolvimento
 
 1. Decisões arquiteturais e conceituais são alinhadas no chat (Claude.ai)
@@ -31,8 +75,36 @@ Em caso de conflito entre seções, **Governança** prevalece sobre
 - Claude Code implementa sem alterar `VERSION`. Marcelo revisa o PR.
   Instrução explícita de merge é dada. A atualização de `VERSION` tem
   que ser explícita para acontecer junto do PR.
-- Todos os PRs usam `curl` contra a GitHub API diretamente — nunca
-  `gh` CLI ou MCP GitHub tools.
+- PRs são abertos pelo Claude Code usando a ferramenta MCP
+  `mcp__github__create_pull_request`. Esta é a **única** ferramenta MCP
+  do GitHub autorizada — ferramentas MCP que manipulem issues
+  diretamente, alterem permissões, criem/deletem branches no remoto ou
+  modifiquem settings de repo continuam **proibidas**.
+
+  Justificativa: o ambiente do Claude Code não expõe `GITHUB_TOKEN`
+  (decisão de design da plataforma), o que torna `curl` contra
+  `api.github.com` inviável (retorna 403). O `gh` CLI também não está
+  autenticado. O acesso git do Code passa por proxy local
+  (`127.0.0.1:<porta>`) que roteia `git push/fetch` mas não chamadas
+  de API REST. Diagnóstico verificado em sessão de Maio/2026.
+
+- O método utilizado para abrir o PR **deve ser registrado no body do
+  PR**, em uma linha ao final, no formato:
+
+  ```
+  _PR aberto via: mcp__github__create_pull_request_
+  ```
+
+  Isso preserva auditabilidade do método, permitindo verificar em
+  retrospectiva quais PRs foram abertos por qual mecanismo.
+
+- Marcelo NÃO abre PRs manualmente como fallback. Se o Code não
+  conseguir abrir o PR, ele para e reporta (vide §1.0). PR aberto
+  manualmente pelo Marcelo gera retrabalho e perda de rastreabilidade.
+
+- Exceção: emergência declarada explicitamente pelo Marcelo. Nesse
+  caso, o body do PR registra:
+  `_PR aberto manualmente — emergência: <razão>_`.
 - Merges em `main` usam `--no-ff` para histórico explícito de commits.
 - Ao abrir o PR, Claude Code informa o nome exato da branch criada.
 - Sempre entregar pelo menos o link do Diff bruto (raw) das alterações
@@ -71,6 +143,11 @@ Serve como documentação viva para futuras mudanças.
 - Tags de versão criadas pelo Marcelo — nunca pelo Claude Code.
 - Backups executados pelo Marcelo — nunca pelo Claude Code.
 - Branch `main` protegida — só recebe merge com instrução explícita.
+- Tags de versão são criadas pelo Marcelo após merge bem-sucedido,
+  para marcar marcos de release. Critério: cada onda concluída do
+  roadmap, ou cada milestone declarado. Formato:
+  `<subprojeto>-v<X.Y.Z>` (ex.: `smc-freqtrade-v0.2.0`). Tag em PRs
+  de chore/saneamento é opcional.
 
 ### 1.6 Entregáveis
 
@@ -154,6 +231,12 @@ Ao editar código existente:
 **Teste:** cada linha alterada deve rastrear ao briefing **ou** a
 uma exceção autorizada acima.
 
+**Nota sobre VERSION em PRs de chore/saneamento:** PRs cujo escopo é
+exclusivamente limpeza, atualização de governança (AGENTS.md),
+gitignore ou deleção de vestígios **não bumpam VERSION**. Não há
+mudança operacional a versionar. A regra §1.3 de "toda nova versão
+atualiza tudo" pressupõe mudança operacional.
+
 ### 2.4 Execução orientada a objetivo
 
 Todo briefing define critério de sucesso verificável:
@@ -197,3 +280,124 @@ Princípios técnicos aplicados em todas as decisões e implementações:
   são silenciosas — warning no log, nunca interrompem o monitor.
 - **Single-message briefings:** todas as instruções para Claude Code
   entregues em uma mensagem completa — nunca piecemeal.
+- **Working tree clean entre sessões:** estado da VM ao fim de qualquer
+  sessão de trabalho deve ser `git status` limpo (ignorando apenas o
+  que está explicitamente gitignorado). Resíduo entre sessões é
+  violação rastreável da §4.3.
+
+---
+
+## 4. Higiene de working tree e sessões exploratórias
+
+Regras nascidas da auditoria pós-Onda 1 (Maio/2026), que revelou 11
+arquivos untracked acumulados em sessões exploratórias passadas sem
+rastro nem decisão de destino.
+
+### 4.1 Categorização de trabalho na VM
+
+Há três categorias de trabalho na VM, com regras distintas:
+
+**(a) Operacional:** comandos que o Marcelo executa para git, deploy,
+inspeção de estado, configuração. Coberta pela §1.2 — comandos sempre
+vêm prontos do Claude.ai, ou através de briefing para Claude Code.
+Não devem alterar arquivos não-versionados nem deixar resíduo.
+
+**(b) Implementação:** código que entra em PR. Sempre pelo Claude Code
+contra branch `claude/*` (ou `chore/*` para chores), nunca diretamente
+na VM em `main`. Coberta pelas seções 1, 2 e 3.
+
+**(c) Exploratória:** testes, validações, downloads, scripts patched,
+sandboxes para entender bibliotecas externas (Freqtrade, PyneCore,
+etc.). Pode ser executada diretamente pelo Marcelo na VM, mas SEMPRE
+em diretório dedicado (§4.2) e com ritual de encerramento (§4.3).
+
+### 4.2 Diretório dedicado para experimentação
+
+Todo trabalho exploratório acontece em diretório explicitamente
+dedicado, com `.gitignore` que cubra os artefatos esperados. Diretórios
+atuais autorizados:
+
+- `tools/pynecore-validation/` — validação do LuxAlgo via PyneCore CLI
+- Outros diretórios podem ser criados conforme necessidade, mas devem
+  vir acompanhados de README documentando o escopo e atualização do
+  `.gitignore` para cobrir os artefatos esperados
+
+Regras:
+
+- **Nunca** experimentar em `user_data/` (raiz ou subprojeto) ou em
+  qualquer diretório que o Freqtrade ou outro daemon use como working
+  dir de produção
+- **Nunca** experimentar dentro de `smc_freqtrade/smc_engine/`, dentro
+  de `legacy/`, ou em qualquer outro diretório destinado a código
+  rastreado por PR
+- O diretório de experimentação deve ter README explicando o que é
+  versionado (referência canônica) versus o que é descartável
+  (gitignored)
+
+### 4.3 Ritual de encerramento de sessão
+
+Toda sessão que envolveu execução exploratória na VM termina com:
+
+1. `git status` na raiz do repo
+2. Para cada arquivo modificado/untracked, decidir uma de três opções:
+   - **Promover:** virou aprendizado/referência. Documentar em README do
+     diretório, adicionar ao git, abrir PR de "chore: documentar X"
+   - **Descartar:** lixo de iteração. Deletar (`rm`)
+   - **Ignorar:** experimentação contínua. Adicionar ao `.gitignore` do
+     diretório
+3. `git status` deve voltar a "nothing to commit, working tree clean"
+   (ignorando apenas o que está explicitamente gitignorado)
+4. Se algum aprendizado foi promovido: PR aberto antes de encerrar
+
+Sessões exploratórias **nunca terminam com working tree sujo**.
+
+### 4.4 Auditoria periódica
+
+Antes de iniciar qualquer onda nova de implementação (ou no mínimo
+mensalmente), executar auditoria:
+
+```bash
+cd "$(git rev-parse --show-toplevel)" && \
+  echo "=== Working tree (deve estar limpo) ===" && \
+  git status && \
+  echo "" && \
+  echo "=== Stashes órfãs (devem ser zero) ===" && \
+  git stash list && \
+  echo "" && \
+  echo "=== Branches locais e remotas claude/* e chore/* mergeadas ===" && \
+  git branch -a | grep -E '(claude|chore)/'
+```
+
+Achados são tratados conforme §4.3 antes de prosseguir com nova onda.
+Branches mergeadas há mais de 30 dias são candidatas a deleção em PR
+de saneamento dedicado.
+
+### 4.5 Padrões obrigatórios em todo `.gitignore`
+
+Todo `.gitignore` (raiz e subprojetos) deve incluir, no mínimo:
+
+- **Backups e temporários:** `*.bak`, `*.tmp`, `*.swp`, `*.swo`, `*~`
+- **Python:** `__pycache__/`, `*.pyc`, `.pytest_cache/`
+- **Virtual environments:** `.venv/`, `venv/`, `env/`
+- **Diretórios de execução do Freqtrade dentro do escopo do
+  subprojeto:** `user_data/data/`, `user_data/logs/`,
+  `user_data/backtest_results/`, `user_data/hyperopt_results/`
+- **Credenciais:** `*.env`, `*.key`, `*.pem`, `*.local.json`,
+  `config.local.json`
+
+Templates de config (com placeholders `PLACEHOLDER_*`) **são
+versionados** como `*.template.json`. O arquivo real (`config.json`,
+`config.local.json`) é gitignored.
+
+### 4.6 Política de PRs de saneamento (chore)
+
+PRs cujo escopo é exclusivamente limpeza, atualização de governança
+(AGENTS.md) ou de `.gitignore`, ou deleção de vestígios:
+
+- Não bumpam VERSION (§2.3 nota)
+- Não exigem tag posterior (§1.5 — tag é opcional)
+- Devem ter título prefixado com `chore:`
+- Devem listar explicitamente, no body do PR, os arquivos deletados,
+  movidos ou modificados, agrupados por motivo
+- Seguem o mesmo mecanismo de abertura definido em §1.2
+  (`mcp__github__create_pull_request`)
