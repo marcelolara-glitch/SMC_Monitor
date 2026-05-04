@@ -2,7 +2,7 @@
 
 > **Status do projeto:** o sistema próprio (`main.py` + `signals.py` + `tracker.py` + 8 módulos de apoio) foi descontinuado em abril de 2026, após Check Up técnico revelar problemas estruturais de modelagem. Este documento preserva o aprendizado e estabelece princípios que devem orientar qualquer futuro sistema SMC, dentro ou fora deste repositório.
 >
-> **Próxima fase:** migração para freqtrade como base de infraestrutura, com lógica SMC implementada como `IStrategy` customizada.
+> **Próxima fase:** subprojeto `smc_freqtrade/` neste mesmo repositório, com freqtrade como base de infraestrutura e lógica SMC implementada como `IStrategy` customizada. O sistema legado é preservado em `legacy/` para referência.
 >
 > **Última atualização:** 2026-04-26.
 
