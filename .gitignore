@@ -223,3 +223,6 @@ user_data/plot/
 *.sqlite-shm
 *.sqlite-wal
 .venv-freqtrade/
+
+# Vestígio do legado (raiz) — substituído por smc_freqtrade/user_data/
+/user_data/
