@@ -1,8 +1,9 @@
 """
 OBJETIVO
-    Pacote da engine SMC do projeto SMC_Freqtrade. Onda 1 expõe apenas
-    os tipos fundacionais e o container de estado. Lógica de detecção
-    SMC entra a partir da Onda 3.
+    Pacote da engine SMC do projeto SMC_Freqtrade. Onda 1 expõe os
+    tipos fundacionais e o container de estado. Onda 2 expõe os
+    operadores ta.* stateless. Onda 3 expõe a detecção de pivots
+    (swing/internal/equal). Lógica de BOS/CHoCH entra na Onda 5.
 
 FONTE DE DADOS
     Não consome dados — apenas declarações. Os tipos espelham verbatim
@@ -11,12 +12,13 @@ FONTE DE DADOS
 
 LIMITAÇÕES CONHECIDAS
     Não há função analyze() ainda. Tentativa de uso para detecção SMC
-    falha com ImportError até Onda 9.
+    completa falha com ImportError até Onda 9.
 
 NÃO FAZER
     Não importar de freqtrade aqui (engine é Python puro).
     Não adicionar lógica SMC neste módulo.
 """
+from .pivots import detect_pivots
 from .state import EngineState
 from .types import (
     ATR,
@@ -45,6 +47,8 @@ __all__ = [
     "TrailingExtremes",
     # State container
     "EngineState",
+    # Onda 3 — detecção de pivots
+    "detect_pivots",
     # Constantes int (Pine main() linhas 73-76)
     "BULLISH",
     "BEARISH",
