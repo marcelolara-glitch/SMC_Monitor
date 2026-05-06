@@ -107,13 +107,37 @@ parar e reportar (vide §1.0).
   `_PR aberto manualmente — emergência: <razão>_`.
 - Merges em `main` usam `--no-ff` para histórico explícito de commits.
 - Ao abrir o PR, Claude Code informa o nome exato da branch criada.
-- Sempre entregar pelo menos o link do Diff bruto (raw) das alterações
-  realizadas no PR
+- Sempre entregar o link do Diff bruto (raw) das alterações
+  realizadas no PR. O link deve ser publicado **na última linha
+  útil do body do PR**, antes da linha de método (`_PR aberto via:
+  ..._`), no formato `https://github.com/<owner>/<repo>/pull/<N>.diff`
+  como URL simples (não usar `<...>` envolvendo a URL, não usar
+  markdown link `[texto](url)`). Exemplo:
+
+  ```
+  Diff bruto: https://github.com/marcelolara-glitch/SMC_Monitor/pull/33.diff
+
+  _PR aberto via: mcp__github__create_pull_request_
+  ```
+
+  Justificativa: a posição fixa torna fácil bater o olho e localizar
+  o link sem rolar pelo body inteiro. O formato URL simples é
+  copiável direto pelo Termius mobile, onde markdown links são
+  inconvenientes para copiar.
 - Marcelo não vai criar comandos para rodar manualmente na VM sem 
   orientação — sempre entregar o comando pronto para rodar direto no 
   terminal ou briefing completo para Claude Code.
 - Marcelo usa terminais Termius quando no mobile, ou o VPS quando
   no desktop.
+- Quando entregar relatórios, prints, dumps de log, conteúdo de
+  arquivo ou qualquer output destinado a ser exibido no Termius
+  (mobile), limitar a aproximadamente 700 linhas por bloco. Acima
+  desse volume, paginar a saída — usar `head -N` / `tail -N` /
+  `sed -n 'A,Bp'`, ou dividir o comando em duas execuções
+  consecutivas (parte 1, parte 2). Justificativa: legibilidade e
+  scroll no celular. Esta regra vale tanto para comandos
+  pré-prontos enviados pelo Claude.ai quanto para outputs que o
+  Claude Code reporta ao Marcelo.
 
 ### 1.3 Versionamento
 
@@ -158,6 +182,18 @@ b) Script/comando para VM ready-to-run (se aplicável),
 
 Briefings para Claude Code tem que ser feitos em arquivos markdown
 e devem seguir as instruções acima
+
+Briefings entregues ao Claude Code **referenciam AGENTS.md por
+número de seção em vez de duplicar regras**. Por exemplo, em vez de
+copiar a regra de versionamento, escrever "conforme §1.3"; em vez
+de copiar o docstring standard, escrever "conforme §1.4". O
+briefing cobre apenas o que é específico da tarefa: escopo, plano
+de execução numerado, critérios de aceite verificáveis, conflitos
+previstos com a realidade. Justificativa: regras duplicadas em
+briefings ficam estáticas — quando AGENTS.md é atualizado em PR
+dedicado, briefings antigos passam a contradizer a verdade canônica
+e induzem o agente a seguir versão obsoleta. Esta regra vale tanto
+para briefings novos quanto para revisões de briefings antigos.
 
 ---
 
