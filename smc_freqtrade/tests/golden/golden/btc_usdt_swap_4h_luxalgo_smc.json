@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "indicator": "LuxAlgo - Smart Money Concepts",
+    "indicator_version": "PLACEHOLDER",
+    "tradingview_timezone": "UTC",
+    "instrument": "BTC-USDT-SWAP",
+    "exchange": "OKX",
+    "timeframe": "4h",
+    "window_start_utc": "PLACEHOLDER",
+    "window_end_utc": "PLACEHOLDER",
+    "ohlcv_csv_sha256": "PLACEHOLDER_SHA256_TO_BE_FILLED_AFTER_OHLCV_FETCH",
+    "extracted_by": "Marcelo Lara - referencia visual TradingView",
+    "structured_by": "Claude.ai + Claude Code",
+    "produced_at_utc": "PLACEHOLDER",
+    "scope_included": [
+      "BOS bullish/bearish (internal e swing)",
+      "CHoCH bullish/bearish (internal e swing)",
+      "OB formacao e mitigacao (internal e swing)",
+      "FVG formacao e mitigacao",
+      "EQH/EQL alerts",
+      "Premium/Discount/Equilibrium zones"
+    ],
+    "scope_excluded": [
+      "Swing/internal/equal pivots por candle (validados por testes sinteticos na Onda 3)",
+      "CHoCH+ (feature do LuxAlgo Price Action Concepts pago, ausente no gratuito)",
+      "Volumetric OB metrics (idem)",
+      "Breaker Blocks (idem)",
+      "Liquidity Grabs (idem; sera abordado na Onda 8 com regra propria)",
+      "Liquidity Trendlines (idem)",
+      "Chart Patterns (idem)",
+      "Inverse FVG e Double FVG (idem)",
+      "Volume Imbalance e Opening Gap (irrelevantes para perpetual swap 24/7)"
+    ],
+    "match_tolerance_candles": 1
+  },
+  "screenshots": [],
+  "events": [],
+  "zones": []
+}
