@@ -431,21 +431,100 @@ class SMCStrategy(IStrategy):
 
 ## 7. Estratégia de validação por golden dataset
 
-O documento "SMC — Princípios e Legado" diz que fidelidade ao LuxAlgo é não-negociável. A maneira concreta de provar fidelidade é:
+O documento "SMC — Princípios e Legado" estabelece que fidelidade ao LuxAlgo
+SMC é não-negociável. A maneira concreta de provar fidelidade é o golden
+dataset descrito nesta seção.
 
-1. **Golden dataset.** Carregar `btc_4h_30days.csv` no TradingView, aplicar o LuxAlgo SMC original, exportar:
-   - Todos os swing highs/lows com timestamp e preço
-   - Todos os internal highs/lows com timestamp e preço
-   - Todos os EQH/EQL detectados
-   - Todos os OBs (swing e internal) com timestamp, range e bias
-   - Todos os FVGs com timestamp, range e bias
-   - Todos os BOS/CHoCH com timestamp e tipo
-2. **Estrutura do golden file:** JSON ou CSV versionado em `tests/golden/btc_4h_30days_luxalgo.json`.
-3. **Teste de equivalência por módulo:** cada módulo da engine roda sobre o mesmo CSV, e seu output é comparado contra a fatia correspondente do golden.
-4. **Tolerância:** match exato em timestamps; match com tolerância de 0.01% em preços (para acomodar diferenças de arredondamento entre Pine e Python).
-5. **Para os Conflitos A/B/C:** o golden documenta o output do LuxAlgo original; os testes da engine podem ter assertions com nota explícita "diverge do LuxAlgo aqui porque [razão do princípio violado]". Conflito B em particular: golden registra FVGs do TradingView, testes esperam mesmo output **com atraso de 1 candle do TF maior**.
+### 7.1 Indicador de referência
 
-A geração do golden dataset é **trabalho manual** que precisa ser feito uma vez no início, antes da Onda 3. Sem ele, validar a portagem é cego.
+**LuxAlgo - Smart Money Concepts (gratuito, open source).**
+
+NÃO é o LuxAlgo Price Action Concepts™ (pago, invite-only). Razão: a portagem
+em `smc_freqtrade/` é um mapa fiel do `tools/pynecore-validation/luxalgo_smc_compute_only.py`,
+que é o compute-only do gratuito. Validar contra o pago geraria divergências
+sistêmicas não-bug porque o pago tem 7 blocos adicionais (CHoCH+, Volumetric
+OB, Breaker Blocks, Liquidity Grabs, Liquidity Trendlines, Chart Patterns,
+Imbalances expandidos) que o gratuito não tem e a portagem não cobre.
+
+Análise comparativa completa entre pago e gratuito está em
+`docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md` (referência viva para
+briefings das Ondas 5-8).
+
+### 7.2 Janela e densidade
+
+- **Instrumento:** BTC-USDT-SWAP (OKX, mesmo provedor da produção).
+- **Timeframe:** 4H.
+- **Janela:** 720 candles 4H (~120 dias).
+- **Timezone:** UTC (TradingView configurado em UTC antes da captura).
+- **Densidade:** 6-8 screenshots cobrindo a janela completa, 90-120 candles
+  por screenshot.
+
+### 7.3 Escopo do golden
+
+**Incluído:**
+
+- BOS bullish/bearish (internal e swing)
+- CHoCH bullish/bearish (internal e swing)
+- OB formação e mitigação (internal e swing)
+- FVG formação e mitigação
+- EQH/EQL alerts
+- Premium/Discount/Equilibrium zones
+
+**Excluído:**
+
+- Swing/internal/equal pivots por candle. Validados por testes sintéticos da
+  Onda 3 (já mergeada). Razão: leitura visual humana de screenshots dá
+  precisão de evento (±1 candle), não de candle exato. Pivots por candle
+  exigem precisão de candle exato — incompatível com o método.
+- Features exclusivas do Price Action Concepts pago (CHoCH+, Volumetric OB,
+  Breakers, Liquidity Grabs, Trendlines, Patterns, Inverse/Double FVG, Volume
+  Imbalance, Opening Gap).
+
+### 7.4 Tolerância de match
+
+**±1 candle (4 horas em TF 4H).** Os testes consumidores das Ondas 5+ devem
+asseverar "este BOS foi detectado dentro de ±1 candle do timestamp esperado",
+não match candle-exato.
+
+### 7.5 Estrutura do golden
+
+- **Localização:** `smc_freqtrade/tests/golden/`
+- **CSV de OHLCV:** `data/btc_usdt_swap_4h_window.csv` (versionado por
+  hash SHA-256 registrado em `meta.ohlcv_csv_sha256`).
+- **JSON do golden:** `golden/btc_usdt_swap_4h_luxalgo_smc.json`.
+- **Schema:** `schema/golden_schema.json` (JSON Schema draft-07).
+- **Ferramentas:** `tools/golden_validator.py`, `tools/ohlcv_fetcher.py`.
+- **README com fluxo:** `README.md`.
+
+### 7.6 Fluxo de produção e atualização
+
+1. Marcelo configura TradingView em UTC e aplica o `LuxAlgo - Smart Money
+   Concepts` em chart BTC-USDT-SWAP 4H Bybit.
+2. Marcelo captura 6-8 screenshots cobrindo a janela completa, em ordem
+   cronológica.
+3. Sessão Claude.ai + Marcelo: cada screenshot é descrito em prosa por
+   Marcelo; Claude.ai/Code produz a fatia do JSON conforme o schema.
+4. `golden_validator.py` é executado para checar conformidade.
+5. PR de atualização do JSON; review humano antes de merge.
+
+**Marcelo NUNCA produz JSON manualmente.** A captura visual é dele; a
+estruturação do JSON é Claude.ai/Code.
+
+Versionamento por hash do CSV: qualquer mudança no CSV gera novo arquivo de
+golden com sufixo (`_v2.json`), preservando histórico.
+
+### 7.7 Para os Conflitos A/B/C do mapa
+
+- **Conflito A (multi-TF):** fechado pela arquitetura Freqtrade (`@informative`).
+  Golden é por TF, não cross-TF.
+- **Conflito B (lookahead):** fechado. Golden registra FVGs do TradingView,
+  testes esperam mesmo output **com atraso de 1 candle do TF maior**.
+  Diferença documentada nos testes.
+- **Conflito C (Liquidity Sweep):** ainda em aberto. Onda 8 vai especificar
+  regra exata. O LuxAlgo gratuito **não detecta sweep** (só EQH/EQL como
+  zona); a Onda 8 vai introduzir detecção própria. Golden NÃO contém
+  Liquidity Sweep events — eles são especificados na Onda 8 e validados
+  separadamente.
 
 ---
 
@@ -492,6 +571,7 @@ Esta seção rastreia exatamente onde a verificação documental do Freqtrade to
 | §6 nova Onda 9.5 | (não existia) | `setup_state.py` formalizado como módulo da engine | Verificação Freqtrade §5 |
 | §6 Onda 10 (IStrategy) | "Esta etapa depende da verificação documental" | Esqueleto verbatim verificado | Verificação Freqtrade §7.3 |
 | §8 (Decisões pendentes) | 6 itens, sendo 4 abertos | 7 itens (1 novo), sendo 3 abertos | Consolidação geral |
+| §7 (Validação golden) | "comparar contra exportação manual do TradingView" sem precisar versão | Reescrita completa fixando indicador (gratuito), janela, escopo, tolerância, fluxo, exclusões | PR Golden Infra (Mai/2026) |
 
 ---
 

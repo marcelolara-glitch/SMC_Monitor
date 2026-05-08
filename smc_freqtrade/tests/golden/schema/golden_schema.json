@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SMC Golden Dataset Schema v1",
+  "type": "object",
+  "required": ["meta", "events", "zones"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "indicator",
+        "indicator_version",
+        "tradingview_timezone",
+        "instrument",
+        "exchange",
+        "timeframe",
+        "window_start_utc",
+        "window_end_utc",
+        "ohlcv_csv_sha256",
+        "extracted_by",
+        "structured_by",
+        "produced_at_utc",
+        "scope_included",
+        "scope_excluded",
+        "match_tolerance_candles"
+      ],
+      "properties": {
+        "indicator": { "type": "string" },
+        "indicator_version": { "type": "string" },
+        "tradingview_timezone": { "type": "string", "enum": ["UTC"] },
+        "instrument": { "type": "string" },
+        "exchange": { "type": "string" },
+        "timeframe": { "type": "string", "enum": ["4h"] },
+        "window_start_utc": { "type": "string", "format": "date-time" },
+        "window_end_utc": { "type": "string", "format": "date-time" },
+        "ohlcv_csv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "extracted_by": { "type": "string" },
+        "structured_by": { "type": "string" },
+        "produced_at_utc": { "type": "string", "format": "date-time" },
+        "scope_included": { "type": "array", "items": { "type": "string" } },
+        "scope_excluded": { "type": "array", "items": { "type": "string" } },
+        "match_tolerance_candles": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_type", "timestamp_utc", "candle_idx", "screenshot_id"],
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "bos_bullish_internal",
+              "bos_bearish_internal",
+              "bos_bullish_swing",
+              "bos_bearish_swing",
+              "choch_bullish_internal",
+              "choch_bearish_internal",
+              "choch_bullish_swing",
+              "choch_bearish_swing",
+              "ob_bullish_internal_formed",
+              "ob_bearish_internal_formed",
+              "ob_bullish_swing_formed",
+              "ob_bearish_swing_formed",
+              "ob_bullish_internal_mitigated",
+              "ob_bearish_internal_mitigated",
+              "ob_bullish_swing_mitigated",
+              "ob_bearish_swing_mitigated",
+              "fvg_bullish_formed",
+              "fvg_bearish_formed",
+              "fvg_bullish_mitigated",
+              "fvg_bearish_mitigated",
+              "eqh_alert",
+              "eql_alert"
+            ]
+          },
+          "timestamp_utc": { "type": "string", "format": "date-time" },
+          "candle_idx": { "type": "integer", "minimum": 0 },
+          "screenshot_id": { "type": "string" },
+          "level": { "type": "number" },
+          "ob_top": { "type": "number" },
+          "ob_bottom": { "type": "number" },
+          "fvg_top": { "type": "number" },
+          "fvg_bottom": { "type": "number" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["zone_type", "screenshot_id", "valid_from_utc", "valid_until_utc"],
+        "properties": {
+          "zone_type": {
+            "type": "string",
+            "enum": ["premium", "equilibrium", "discount"]
+          },
+          "screenshot_id": { "type": "string" },
+          "valid_from_utc": { "type": "string", "format": "date-time" },
+          "valid_until_utc": { "type": "string", "format": "date-time" },
+          "upper_bound": { "type": "number" },
+          "lower_bound": { "type": "number" }
+        }
+      }
+    },
+    "screenshots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["screenshot_id", "candle_range_start_utc", "candle_range_end_utc"],
+        "properties": {
+          "screenshot_id": { "type": "string" },
+          "candle_range_start_utc": { "type": "string", "format": "date-time" },
+          "candle_range_end_utc": { "type": "string", "format": "date-time" },
+          "candle_count": { "type": "integer", "minimum": 1 },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}
