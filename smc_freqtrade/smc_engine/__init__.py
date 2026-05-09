@@ -18,8 +18,22 @@ NÃO FAZER
     Não importar de freqtrade aqui (engine é Python puro).
     Não adicionar lógica SMC neste módulo.
 """
-from .pivots import detect_pivots
+from .pivots import (
+    detect_pivots,
+    COL_SWING_HIGH_LEVEL,
+    COL_SWING_LOW_LEVEL,
+)
 from .state import EngineState
+from .trailing import (
+    compute_trailing_extremes,
+    COL_TRAILING_TOP,
+    COL_TRAILING_BOTTOM,
+    COL_PD_RATIO,
+    COL_PD_ZONE,
+    PD_ZONE_PREMIUM,
+    PD_ZONE_DISCOUNT,
+    PD_ZONE_EQUILIBRIUM,
+)
 from .types import (
     ATR,
     BEARISH,
