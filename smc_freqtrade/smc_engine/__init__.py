@@ -3,7 +3,8 @@ OBJETIVO
     Pacote da engine SMC do projeto SMC_Freqtrade. Onda 1 expõe os
     tipos fundacionais e o container de estado. Onda 2 expõe os
     operadores ta.* stateless. Onda 3 expõe a detecção de pivots
-    (swing/internal/equal). Lógica de BOS/CHoCH entra na Onda 5.
+    (swing/internal/equal). Onda 4 expõe trailing extremes +
+    Premium/Discount. Onda 5 expõe BOS/CHoCH formal.
 
 FONTE DE DADOS
     Não consome dados — apenas declarações. Os tipos espelham verbatim
@@ -24,6 +25,19 @@ from .pivots import (
     COL_SWING_LOW_LEVEL,
 )
 from .state import EngineState
+from .structure import (
+    detect_structure,
+    COL_BOS_INTERNAL_BEARISH,
+    COL_BOS_INTERNAL_BULLISH,
+    COL_BOS_SWING_BEARISH,
+    COL_BOS_SWING_BULLISH,
+    COL_CHOCH_INTERNAL_BEARISH,
+    COL_CHOCH_INTERNAL_BULLISH,
+    COL_CHOCH_SWING_BEARISH,
+    COL_CHOCH_SWING_BULLISH,
+    COL_INTERNAL_TREND_BIAS,
+    COL_SWING_TREND_BIAS,
+)
 from .trailing import (
     compute_trailing_extremes,
     COL_TRAILING_TOP,
@@ -63,6 +77,18 @@ __all__ = [
     "EngineState",
     # Onda 3 — detecção de pivots
     "detect_pivots",
+    # Onda 5 — BOS / CHoCH formal
+    "detect_structure",
+    "COL_BOS_INTERNAL_BEARISH",
+    "COL_BOS_INTERNAL_BULLISH",
+    "COL_BOS_SWING_BEARISH",
+    "COL_BOS_SWING_BULLISH",
+    "COL_CHOCH_INTERNAL_BEARISH",
+    "COL_CHOCH_INTERNAL_BULLISH",
+    "COL_CHOCH_SWING_BEARISH",
+    "COL_CHOCH_SWING_BULLISH",
+    "COL_INTERNAL_TREND_BIAS",
+    "COL_SWING_TREND_BIAS",
     # Constantes int (Pine main() linhas 73-76)
     "BULLISH",
     "BEARISH",
