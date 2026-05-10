@@ -75,22 +75,33 @@ realidade").
    vetorizada via `cumsum` sobre eventos de pivot novo (padrão
    análogo a `_segmented_running_extreme` em `trailing.py:78-99`).
 
+   Constantes consumidas em `pivots.py`: `COL_SWING_HIGH_IDX`,
+   `COL_SWING_LOW_IDX`, `COL_INTERNAL_HIGH_IDX`, `COL_INTERNAL_LOW_IDX`.
+   Cada bullish-break-de-swing-high segmenta por
+   `COL_SWING_HIGH_IDX.notna().cumsum()`; cada
+   bearish-break-de-swing-low por `COL_SWING_LOW_IDX.notna().cumsum()`;
+   idem para internal.
+
 6. **Internal só dispara quando `internal_*_level != swing_*_level`.**
    Pine linha 246 (bullish) e 259 (bearish). Quando o nível interno
    converge com o swing (sequência interna confirmou exatamente o
    swing), o internal break é suprimido para evitar duplicar evento.
+
+   Em pandas vetorizado:
+   `extra_internal_bullish = COL_INTERNAL_HIGH_LEVEL.ffill() != COL_SWING_HIGH_LEVEL.ffill()`;
+   `extra_internal_bearish = COL_INTERNAL_LOW_LEVEL.ffill() != COL_SWING_LOW_LEVEL.ffill()`.
 
 7. **Confluence filter (`internal_filter_confluence`, default `False`)
    adiciona condição extra para internal, NUNCA para swing.** Pine
    linhas 241-243. Quando `True`:
 
    ```pine
-   // Pine linhas 241-243 (verbatim)
-   var bullishBar = true
-   var bearishBar = true
-   if internalFilterConfluence
-       bullishBar := high - math.max(close, open) > math.min(close, open) - low
-       bearishBar := high - math.max(close, open) < math.min(close, open) - low
+   // Pine linhas 239-243 (verbatim do PyneComp output)
+   bullishBar: Persistent[bool] = True
+   bearishBar: Persistent[bool] = True
+   if internalFilterConfluenceInput:
+       bullishBar = high - math.max(close, open) > math.min(close, open - low)
+       bearishBar = high - math.max(close, open) < math.min(close, open - low)
    ```
 
    Portar **verbatim**, incluindo a idiossincrasia de
@@ -100,7 +111,7 @@ realidade").
 
 8. **CHoCH+ (variante supported) NÃO faz parte desta onda.** É
    feature do LuxAlgo Price Action Concepts pago, adiada para
-   **Onda 5.5** com hook documentado. Ver §11 deste briefing.
+   **Onda 5.5** com hook documentado. Ver §8 deste briefing.
 
 9. **Lookahead-safe.** Como toda onda anterior, sem `shift(-N)`. Os
    `_level` materializam apenas no candle `X = candle_real + size`
@@ -154,35 +165,61 @@ def detect_structure(
     internal_filter_confluence: bool = False,
 ) -> pd.DataFrame:
     """
-    Detecta Break of Structure (BOS) e Change of Character (CHoCH) sobre
-    os pivots produzidos por detect_pivots() (Onda 3), em duas escalas:
-    internal (length=5) e swing (length=50).
+    OBJETIVO
+        Portagem vetorizada de displayStructure() do LuxAlgo SMC
+        (Pine linhas 238-272). Detecta Break of Structure (BOS) e Change
+        of Character (CHoCH) sobre os pivots produzidos por
+        detect_pivots() (Onda 3), em duas escalas independentes:
+        internal (length=5) e swing (length=swings_length=50).
 
-    Porta displayStructure() do LuxAlgo SMC Pine (linhas 238-272).
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame de candles já processado por detect_pivots() e
-        compute_trailing_extremes(). Precisa conter as colunas de nível
-        e idx dos pivots swing/internal (consultar smc_engine/pivots.py).
-    internal_filter_confluence : bool, default False
-        Quando True, exige condição bullishBar/bearishBar (Pine linhas
-        241-243) para confirmar breaks internal. Não afeta swing.
-
-    Returns
-    -------
-    pd.DataFrame
-        Cópia de df com 10 colunas anexadas (ver §4.3 do briefing).
+    FONTE DE DADOS
+        df: DataFrame com no mínimo 'close' + as 8 colunas COL_*_LEVEL e
+            COL_*_IDX produzidas por detect_pivots() para os escopos
+            swing e internal. Equal pivots NÃO são consumidos.
+        internal_filter_confluence: replica internalFilterConfluenceInput
+            do Pine (linhas 241-243). Quando True, exige bullishBar /
+            bearishBar (computados verbatim, ver linhas 242-243 do Pine
+            fonte) como condição extra para breaks internal. NUNCA afeta
+            swing.
+        A semântica `Persistent[trend].bias = 0` do Pine (estado neutro
+            inicial) é mapeada para `pd.NA` nas colunas
+            internal_trend_bias / swing_trend_bias. Equivalência:
+            `0 != BEARISH` e `pd.NA != BEARISH` ambos colapsam para
+            tag = 'BOS' na primeira detecção.
 
     LIMITAÇÕES CONHECIDAS
-    ---------------------
-    - CHoCH+ (variante "supported" do CHoCH com pré-condição estrutural
-      de failed HH/LL na tendência prévia) NÃO é detectado nesta onda.
-      Decisão arquitetural fechada no briefing da Onda 5: feature do
-      LuxAlgo pago, adiada para Onda 5.5 com hook explícito. Ver
-      docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md §4.1 para
-      spec conceitual e §6.2 para classificação como Categoria B.
+        Lookahead-safe por construção: consome apenas COL_*_LEVEL já
+            materializados pela Onda 3 (que são lookahead-safe). Nenhum
+            shift(-N) interno.
+
+        CHoCH+ (variante "supported" do CHoCH com pré-condição estrutural
+            de failed HH/LL na tendência prévia) NÃO é detectado nesta
+            onda. Decisão arquitetural fechada no briefing da Onda 5:
+            feature do LuxAlgo Price Action Concepts pago, adiada para
+            Onda 5.5 com hook explícito. Ver
+            docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md §4.1
+            (spec conceitual) e §6.2 (classificação como Categoria B —
+            extensão sem mudança arquitetural; adiciona regra dentro de
+            detect_structure + estado failed_swing_observed por trend).
+
+        Ordem de declaração no Pine (linha 313: displayStructure(True)
+            antes de linha 314: displayStructure()) é irrelevante na
+            porta vetorizada porque os dois escopos têm trends
+            independentes.
+
+    NÃO FAZER
+        Não usar shift(-N) em ponto algum.
+        Não consumir trailing.* (Onda 4) — irrelevante para BOS/CHoCH.
+        Não emitir efeitos colaterais sobre o DataFrame de entrada
+            (operar sobre df.copy()).
+        Não alterar order_blocks.py (Onda 6) — apesar de Pine chamar
+            storeOrdeBlock dentro de displayStructure (linhas 257, 271),
+            a Onda 6 lê os 8 booleans da Onda 5 + os COL_*_IDX da Onda 3
+            para localizar o pivot do break.
+        Não inline-ar nomes de coluna — usar as 10 constantes COL_*
+            definidas no topo do módulo.
+        Não popular EngineState (Mapa §2 v1.1).
+        Não detectar CHoCH+ — Onda 5.5.
     """
 ```
 
@@ -206,6 +243,10 @@ COL_SWING_TREND_BIAS = "swing_trend_bias"
 10 colunas anexadas. Os 8 booleans saem `bool` não-nullable (default
 `False`); os 2 trend bias saem `Int8` nullable (`pd.NA` antes do primeiro
 break, `BULLISH=1`/`BEARISH=-1` depois — constantes já em `types.py`).
+Mapeamento neutro: o Pine inicializa `trend(0)`, mas a porta usa `pd.NA`
+(Int8 nullable) por simetria com o tratamento de pivots Onda 3 antes da
+materialização. Equivalente para classificação BOS/CHoCH (`0 != BEARISH`
+e `pd.NA != BEARISH` ambos colapsam para 'BOS').
 
 | Coluna | Dtype | Default | Significado |
 |---|---|---|---|
@@ -286,14 +327,30 @@ Para cada combinação `scope ∈ {internal, swing} × direction ∈ {bullish, b
 
 9. Atribuir as 10 colunas no DataFrame de saída (`result = df.copy()`).
 
-Os passos 7 e 8 têm interdependência: a classificação BOS/CHoCH precisa
-do bias **anterior** ao break, mas o bias só é atualizado pelo break.
-Uma forma correta: computar primeiro a coluna `bias_pre_event` por
-scope (= bias propagado ATÉ X-1, sem incluir o evento de X) via ffill
-sobre o bias atualizado em eventos passados; usar isso para
-classificar o evento de X; finalmente ffill propaga o bias atualizado
-adiante. Detalhamento Camada 2 fica para a sessão de implementação;
-o smoke valida o resultado, não o caminho.
+Os passos 7 e 8 têm interdependência aparente: a classificação
+BOS/CHoCH precisa do bias **anterior** ao break, mas o bias só é
+atualizado pelo break. A vetorização quebra o ciclo em três passos:
+
+(a) Detectar candles de evento bruto por direção
+    (bullish_event_raw, bearish_event_raw) usando first_in_segment &
+    extra_condition de §4.5 passo 6, **sem distinguir BOS/CHoCH**.
+    A direção (bullish/bearish) é determinada pela coluna LEVEL
+    consumida e pela sentinela close-cross — independe da
+    classificação.
+(b) Construir bias_running por escopo via cumsum sobre os eventos
+    brutos com sinal: BULLISH (+1) em bullish_event_raw, BEARISH (-1)
+    em bearish_event_raw, ffill entre eventos. O resultado é a coluna
+    *_trend_bias do output.
+(c) Computar bias_pre_event = bias_running.shift(1). Classificar:
+    em bullish_event_raw, choch = (bias_pre_event == BEARISH);
+    em bearish_event_raw, choch = (bias_pre_event == BULLISH);
+    bos = ~choch & event_raw.
+
+A análise de invariantes (§4.4 #1) garante que bullish_event_raw e
+bearish_event_raw são mutuamente exclusivos no mesmo candle do mesmo
+escopo, então a ordem de aplicação dentro de um candle não importa.
+Esta é a abordagem recomendada — alternativa (loop sequencial sobre
+eventos) é correta mas inconsistente com o padrão da Onda 3 e Onda 4.
 
 ---
 
@@ -360,16 +417,20 @@ def test_smoke_wave5_swing_sequence(synthetic_df):
     y = out.index[out["choch_swing_bearish"]][0]
     assert not out.loc[y, "bos_swing_bearish"]
     assert out.loc[y, "swing_trend_bias"] == BEARISH
-    assert out.loc[y - 1, "swing_trend_bias"] == BULLISH
+    y_pos = out.index.get_loc(y)
+    prev_y = out.index[y_pos - 1]
+    assert out.loc[prev_y, "swing_trend_bias"] == BULLISH
 
     # Fase 4: break bullish após BEARISH = CHoCH
     z = out.index[out["choch_swing_bullish"]][0]
     assert out.loc[z, "swing_trend_bias"] == BULLISH
-    assert out.loc[z - 1, "swing_trend_bias"] == BEARISH
+    z_pos = out.index.get_loc(z)
+    prev_z = out.index[z_pos - 1]
+    assert out.loc[prev_z, "swing_trend_bias"] == BEARISH
 
     # Fase 5: break bullish após BULLISH = BOS
     w = out.index[out["bos_swing_bullish"]][-1]
-    assert w > z
+    assert out.index.get_loc(w) > z_pos
     assert not out.loc[w, "choch_swing_bullish"]
 
 
@@ -385,20 +446,98 @@ def test_smoke_wave5_mutual_exclusion(synthetic_df):
     assert not (out["bos_internal_bearish"] & out["choch_internal_bearish"]).any()
 
 
-def test_smoke_wave5_crossed_flag_per_segment(synthetic_df):
+@pytest.mark.parametrize("idx_col,event_cols", [
+    ("swing_high_idx", ("bos_swing_bullish", "choch_swing_bullish")),
+    ("swing_low_idx", ("bos_swing_bearish", "choch_swing_bearish")),
+    ("internal_high_idx", ("bos_internal_bullish", "choch_internal_bullish")),
+    ("internal_low_idx", ("bos_internal_bearish", "choch_internal_bearish")),
+])
+def test_smoke_wave5_crossed_flag_per_segment(synthetic_df, idx_col, event_cols):
     """Mesmo segmento não dispara duas vezes mesmo com close-cross persistente."""
     df = detect_pivots(synthetic_df, swings_length=50, internal_length=5, equal_length=3)
     df = compute_trailing_extremes(df)
     out = detect_structure(df)
-
-    pivot_idx = out["swing_high_idx"]
-    segment_id = pivot_idx.notna().cumsum()
-    events = out["bos_swing_bullish"] | out["choch_swing_bullish"]
+    segment_id = out[idx_col].notna().cumsum()
+    events = out[event_cols[0]] | out[event_cols[1]]
     counts = events.groupby(segment_id).sum()
     assert (counts <= 1).all()
+
+
+def test_smoke_wave5_internal_sequence(synthetic_df):
+    """Paralelo a swing_sequence: cobre os 4 booleans internal e internal_trend_bias.
+
+    A fixture §5.1 produz pivots internal (length=5) ao longo dos 300 candles;
+    eventos internal naturalmente ocorrem entre fases swing.
+    """
+    df = detect_pivots(synthetic_df, swings_length=50, internal_length=5, equal_length=3)
+    df = compute_trailing_extremes(df)
+    out = detect_structure(df)
+
+    internal_events = (
+        out["bos_internal_bullish"]
+        | out["bos_internal_bearish"]
+        | out["choch_internal_bullish"]
+        | out["choch_internal_bearish"]
+    )
+    assert internal_events.any()
+
+    # Primeiro evento internal a partir de neutro: bias prévio é pd.NA, então
+    # primeira detecção colapsa para BOS (Pine: tag = 'CHoCH' if bias == BEARISH else 'BOS').
+    first_idx = out.index[internal_events][0]
+    first_pos = out.index.get_loc(first_idx)
+    if first_pos > 0:
+        prev_idx = out.index[first_pos - 1]
+        assert pd.isna(out.loc[prev_idx, "internal_trend_bias"])
+    assert (
+        out.loc[first_idx, "bos_internal_bullish"]
+        or out.loc[first_idx, "bos_internal_bearish"]
+    )
+    assert not (
+        out.loc[first_idx, "choch_internal_bullish"]
+        or out.loc[first_idx, "choch_internal_bearish"]
+    )
+    if out.loc[first_idx, "bos_internal_bullish"]:
+        assert out.loc[first_idx, "internal_trend_bias"] == BULLISH
+    else:
+        assert out.loc[first_idx, "internal_trend_bias"] == BEARISH
+
+
+def test_smoke_wave5_confluence_filter(synthetic_df):
+    """internal_filter_confluence=True só remove eventos internal; swing inafetado."""
+    df = detect_pivots(synthetic_df, swings_length=50, internal_length=5, equal_length=3)
+    df = compute_trailing_extremes(df)
+    out_default = detect_structure(df, internal_filter_confluence=False)
+    out_filtered = detect_structure(df, internal_filter_confluence=True)
+
+    internal_cols = [
+        "bos_internal_bullish",
+        "bos_internal_bearish",
+        "choch_internal_bullish",
+        "choch_internal_bearish",
+    ]
+    swing_cols = [
+        "bos_swing_bullish",
+        "bos_swing_bearish",
+        "choch_swing_bullish",
+        "choch_swing_bearish",
+    ]
+
+    # Filtro só remove eventos, nunca cria
+    for col in internal_cols:
+        assert (out_default[col] >= out_filtered[col]).all()
+
+    # Swing inafetado pelo filtro
+    for col in swing_cols:
+        assert (out_default[col] == out_filtered[col]).all()
+
+    # Algum evento internal é de fato filtrado (caso contrário teste é vacuamente verdadeiro)
+    assert (
+        out_filtered[internal_cols].sum().sum()
+        < out_default[internal_cols].sum().sum()
+    )
 ```
 
-### 5.3 Confluence filter (caso opcional)
+### 5.3 Confluence filter (obrigatório)
 
 Mesma fixture com `internal_filter_confluence=True`. *Esperado:* alguns
 dos eventos `bos_internal_*`/`choch_internal_*` desaparecem (filtrados
@@ -466,7 +605,7 @@ Adicionar entrada sobre output canônico engine-derived:
 Substituir o fluxo "Marcelo descreve screenshot → Claude monta JSON"
 pelo método novo:
 
-1. Marcelo configura TradingView em UTC e aplica o **LuxAlgo - Smart Money Concepts** em chart BTC-USDT-SWAP 4H Bybit (mesmo CSV de
+1. Marcelo configura TradingView em UTC e aplica o **LuxAlgo - Smart Money Concepts** em chart BTC-USDT-SWAP 4H OKX (mesmo CSV de
    `data/btc_usdt_swap_4h_window.csv`).
 2. Engine SMC roda sobre o CSV, produz output canônico (§7.5).
 3. Marcelo captura 6-8 screenshots do TradingView com o gratuito
@@ -477,7 +616,7 @@ pelo método novo:
    - **(a) Bug da engine** — abre PR de correção dedicado.
    - **(b) Diferença esperada por feature do pago** que a portagem
      ainda não absorveu (CHoCH+ até Onda 5.5, Volumetric OB até
-     onda futura, etc.) — registrada em §7.7 abaixo, NÃO é bug.
+     onda futura, etc.) — registrada em §7.8 abaixo, NÃO é bug.
    - **(c) Ambiguidade na referência** — Marcelo decide.
 5. Após ratificação completa, Marcelo abre PR de "feat(golden):
    ratificar Onda N" anexando o output canônico ao
@@ -487,7 +626,7 @@ pelo método novo:
 Marcelo **não** estrutura o JSON manualmente. Engine produz; Marcelo
 ratifica visualmente.
 
-### 7.4 Subseção nova §7.7 (Divergências esperadas vs golden visual)
+### 7.4 Subseção nova §7.8 (Divergências esperadas vs golden visual)
 
 Adicionar subseção nova listando features do pago que a portagem em
 curso **não absorve por design** (até a onda especificada):
@@ -527,7 +666,7 @@ match, pago conceitual) registrado em §7"**.
 ## 8. Hooks de absorção do LuxAlgo pago
 
 Esta onda fixa convenção para hooks de absorção. Cada hook é um par
-(comentário no docstring do módulo afetado) + (entrada na §7.7 do
+(comentário no docstring do módulo afetado) + (entrada na §7.8 do
 Mapa) + (entrada em §8 decisões pendentes).
 
 ### 8.1 Hook Onda 5.5 — CHoCH+ (criado nesta onda)
