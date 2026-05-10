@@ -437,18 +437,21 @@ dataset descrito nesta seção.
 
 ### 7.1 Indicador de referência
 
-**LuxAlgo - Smart Money Concepts (gratuito, open source).**
+**LuxAlgo - Smart Money Concepts** (gratuito) — referência canônica de
+**match exato** da portagem. A engine deve detectar exatamente o que o
+gratuito detecta, com tolerância ±1 candle (§7.4).
 
-NÃO é o LuxAlgo Price Action Concepts™ (pago, invite-only). Razão: a portagem
-em `smc_freqtrade/` é um mapa fiel do `tools/pynecore-validation/luxalgo_smc_compute_only.py`,
-que é o compute-only do gratuito. Validar contra o pago geraria divergências
-sistêmicas não-bug porque o pago tem 7 blocos adicionais (CHoCH+, Volumetric
-OB, Breaker Blocks, Liquidity Grabs, Liquidity Trendlines, Chart Patterns,
-Imbalances expandidos) que o gratuito não tem e a portagem não cobre.
+**LuxAlgo - Price Action Concepts™** (pago) — referência **conceitual
+auxiliar** para escopo de ondas futuras. NÃO é referência de match da
+portagem em curso porque tem 7 blocos adicionais (CHoCH+, Volumetric OB,
+Breakers, Liquidity Grabs, Trendlines, Patterns, Imbalances expandidos)
+que o gratuito não tem e a portagem só absorverá em ondas futuras
+dedicadas.
 
-Análise comparativa completa entre pago e gratuito está em
-`docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md` (referência viva para
-briefings das Ondas 5-8).
+Análise comparativa completa em
+`docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md`. Decisões de
+absorção feature-a-feature ficam para os briefings das Ondas 5.5+
+conforme decisão pendente §8 deste mapa.
 
 ### 7.2 Janela e densidade
 
@@ -495,23 +498,34 @@ não match candle-exato.
 - **Schema:** `schema/golden_schema.json` (JSON Schema draft-07).
 - **Ferramentas:** `tools/golden_validator.py`, `tools/ohlcv_fetcher.py`.
 - **README com fluxo:** `README.md`.
+- **Output canônico engine-derived:** `tests/golden/golden/<nome>_engine_output.parquet`
+  (formato definido na Onda 9, antecipado em smoke local até lá).
+  Produzido pela engine ao longo das ondas, ratificado por screenshot
+  do gratuito (§7.6).
 
 ### 7.6 Fluxo de produção e atualização
 
-1. Marcelo configura TradingView em UTC e aplica o `LuxAlgo - Smart Money
-   Concepts` em chart BTC-USDT-SWAP 4H Bybit.
-2. Marcelo captura 6-8 screenshots cobrindo a janela completa, em ordem
-   cronológica.
-3. Sessão Claude.ai + Marcelo: cada screenshot é descrito em prosa por
-   Marcelo; Claude.ai/Code produz a fatia do JSON conforme o schema.
-4. `golden_validator.py` é executado para checar conformidade.
-5. PR de atualização do JSON; review humano antes de merge.
+1. Marcelo configura TradingView em UTC e aplica o **LuxAlgo - Smart
+   Money Concepts** em chart BTC-USDT-SWAP 4H OKX (mesmo CSV de
+   `data/btc_usdt_swap_4h_window.csv`).
+2. Engine SMC roda sobre o CSV, produz output canônico (§7.5).
+3. Marcelo captura 6-8 screenshots do TradingView com o gratuito
+   aplicado, cobrindo a janela completa, em ordem cronológica.
+4. Sessão Claude.ai + Marcelo: cada screenshot é comparado com o
+   output canônico. Match (±1 candle) → ratificado. Divergência →
+   classificada em uma de três categorias:
+   - **(a) Bug da engine** — abre PR de correção dedicado.
+   - **(b) Diferença esperada por feature do pago** que a portagem
+     ainda não absorveu (CHoCH+ até Onda 5.5, Volumetric OB até onda
+     futura, etc.) — registrada em §7.8 abaixo, NÃO é bug.
+   - **(c) Ambiguidade na referência** — Marcelo decide.
+5. Após ratificação completa, Marcelo abre PR de "feat(golden):
+   ratificar Onda N" anexando o output canônico ao
+   `tests/golden/golden/`. Os screenshots ficam fora do repo
+   (Drive de Marcelo).
 
-**Marcelo NUNCA produz JSON manualmente.** A captura visual é dele; a
-estruturação do JSON é Claude.ai/Code.
-
-Versionamento por hash do CSV: qualquer mudança no CSV gera novo arquivo de
-golden com sufixo (`_v2.json`), preservando histórico.
+Marcelo **não** estrutura o JSON manualmente. Engine produz; Marcelo
+ratifica visualmente.
 
 ### 7.7 Para os Conflitos A/B/C do mapa
 
@@ -526,6 +540,28 @@ golden com sufixo (`_v2.json`), preservando histórico.
   Liquidity Sweep events — eles são especificados na Onda 8 e validados
   separadamente.
 
+### 7.8 Divergências esperadas vs golden visual
+
+Estas divergências entre output da portagem (referência: gratuito) e
+screenshots do pago (caso o usuário do golden esteja no pago em vez
+de no gratuito) são **diferenças documentadas, NÃO bugs**:
+
+| Feature do pago | Onda da portagem em que entra | Status |
+|---|---|---|
+| CHoCH+ (Supported CHoCH) | Onda 5.5 | **Decidido** — hook em `structure.py` |
+| Volumetric Order Blocks | Onda 6.x (a decidir) | Pendente |
+| Breaker Blocks | Onda 6.y (a decidir) | Pendente |
+| OB Mitigation Method = Average | Onda 6.x | Pendente |
+| Inverse FVG | Onda 7.x | Pendente |
+| Double FVG / Balanced Price Range | Onda 7.x | Pendente |
+| Liquidity Grabs (varrida) | Onda 8 | Já mapeada — decisão #5 |
+| Liquidity Trendlines | Decisão de escopo | Categoria C |
+| Chart Pattern Detection | Decisão de escopo | Categoria C |
+| Volume Imbalance / Opening Gap | **Excluído** (perpetual swap 24/7) | Recomendação técnica AVALIACAO §4.5 |
+
+Esta tabela é a fonte da verdade para "o que esperar de divergência
+visual" e é atualizada a cada onda que absorve uma feature.
+
 ---
 
 ## 8. Decisões pendentes consolidadas (atualizado v1.1)
@@ -537,8 +573,9 @@ golden com sufixo (`_v2.json`), preservando histórico.
 | 3 | Conflito A — multi-TF é responsabilidade da `IStrategy` | **FECHADA** (verificação Freqtrade §2) | — |
 | 4 | Conflito B — não replicar `lookahead_on` | **FECHADA** (verificação Freqtrade §3) | — |
 | 5 | Conflito C — regra exata de Liquidity Sweep | **Aberta** | Onda 8 |
-| 6 | Geração do golden dataset | **Aberta** | Onda 3 em diante |
+| 6 | Geração do golden dataset | **FECHADA — método engine-derived + spot-check híbrido (gratuito match, pago conceitual) registrado em §7** | Onda 3 em diante |
 | 7 (novo) | Onde mora `setup_state.py` (engine vs strategy) | **FECHADA** — dentro de `smc_engine/` como módulo opcional | Onda 9.5 |
+| 8 (novo) | Onda 5.5 — incluir CHoCH+ baseado em failed HH/LL detectado por pivots da Onda 3 | Aberta | Onda 5.5 (futura) |
 
 ---
 
