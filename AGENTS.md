@@ -51,6 +51,13 @@ Em caso de conflito entre instruções, prevalece nesta ordem:
 4. **Conversa em andamento no Claude.ai**
 5. **Memória do projeto / contexto histórico**
 
+Documentos canônicos adicionais:
+
+- `docs/REFERENCIA_VALIDACAO_VISUAL_LUXALGO.md` — documento
+  canônico para validação visual da engine contra LuxAlgo SMC
+  gratuito no TradingView. Aplica-se universalmente a qualquer
+  spot-check visual de qualquer onda.
+
 Conflito identificado em qualquer nível inferior contra um superior:
 parar e reportar (vide §1.0).
 

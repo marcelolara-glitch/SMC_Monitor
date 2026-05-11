@@ -585,6 +585,11 @@ direitas — primeira mitigação (estado `'active' → 'breaker'`) e
 remoção definitiva (estado `'breaker' → 'removed'`). Detalhar
 quando Onda 6.2 for absorvida.
 
+Para regras temporais detalhadas por tipo de marcador (BOS, CHoCH,
+pivots, EQH/EQL, FVG, OB), tolerâncias e procedimento de
+comparação engine ↔ visual, ver
+`docs/REFERENCIA_VALIDACAO_VISUAL_LUXALGO.md`.
+
 ### 7.7 Para os Conflitos A/B/C do mapa
 
 - **Conflito A (multi-TF):** fechado pela arquitetura Freqtrade (`@informative`).
