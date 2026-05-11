@@ -583,6 +583,33 @@ de no gratuito) são **diferenças documentadas, NÃO bugs**:
 Esta tabela é a fonte da verdade para "o que esperar de divergência
 visual" e é atualizada a cada onda que absorve uma feature.
 
+### 7.9 Divergências dogmáticas SMC vs LuxAlgo gratuito
+
+Categoria distinta de §7.8: divergências entre o framework SMC
+dogmático (Mentfx, ICT, e literatura derivada) e a implementação
+do LuxAlgo gratuito que serve de referência canônica de match
+exato (§7.1). Estas divergências **não são bugs** nem **features
+do pago**.
+
+**Princípio canônico**: a portagem prioriza fidelidade ao
+LuxAlgo gratuito sobre fidelidade ao dogma SMC. Razão: §7.1
+estabelece o gratuito como single source of truth para match
+exato. Tornar a portagem "mais dogmática" que a referência seria
+**bias arquitetural não-autorizado** (AGENTS §1.0.1 — Mapa
+prevalece sobre interpretação).
+
+**Divergências dogmáticas registradas**:
+
+| # | Divergência | Definição dogmática SMC | Implementação LuxAlgo gratuito | Onda afetada |
+|---|---|---|---|---|
+| 1 | Origem do Order Block | Última vela de cor oposta antes do break (Mentfx) | Vela com extremo de `parsed_low`/`parsed_high` na janela `[pivot_idx, break_idx)` (LuxAlgo) | Onda 6 |
+
+Quando a engine produz output que não bate com a definição
+dogmática mas bate com o LuxAlgo gratuito, **a engine está
+correta**. Marcelo decide caso-a-caso se a divergência justifica
+investigação adicional ao `SMC_PRINCIPIOS_E_LEGADO.md` (PR de doc
+dedicado, NÃO bloqueia ondas em curso).
+
 ---
 
 ## 8. Decisões pendentes consolidadas (atualizado v1.1)
