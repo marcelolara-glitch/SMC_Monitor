@@ -548,6 +548,43 @@ o timestamp do evento**.
 Esta regra é canônica e se aplica ao spot-check de todas as ondas
 (atual e futuras).
 
+#### 7.6.2 — Caixas de Order Block: refinamento de §7.6.1
+
+Para Order Blocks (caixas retangulares no LuxAlgo SMC), a regra
+genérica de §7.6.1 ("OB | Candle de trigger/validação, não o de
+origem da caixa") aplica-se como ponto de validação. Esta subseção
+adiciona convenções específicas de label e mapeamento engine↔visual,
+necessárias para o spot-check híbrido da Onda 6:
+
+- **"Linha" =** caixa retangular do OB no chart, projetada
+  horizontalmente da vela de origem (`bar_time` ≡ `t_origin`) até
+  a vela de mitigação (`t_mitigation`), ou até a vela atual se o
+  OB ainda estiver ativo.
+- **"Fim da linha" =** `t_mitigation` quando preenchido; vela
+  atual (ou último candle visível no screenshot) caso ativo.
+- **"Ponto médio horizontal" (label) =** midpoint temporal de
+  `[bar_time, t_mitigation or current]`. **NÃO** é midpoint de
+  `[t_creation, t_mitigation]`. Razão: visualmente o LuxAlgo
+  desenha a caixa a partir da vela parsed-extreme (= `bar_time` no
+  UDT Pine, linhas 68-73 e 232), não da vela do break.
+- **Comparação engine ↔ visual:**
+  - `bar_time` da engine ↔ candle esquerdo da caixa visual (±1).
+  - `t_mitigation` da engine ↔ candle direito visível onde a caixa
+    termina / o preço penetra (±1).
+  - `[bar_low, bar_high]` da engine ↔ topo/fundo verticais da
+    caixa visual (tolerância ±5% do ATR).
+- **Caixas ainda ativas no screenshot:** se a caixa se estende até
+  o limite direito do screenshot, verificar que `t_mitigation is
+  pd.NaT` no ledger; comparar `bar_time` contra a borda esquerda
+  da caixa.
+
+Esta subseção é referência canônica para o spot-check da Onda 6.
+Aplica-se também a Breaker Blocks (Onda 6.2 futura) com o
+refinamento adicional: caixa "breaker" tem **duas** extremidades
+direitas — primeira mitigação (estado `'active' → 'breaker'`) e
+remoção definitiva (estado `'breaker' → 'removed'`). Detalhar
+quando Onda 6.2 for absorvida.
+
 ### 7.7 Para os Conflitos A/B/C do mapa
 
 - **Conflito A (multi-TF):** fechado pela arquitetura Freqtrade (`@informative`).
@@ -570,9 +607,9 @@ de no gratuito) são **diferenças documentadas, NÃO bugs**:
 | Feature do pago | Onda da portagem em que entra | Status |
 |---|---|---|
 | CHoCH+ (Supported CHoCH) | Onda 5.5 | **Decidido** — hook em `structure.py` |
-| Volumetric Order Blocks | Onda 6.x (a decidir) | Pendente |
-| Breaker Blocks | Onda 6.y (a decidir) | Pendente |
-| OB Mitigation Method = Average | Onda 6.x | Pendente |
+| Volumetric Order Blocks | Onda 6.1 | **Decidido** — hook `volumetric_intensity` em `order_blocks.py` |
+| Breaker Blocks | Onda 6.2 | **Decidido** — hook campo `state` aceita `'breaker'` |
+| OB Mitigation Method = Average | Onda 6.1 | **Decidido** — hook parâmetro `mitigation` aceita `'Average'` |
 | Inverse FVG | Onda 7.x | Pendente |
 | Double FVG / Balanced Price Range | Onda 7.x | Pendente |
 | Liquidity Grabs (varrida) | Onda 8 | Já mapeada — decisão #5 |
@@ -617,7 +654,7 @@ dedicado, NÃO bloqueia ondas em curso).
 | # | Decisão | Status v1.1 | Bloqueia onda |
 |---|---|---|---|
 | 1 | Verificação documental do Freqtrade | **FECHADA** (documento `VERIFICACAO_FREQTRADE.md`) | — |
-| 2 | Sliding window vs lista full-history em `parsedHighs/Lows` | **Aberta** | Onda 6 — recomendação `df.iloc[start:end]` documentada |
+| 2 | Sliding window vs lista full-history em `parsedHighs/Lows` | **FECHADA na Onda 6**: sliding window via `df.iloc[start:end]`, sem lista global. Memória O(1) extra além do próprio DataFrame. Confirmado em briefing Onda 6 §2 P5. | — |
 | 3 | Conflito A — multi-TF é responsabilidade da `IStrategy` | **FECHADA** (verificação Freqtrade §2) | — |
 | 4 | Conflito B — não replicar `lookahead_on` | **FECHADA** (verificação Freqtrade §3) | — |
 | 5 | Conflito C — regra exata de Liquidity Sweep | **Aberta** | Onda 8 |
