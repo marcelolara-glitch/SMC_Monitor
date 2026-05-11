@@ -304,7 +304,7 @@ do PR é §6.
    commitado nesta onda — produto vai como artefato no PR para
    Marcelo conferir visualmente vs LuxAlgo gratuito TradingView).
    *Verifica:* `python -c "import pandas as pd; from smc_engine import detect_pivots, compute_trailing_extremes, detect_structure, detect_order_blocks; df = pd.read_csv(...); df = detect_pivots(df); df = compute_trailing_extremes(df); df = detect_structure(df); df_ob, ledger = detect_order_blocks(df); print(len(ledger), ledger['bias'].value_counts(), ledger['state'].value_counts())"`
-   produz contagens plausíveis. Spot-check contra os ~12 OBs do
+   produz contagens plausíveis. Spot-check contra os 13 OBs do
    §3.1 do relatório final da Onda 5 conforme §8 deste briefing.
 
 ---
@@ -797,11 +797,11 @@ def test_smoke_wave6_co_mitigation(synthetic_df_co_mit):
     assert found_co_mitigation, "Fixture deve gerar ≥1 candle de co-mitigação"
 ```
 
-### 5.3 Spot-check híbrido contra os ~12 OBs visuais (obrigatório)
+### 5.3 Spot-check híbrido contra os 13 OBs visuais (obrigatório)
 
 Plano em §8 deste briefing. Não é unit test (`pytest`) — é
 ferramenta de validação que roda sobre o golden CSV e produz
-relatório com taxa de match contra os 12 OBs do §3.1 do relatório
+relatório com taxa de match contra os 13 OBs do §3.1 do relatório
 final da Onda 5.
 
 ---
