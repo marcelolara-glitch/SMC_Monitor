@@ -19,6 +19,17 @@ NÃO FAZER
     Não importar de freqtrade aqui (engine é Python puro).
     Não adicionar lógica SMC neste módulo.
 """
+from .order_blocks import (
+    detect_order_blocks,
+    COL_OB_INTERNAL_BEARISH_CREATED,
+    COL_OB_INTERNAL_BEARISH_MITIGATED,
+    COL_OB_INTERNAL_BULLISH_CREATED,
+    COL_OB_INTERNAL_BULLISH_MITIGATED,
+    COL_OB_SWING_BEARISH_CREATED,
+    COL_OB_SWING_BEARISH_MITIGATED,
+    COL_OB_SWING_BULLISH_CREATED,
+    COL_OB_SWING_BULLISH_MITIGATED,
+)
 from .pivots import (
     detect_pivots,
     COL_SWING_HIGH_LEVEL,
@@ -89,6 +100,16 @@ __all__ = [
     "COL_CHOCH_SWING_BULLISH",
     "COL_INTERNAL_TREND_BIAS",
     "COL_SWING_TREND_BIAS",
+    # Onda 6 — Order Blocks com mitigação
+    "detect_order_blocks",
+    "COL_OB_INTERNAL_BEARISH_CREATED",
+    "COL_OB_INTERNAL_BEARISH_MITIGATED",
+    "COL_OB_INTERNAL_BULLISH_CREATED",
+    "COL_OB_INTERNAL_BULLISH_MITIGATED",
+    "COL_OB_SWING_BEARISH_CREATED",
+    "COL_OB_SWING_BEARISH_MITIGATED",
+    "COL_OB_SWING_BULLISH_CREATED",
+    "COL_OB_SWING_BULLISH_MITIGATED",
     # Constantes int (Pine main() linhas 73-76)
     "BULLISH",
     "BEARISH",
