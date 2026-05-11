@@ -24,9 +24,10 @@ emitem eventos por candle ou estados de bias por candle.
 
 A onda também:
 
-- Estende o UDT `OrderBlock` de Onda 1 com 5 campos novos (lifecycle
-  + scope + state + hook volumetric), mantendo `bar_time` para
-  preservar fidelidade à interface Pine.
+- Estende o UDT `OrderBlock` de Onda 1 com 6 campos novos
+  (`t_creation`, `t_mitigation`, `t_invalidation`, `scope`, `state`,
+  `volumetric_intensity`), mantendo `bar_time` para preservar
+  fidelidade à interface Pine.
 - Fecha a decisão pendente §8 #2 do Mapa Camada 1
   (`MAPA_LUXALGO_CAMADA_1_v1.1.md`): "sliding window vs lista
   full-history em `parsedHighs/Lows`" → resolve por
@@ -111,7 +112,7 @@ realidade").
    | `volumetric_intensity` | **NOVO Onda 6** | RESERVADO — sempre None em Wave 6 (hook Onda 6.1) |
 
    A extensão do UDT é exceção autorizada à mudança cirúrgica
-   (AGENTS §2.3): necessidade arquitetural Wave 6 — sem os 5 campos
+   (AGENTS §2.3): necessidade arquitetural Wave 6 — sem os 6 campos
    novos, o ledger não é construível e o spot-check híbrido fica
    inespecificável.
 
@@ -271,8 +272,13 @@ do PR é §6.
    schema correto (11 colunas).
 
 3. **Criar `smc_freqtrade/tests/test_smoke_wave6.py`** com smoke
-   sintético conforme §5. *Verifica:* `pytest` passa; cobertura dos
-   8 cenários listados em §5.
+   sintético conforme §5. *Verifica:* `pytest` passa; as 5 funções
+   de teste de §5 (`test_smoke_wave6_lifecycle`,
+   `test_smoke_wave6_mitigation_close_mode`,
+   `test_smoke_wave6_bar_time_within_window`,
+   `test_smoke_wave6_parsed_high_low_inversion`,
+   `test_smoke_wave6_co_mitigation`) passam cobrindo a fixture com
+   6 fases (incluindo a fase 6 nova de co-mitigação, patch §5.8).
 
 4. **Atualizar `smc_engine/__init__.py`** exportando
    `detect_order_blocks` e as 8 constantes `COL_OB_*` da Onda 6.
@@ -326,10 +332,15 @@ def detect_order_blocks(
         com uma linha por OB de ciclo de vida completo.
 
     FONTE DE DADOS
-        df: DataFrame com no mínimo OHLC + as 4 colunas COL_*_IDX
-            produzidas por detect_pivots() (Onda 3) para os escopos
-            swing e internal + as 8 booleans BOS/CHoCH produzidas por
-            detect_structure() (Onda 5).
+        df: DataFrame com no mínimo:
+            - 4 colunas OHLC: open, high, low, close (float64).
+            - Coluna `date` (Int64 epoch ms ou pd.Timestamp) —
+              timestamp canônico usado para preencher bar_time,
+              t_creation e t_mitigation no ledger.
+            - 4 colunas COL_*_IDX produzidas por detect_pivots()
+              (Onda 3) para os escopos swing e internal.
+            - 8 booleans BOS/CHoCH produzidas por detect_structure()
+              (Onda 5).
         ob_filter: replica orderBlockFilterInput do Pine (linha 87).
             'Atr' usa ta.atr(atr_length); 'Range' usa
             ta.cum(ta.tr) / bar_index. Determina volatilityMeasure
@@ -387,7 +398,10 @@ def detect_order_blocks(
             (operar sobre df.copy()).
         Não inline-ar nomes de coluna — usar as constantes COL_OB_*
             definidas no topo do módulo.
-        Não popular EngineState (Mapa §2 v1.1).
+        Não popular EngineState (Mapa §2 v1.1) — a portagem é
+            vetorizada sobre DataFrame; o ledger substitui os slots
+            `swing_order_blocks` / `internal_order_blocks` do
+            EngineState herdado do Pine.
         Não detectar Volumetric OB — Onda 6.1.
         Não detectar Breaker Blocks — Onda 6.2.
         Não implementar mitigation='Average' — Onda 6.1.
@@ -496,6 +510,12 @@ consumidores.
     candle e mesmo (scope, direction). O ledger não deduplica por
     proximidade — cada break emite um OB.
 
+13. **Co-mitigação determinística.** Se múltiplos OBs do mesmo
+    `(scope, direction)` são mitigados no mesmo candle Z, então
+    `df_per_candle.loc[Z, 'ob_<scope>_<direction>_mitigated'] == True`
+    (uma única marca booleana) e todos os OBs envolvidos têm
+    `t_mitigation == df.iloc[Z]['date']` no ledger.
+
 ### 4.5 Algoritmo (em prosa, sem código pronto)
 
 1. **Computar `parsed_high` / `parsed_low`** sobre todo o DataFrame
@@ -513,13 +533,23 @@ consumidores.
       bullish, e simétrico para bearish — linha 258).
 
    b. Slicear `window_parsed = df.iloc[int(pivot_idx):X]` (semi-aberto
-      à direita, P5). NOTA: se `pivot_idx` for `NaN`, abortar a
-      criação deste OB e logar — significa que o break disparou antes
-      do pivot materializar, o que indica bug em Onda 3/5 (não em
-      Onda 6).
+      à direita, P5). NOTA:
+      - Se `pivot_idx` for `NaN`, abortar a criação deste OB e
+        logar — significa que o break disparou antes do pivot
+        materializar, o que indica bug em Onda 3/5 (não em Onda 6).
+      - Se a janela for vazia (`int(pivot_idx) >= X`), abortar a
+        criação deste OB e logar — janela vazia é praticamente
+        impossível com Onda 3/5 corretas (ver audit §3.4), mas
+        possível em smoke sintético com horizonte curto. Mesma
+        classificação de bug que NaN.
 
    c. Para BULLISH OB: `extreme_idx = window_parsed['parsed_low'].idxmin()`.
       Para BEARISH OB: `extreme_idx = window_parsed['parsed_high'].idxmax()`.
+      Empate (múltiplos candles com mesmo extremo): ambos
+      `Series.idxmin()` (pandas) e `array.indexof(array.min(...))`
+      (Pine) retornam a **primeira ocorrência**. Comportamento
+      consistente entre as duas linguagens — sem necessidade de
+      tie-breaking adicional.
 
    d. Construir `OrderBlock`:
       - `bar_high = window_parsed.loc[extreme_idx, 'parsed_high']`
@@ -543,7 +573,14 @@ consumidores.
 3. **MITIGATION pass** (vetorizado por OB):
 
    Para cada `ob_id` no ledger (ordenado por internal-first então
-   swing-first, P7):
+   swing-first, P7).
+
+   **Nota**: a ordem de iteração (internal antes de swing) é
+   **cosmética** em pandas vetorizado — não há efeito-colateral
+   entre OBs no MITIGATION pass; cada OB é processado
+   independentemente. P7 mantém a ordem por fidelidade ao Pine e
+   por consistência com o CREATE pass (onde a ordem afeta `ob_id`
+   sequencial).
 
    a. Selecionar `source = high` (bearish OB, Wick) | `low` (bullish
       OB, Wick) | `close` (Close mode, ambos os lados).
@@ -614,6 +651,13 @@ verificável:
     contagem de `ledger.query("t_creation <= t and (t_mitigation > t or t_mitigation.isna())")`
     para algum candle t).
 
+- **Fase 6 (~290-300, dependente de extensão de N):** retração
+  profunda que fura `bar_low` de **ambos** os bullish OBs criados
+  em fases 4 e 5 no mesmo candle Z. *Esperado:* co-mitigação:
+  `ob_swing_bullish_mitigated[Z] == True` (única marca booleana);
+  ambos OBs no ledger ganham `t_mitigation == df.iloc[Z]['date']`.
+  Cobre invariante 13.
+
 ### 5.2 Asserts canônicos (lista descritiva)
 
 ```python
@@ -666,17 +710,44 @@ def test_smoke_wave6_lifecycle(synthetic_df):
 
 
 def test_smoke_wave6_mitigation_close_mode(synthetic_df):
-    """Modo Close usa close como source, não high/low. Esperado: mitigações
-    são *menos frequentes* que no modo Wick (Close mais conservador)."""
+    """Modo Close usa close como source, não high/low.
+
+    Assert forte (não-tautológico): pelo menos um OB do ledger tem
+    comportamento de mitigação diferente entre Wick e Close. Sem
+    isso, o teste passaria mesmo se a engine ignorasse o parâmetro
+    `mitigation` (Wick é estritamente mais permissivo que Close
+    para qualquer OHLC válido — então `n_mit_close <= n_mit_wick`
+    é tautológico).
+
+    Fixture pré-requisito: pelo menos um candle de retração cujo
+    `low` (ou `high` para bearish) fura `bar_low` (ou `bar_high`)
+    de algum OB ativo enquanto o `close` do mesmo candle ainda
+    fica do lado oposto. A fixture §5.1 fase 3 já garante esse
+    cenário (candle Z com `low < ob.bar_low` e `close >= ob.bar_low`).
+    """
     df = detect_pivots(synthetic_df, swings_length=50, internal_length=5, equal_length=3)
     df = compute_trailing_extremes(df)
     df = detect_structure(df)
     _, ledger_wick = detect_order_blocks(df, mitigation='Wick')
     _, ledger_close = detect_order_blocks(df, mitigation='Close')
 
-    n_mit_wick = (ledger_wick['state'] == 'mitigated').sum()
-    n_mit_close = (ledger_close['state'] == 'mitigated').sum()
-    assert n_mit_close <= n_mit_wick
+    joined = ledger_wick.merge(
+        ledger_close, on='ob_id', suffixes=('_wick', '_close'),
+    )
+    strictly_earlier = (
+        joined['t_mitigation_wick'].notna()
+        & joined['t_mitigation_close'].notna()
+        & (joined['t_mitigation_wick'] < joined['t_mitigation_close'])
+    ).any()
+    wick_only = (
+        joined['t_mitigation_wick'].notna()
+        & joined['t_mitigation_close'].isna()
+    ).any()
+    assert strictly_earlier or wick_only, (
+        "Parâmetro mitigation parece estar sendo ignorado: Wick e "
+        "Close produzem ledgers indistinguíveis. Verificar "
+        "implementação de _resolve_mitigations."
+    )
 
 
 def test_smoke_wave6_bar_time_within_window(synthetic_df):
@@ -698,6 +769,32 @@ def test_smoke_wave6_parsed_high_low_inversion(synthetic_df):
     # com a inversão correta (sanity-check; teste mais detalhado em
     # implementation review).
     pass  # Detalhar quando implementation review acontecer
+
+
+def test_smoke_wave6_co_mitigation(synthetic_df_co_mit):
+    """Múltiplos OBs do mesmo (scope, direction) mitigados no mesmo candle.
+
+    Fixture estendida com fase 6: candle Z onde low fura bar_low de
+    ≥2 bullish swing OBs simultaneamente. Cobre invariante 13.
+    """
+    df = detect_pivots(synthetic_df_co_mit, swings_length=50, internal_length=5, equal_length=3)
+    df = compute_trailing_extremes(df)
+    df = detect_structure(df)
+    df_out, ledger = detect_order_blocks(df, mitigation='Wick')
+
+    co_mit_candles = df_out.index[df_out['ob_swing_bullish_mitigated']]
+    found_co_mitigation = False
+    for Z in co_mit_candles:
+        ts_Z = df_out.loc[Z, 'date']
+        co_mit_obs = ledger.query(
+            "scope == 'swing' and bias == @BULLISH and t_mitigation == @ts_Z"
+        )
+        if len(co_mit_obs) >= 2:
+            found_co_mitigation = True
+            # Invariante 13
+            assert df_out.loc[Z, 'ob_swing_bullish_mitigated']
+            assert (co_mit_obs['t_mitigation'] == ts_Z).all()
+    assert found_co_mitigation, "Fixture deve gerar ≥1 candle de co-mitigação"
 ```
 
 ### 5.3 Spot-check híbrido contra os ~12 OBs visuais (obrigatório)
@@ -724,9 +821,11 @@ final da Onda 5.
 - [ ] Hooks Onda 6.1 e Onda 6.2 documentados no docstring de
       `order_blocks.py` e em §7.8 do Mapa
 - [ ] Working tree limpo após implementação (AGENTS §3, §4.3)
-- [ ] `VERSION` bumpada conforme AGENTS §1.3 — Marcelo confirma
-      número explicitamente no PR (esperado: 0.6.0)
-- [ ] Spot-check híbrido contra os ~12 OBs do §3.1 do relatório
+- [ ] `VERSION` é bumpado por Marcelo **antes do merge** (AGENTS
+      §1.2). Claude Code **NÃO altera VERSION** no PR. Versão
+      esperada pós-merge: **0.6.0** (sequencial sobre 0.5.0 da
+      Onda 5).
+- [ ] Spot-check híbrido contra os 13 OBs do §3.1 do relatório
       final da Onda 5 — relatório anexado ao body do PR
 
 ---
@@ -815,6 +914,10 @@ CONHECIDAS`:
 > conceitual) e §6.2 (classificação Categoria B — extensão sem
 > mudança arquitetural; preenche `volumetric_intensity` durante o
 > CREATE pass somando volume da janela `[pivot_idx, break_idx)`).
+>
+> **Pré-condição Onda 6.1**: DataFrame de entrada deve incluir
+> coluna `volume` (padrão Freqtrade OHLCV). Não é pré-condição da
+> Wave 6 base — apenas da extensão Onda 6.1.
 
 ### 8.2 Hook Onda 6.2 — Breaker Blocks (criado nesta onda)
 
@@ -873,9 +976,12 @@ Procedimento de spot-check:
    label visual no midpoint de `[bar_time, t_mitigation or current]`;
    "fim da linha" = `t_mitigation` ou último candle visível.
 
-Esperado: dos 13 OBs visuais, ≥10 ratificados em (a) ou (b). Casos
-não-ratificados viram lista de divergências para o relatório anexado
-ao PR.
+Esperado: relatório anexado ao body do PR listando, para cada um
+dos 13 OBs visuais, classificação caso-a-caso (ratificado /
+divergente em (a)/(b)/(c)). **Sem critério quantitativo
+pré-estabelecido** — alinhamento com prática Wave 5 (avaliação
+qualitativa por Marcelo). Marcelo decide aprovação do PR conforme
+relatório.
 
 ---
 
@@ -912,7 +1018,7 @@ Ler antes de iniciar a implementação, na ordem:
    (Volumetric OB + Breakers spec), §4.x (OB Mitigation = Average),
    §6.2 (categorização Categoria B).
 4. `docs/SMC_PRINCIPIOS_E_LEGADO.md` — definição dogmática SMC de
-   OB (gap documental; ver §11 item 4 deste briefing).
+   OB (gap registrado em Mapa §7.9, criado neste PR).
 5. `tools/pynecore-validation/luxalgo_smc_compute_only.py` — Pine
    fonte; foco em linhas 68-73 (UDT `orderBlock`), 122-128 (setup
    parsedHigh/Low + filter), 200-221 (`deleteOrderBlocks`),
@@ -921,9 +1027,10 @@ Ler antes de iniciar a implementação, na ordem:
 6. `smc_freqtrade/briefings/onda-05-bos-choch-spec.md` — template
    estrutural deste briefing; spec da Onda 5 que esta onda consome.
 7. `smc_freqtrade/briefings/onda-05-final-consistency-report.md` —
-   §3.1 (12 OBs pré-mapeados, material do spot-check), §6.2
-   (recomendação para Onda 6), **DT-4** (Mapa §7.6 patch — agora
-   absorvido em §7 deste briefing).
+   §3.1 (13 OBs pré-mapeados — header colloquial "~12 OBs", mas
+   tabela canônica lista 13 entradas — material do spot-check),
+   §6.2 (recomendação para Onda 6), **DT-4** (Mapa §7.6 patch —
+   agora absorvido em §7 deste briefing).
 8. `smc_freqtrade/smc_engine/types.py` — Onda 1, UDT `OrderBlock`
    atual (4 campos; esta onda adiciona 6).
 9. `smc_freqtrade/smc_engine/operators.py` — Onda 2, primitivas
@@ -948,46 +1055,55 @@ Lista enxuta de pontos onde esta sessão de planning não fechou
 decisão. Cada item precisa de segunda passada com olhar adversarial
 antes da sessão de implementação.
 
-1. **Slice exclusive vs inclusive end (P5).** Confirmar que Pine
-   `array.slice(arr, from, to)` é `[from, to)` (exclusive end)
-   antes da implementação. Hipótese atual (espelha sintaxe Python e
-   convenção da maioria das linguagens de array); PyneCore compilou
-   verbatim — verificar comportamento em `pynecore.lib.array` ou
-   via teste sintético no smoke da Wave 6. Impacto: se exclusive,
-   `df.iloc[pivot_idx:break_idx]` correto. Se inclusive,
-   `df.iloc[pivot_idx:break_idx + 1]`. Erro de 1 candle no
-   parsed-extreme.
+1. **Slice exclusive vs inclusive end (P5) — FECHADO.** Pine
+   `array.slice(arr, from, to)` é `[from, to)` (exclusive end),
+   confirmado por: (a) documentação oficial Pine v5
+   (`index_to` = "before which to end extraction"), (b) análise de
+   contexto do Pine fonte linhas 227-231 (incluir bar_index atual
+   distorceria a busca pelo parsed-extreme, então só exclusive faz
+   sentido logicamente). Implementação: `df.iloc[int(pivot_idx):int(break_idx)]`
+   conforme P5. Sem necessidade de smoke disambiguador. Ver audit
+   report §2.3.
 
-2. **Contrato de saída: tuple vs helper separado.** Wave 6 propõe
-   `detect_order_blocks(df) -> tuple[pd.DataFrame, pd.DataFrame]`,
-   quebrando o padrão Onda 5 (`detect_structure(df) -> pd.DataFrame`).
-   Audit decide se a clareza arquitetural (ledger lifecycle
-   queryable) compensa a quebra de padrão, ou se a alternativa
-   `df = detect_order_blocks(df); ledger = get_order_blocks_ledger(df)`
-   (helper separado, com ledger reconstruído a partir das colunas
-   booleans + state interno cacheado em `df.attrs`) é preferível.
+2. **Contrato de saída: tuple-return — FECHADO.** Decisão final:
+   `detect_order_blocks(df) -> tuple[pd.DataFrame, pd.DataFrame]`
+   é a única opção tecnicamente viável. A alternativa (helper
+   `get_order_blocks_ledger(df)` reconstruindo via `df.attrs` ou
+   via colunas booleans) tem duas falhas técnicas:
 
-3. **Naming das 8 colunas booleans.** Wave 6 propõe `ob_<scope>_<direction>_created` /
-   `_mitigated`. Alternativa Pine-faithful: `ob_alert_<scope><direction>`
-   (espelha `currentAlerts.internalBullishOrderBlock` etc. do Pine).
-   Audit decide. Recomendação atual: `created/mitigated` mais
-   informativo e separa CREATE de MITIGATE em colunas distintas.
+   (i) `df.attrs` é experimental em pandas e NÃO é propagado por
+   operações comuns (`pd.concat`, `pd.merge`, `groupby.agg`); em
+   pipeline Freqtrade real evapora silenciosamente.
 
-4. **Gap dogmático SMC vs LuxAlgo.** `docs/SMC_PRINCIPIOS_E_LEGADO.md`
-   sugere implicitamente que origem do OB = última vela de cor
-   oposta antes do break (definição dogmática). LuxAlgo usa lógica
-   diferente: vela com extremo de `parsed_low`/`parsed_high` na
-   janela `[pivot_idx, break_idx)` — pode coincidir, pode não. Wave 6
-   segue Pine fonte (fidelidade ao gratuito, AGENTS §1.0.1
-   hierarquia de fontes). Audit decide se isso vira:
-   - (a) Nova entrada em §7.8 do Mapa ("divergência esperada
-     não-bug, dogmático SMC ≠ LuxAlgo"), ou
-   - (b) Investigação adicional para codificar a definição
-     dogmática em `SMC_PRINCIPIOS_E_LEGADO.md` antes da
-     implementação, ou
-   - (c) Aceitar implicitamente como pré-condição da portagem
-     ("LuxAlgo gratuito é referência canônica de match exato",
-     Mapa §7.1).
+   (ii) Reconstrução determinística do ledger a partir das 8
+   booleans + OHLC é impossível em geral: `bar_time` exige
+   recomputar `parsed_high`/`parsed_low` (dependem de `ob_filter`,
+   `atr_length`), e o matching CREATE→MITIGATE para múltiplos
+   OBs coexistentes do mesmo (scope, direction) é ambíguo sem
+   o ledger interno.
+
+   Ver audit report §2.5.
+
+3. **Naming das 8 colunas booleans — FECHADO.** Decisão final:
+   `ob_<scope>_<direction>_created` / `_mitigated`. Razões:
+   (a) Pine usa "alert" porque seu output é `alertcondition`; em
+   pandas o output é dado, não evento de alerta — "alert" carrega
+   significado errado. (b) No Pine, `*OrderBlock` no nome do alert
+   refere-se a **mitigação** somente (linhas 329-332 do Pine: "OB
+   Breakout"); replicar em pandas obrigaria a omitir os eventos
+   de criação, que Wave 6 expõe. Logo o naming Pine-faithful é
+   incompleto. Ver audit report §2.6.
+
+4. **Gap dogmático SMC vs LuxAlgo — FECHADO.** Decisão final: a
+   divergência (origem de OB dogmática = última vela de cor oposta
+   antes do break; LuxAlgo = vela com extremo de
+   `parsed_low`/`parsed_high` na janela `[pivot_idx, break_idx)`)
+   é registrada em **nova subseção §7.9 do Mapa Camada 1**
+   ("Divergências dogmáticas SMC vs LuxAlgo gratuito"), aplicada
+   junto deste PR. Princípio canônico: portagem prioriza fidelidade
+   ao gratuito (§7.1 do Mapa). Engine não é considerada "errada"
+   se produzir output diferente da definição dogmática mas
+   compatível com o gratuito. Ver audit report §2.4.
 
 ---
 
