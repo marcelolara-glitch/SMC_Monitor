@@ -527,6 +527,27 @@ não match candle-exato.
 Marcelo **não** estrutura o JSON manualmente. Engine produz; Marcelo
 ratifica visualmente.
 
+#### 7.6.1 — Regra de leitura visual canônica do LuxAlgo SMC
+
+Para validar a engine contra screenshots do LuxAlgo, o timestamp do
+evento detectado deve ser comparado contra a **extremidade direita**
+dos marcadores visuais, conforme tabela:
+
+| Marcador LuxAlgo | Ponto de comparação para validação engine |
+|---|---|
+| BOS / CHoCH | Fim da linha tracejada (candle do close-cross) |
+| OB | Candle de trigger/validação (não o de origem da caixa) |
+| FVG | Terceiro candle do padrão (quando o gap fica conhecido) |
+| EQH / EQL | Último pivot que completa a condição de igualdade |
+| HH / LH / HL / LL | Candle do pivot real (não o de confirmação) |
+
+O label de texto do LuxAlgo (`BOS`, `CHoCH`, etc.) costuma estar no
+ponto médio aproximado da linha — é referência visual apenas, **NÃO é
+o timestamp do evento**.
+
+Esta regra é canônica e se aplica ao spot-check de todas as ondas
+(atual e futuras).
+
 ### 7.7 Para os Conflitos A/B/C do mapa
 
 - **Conflito A (multi-TF):** fechado pela arquitetura Freqtrade (`@informative`).
