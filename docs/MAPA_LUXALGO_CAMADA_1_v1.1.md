@@ -615,6 +615,11 @@ de no gratuito) são **diferenças documentadas, NÃO bugs**:
 | Volumetric Order Blocks | Onda 6.1 | **Decidido** — hook `volumetric_intensity` em `order_blocks.py` |
 | Breaker Blocks | Onda 6.2 | **Decidido** — hook campo `state` aceita `'breaker'` |
 | OB Mitigation Method = Average | Onda 6.1 | **Decidido** — hook parâmetro `mitigation` aceita `'Average'` |
+| OB Metrics (% volume total) | Onda 6.1 (extensão Volumetric) | Pendente — pós-processamento das colunas Volumetric OB |
+| OB Internal Activity (Positive/Negative Association) | Onda 6.1 (extensão Volumetric) | Pendente — derivado de buy_volume vs sell_volume |
+| Hide Overlap | Onda 6.x | Pendente — flag de pós-filtro em `order_blocks.py` |
+| Strong/Weak Volume % | Onda 6.x | Pendente — análoga a Volumetric OB para swing extremos |
+| Premium/Discount com 4 níveis | Onda 4.x refinamento | Pendente — Equilibrium ganha top e bottom em vez de linha única |
 | Inverse FVG | Onda 7.x | Pendente |
 | Double FVG / Balanced Price Range | Onda 7.x | Pendente |
 | Liquidity Grabs (varrida) | Onda 8 | Já mapeada — decisão #5 |
