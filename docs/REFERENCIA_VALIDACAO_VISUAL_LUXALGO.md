@@ -147,6 +147,19 @@ A tabela auxiliar abaixo reaproveita os marcadores complementares do relatório 
 | 8 | OB bullish | demanda | 73,600–75,000 | 2026-04-17 a 2026-05-01 | candle de trigger/validação | faixa azul inferior |
 | 8 | OB bullish | demanda | 74,900–76,300 | 2026-04-29 a 2026-05-01 | candle de trigger/validação | caixa azul menor |
 | 8 | FVG bullish | gap | 77,400–78,100 | 2026-04-30 a 2026-05-01 | terceiro candle do padrão FVG | gap na última impulsão |
+
+> **Anotações pós-Wave-6 (2026-05-11):** Duas entradas marcadas
+> originalmente como "FVG / OB bearish" foram confirmadas como
+> **FVG bearish (não OB)** via spot-check visual da Onda 6 contra
+> LuxAlgo gratuito no TradingView:
+>
+> - Shot 2, faixa 91.200–92.000, 2026-01-20: FVG bearish.
+> - Shot 2, faixa 85.700–87.400, 2026-01-29: FVG bearish.
+>
+> Esses dois pontos servem como ratificação inicial canônica para
+> o spot-check da Onda 7 (FVG), análogo ao papel que os 5 swing
+> BOS/CHoCH cumpriram para a ratificação da Onda 5.
+
 ---
 ## 6. Sumário de consistência dos eventos swing
 | Categoria | Total analisado | Consistentes com engine | Divergentes após correção | Observação |
