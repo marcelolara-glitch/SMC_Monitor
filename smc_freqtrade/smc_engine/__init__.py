@@ -19,6 +19,13 @@ NÃO FAZER
     Não importar de freqtrade aqui (engine é Python puro).
     Não adicionar lógica SMC neste módulo.
 """
+from .fvg import (
+    detect_fair_value_gaps,
+    COL_FVG_BULLISH_CREATED,
+    COL_FVG_BEARISH_CREATED,
+    COL_FVG_BULLISH_MITIGATED,
+    COL_FVG_BEARISH_MITIGATED,
+)
 from .order_blocks import (
     detect_order_blocks,
     COL_OB_INTERNAL_BEARISH_CREATED,
@@ -88,6 +95,17 @@ __all__ = [
     "EngineState",
     # Onda 3 — detecção de pivots
     "detect_pivots",
+    "COL_SWING_HIGH_LEVEL",
+    "COL_SWING_LOW_LEVEL",
+    # Onda 4 — trailing extremes + Premium/Discount
+    "compute_trailing_extremes",
+    "COL_TRAILING_TOP",
+    "COL_TRAILING_BOTTOM",
+    "COL_PD_RATIO",
+    "COL_PD_ZONE",
+    "PD_ZONE_PREMIUM",
+    "PD_ZONE_DISCOUNT",
+    "PD_ZONE_EQUILIBRIUM",
     # Onda 5 — BOS / CHoCH formal
     "detect_structure",
     "COL_BOS_INTERNAL_BEARISH",
@@ -110,6 +128,12 @@ __all__ = [
     "COL_OB_SWING_BEARISH_MITIGATED",
     "COL_OB_SWING_BULLISH_CREATED",
     "COL_OB_SWING_BULLISH_MITIGATED",
+    # Onda 7 — Fair Value Gaps com mitigação
+    "detect_fair_value_gaps",
+    "COL_FVG_BULLISH_CREATED",
+    "COL_FVG_BEARISH_CREATED",
+    "COL_FVG_BULLISH_MITIGATED",
+    "COL_FVG_BEARISH_MITIGATED",
     # Constantes int (Pine main() linhas 73-76)
     "BULLISH",
     "BEARISH",
