@@ -4,7 +4,10 @@ OBJETIVO
     tipos fundacionais e o container de estado. Onda 2 expõe os
     operadores ta.* stateless. Onda 3 expõe a detecção de pivots
     (swing/internal/equal). Onda 4 expõe trailing extremes +
-    Premium/Discount. Onda 5 expõe BOS/CHoCH formal.
+    Premium/Discount. Onda 5 expõe BOS/CHoCH formal. Onda 6 expõe
+    Order Blocks com mitigação. Onda 7 expõe Fair Value Gaps com
+    mitigação. Onda 8 expõe Liquidity Sweep (indicador gratuito do
+    LuxAlgo, separado do SMC principal).
 
 FONTE DE DADOS
     Não consome dados — apenas declarações. Os tipos espelham verbatim
@@ -25,6 +28,21 @@ from .fvg import (
     COL_FVG_BEARISH_CREATED,
     COL_FVG_BULLISH_MITIGATED,
     COL_FVG_BEARISH_MITIGATED,
+)
+from .liquidity_sweep import (
+    detect_liquidity_sweeps,
+    COL_SWEEP_BULLISH_WICK,
+    COL_SWEEP_BEARISH_WICK,
+    COL_SWEEP_BULLISH_RETEST,
+    COL_SWEEP_BEARISH_RETEST,
+    COL_SWEEP_BULLISH_LEVEL_IDX,
+    COL_SWEEP_BEARISH_LEVEL_IDX,
+    COL_SWEEP_BULLISH_LEVEL_PRICE,
+    COL_SWEEP_BEARISH_LEVEL_PRICE,
+    COL_SWEEP_BULLISH_MITIGATED,
+    COL_SWEEP_BEARISH_MITIGATED,
+    COL_SWEEP_BULLISH_PD_ZONE,
+    COL_SWEEP_BEARISH_PD_ZONE,
 )
 from .order_blocks import (
     detect_order_blocks,
@@ -89,6 +107,7 @@ from .types import (
     RANGE,
     Alerts,
     FairValueGap,
+    LiquiditySweep,
     OrderBlock,
     Pivot,
     TrailingExtremes,
@@ -102,6 +121,7 @@ __all__ = [
     "Alerts",
     "OrderBlock",
     "FairValueGap",
+    "LiquiditySweep",
     "TrailingExtremes",
     # State container
     "EngineState",
@@ -158,6 +178,20 @@ __all__ = [
     "COL_FVG_BEARISH_CREATED",
     "COL_FVG_BULLISH_MITIGATED",
     "COL_FVG_BEARISH_MITIGATED",
+    # Onda 8 — Liquidity Sweep (LuxAlgo gratuito, separado do SMC)
+    "detect_liquidity_sweeps",
+    "COL_SWEEP_BULLISH_WICK",
+    "COL_SWEEP_BEARISH_WICK",
+    "COL_SWEEP_BULLISH_RETEST",
+    "COL_SWEEP_BEARISH_RETEST",
+    "COL_SWEEP_BULLISH_LEVEL_IDX",
+    "COL_SWEEP_BEARISH_LEVEL_IDX",
+    "COL_SWEEP_BULLISH_LEVEL_PRICE",
+    "COL_SWEEP_BEARISH_LEVEL_PRICE",
+    "COL_SWEEP_BULLISH_MITIGATED",
+    "COL_SWEEP_BEARISH_MITIGATED",
+    "COL_SWEEP_BULLISH_PD_ZONE",
+    "COL_SWEEP_BEARISH_PD_ZONE",
     # Constantes int (Pine main() linhas 73-76)
     "BULLISH",
     "BEARISH",
