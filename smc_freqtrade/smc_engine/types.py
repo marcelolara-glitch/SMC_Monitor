@@ -278,6 +278,37 @@ class FairValueGap:
 
 
 @dataclass
+class LiquiditySweep:
+    """
+    OBJETIVO
+        Representar um evento de Liquidity Sweep detectado pelo
+        detector vetorizado.
+
+    FONTE DE DADOS
+        Pine `Liquidity Sweeps [LuxAlgo]` — UDTs `piv` (pivot tracked)
+        + `boxBr` (sweep area).
+
+    LIMITAÇÕES CONHECIDAS
+        - `pd_zone` só é preenchido se `qualify_with_pd_zone=True`
+          no detector.
+        - `mitigation_idx` é None enquanto o sweep estiver vivo.
+
+    NÃO FAZER
+        - Não interpretar `sub_type` como score — é categórico.
+        - Não correlacionar com OB/FVG aqui; isso é responsabilidade
+          da state machine (Onda 9.5).
+    """
+    direction: int                          # BULLISH (+1) / BEARISH (-1)
+    sub_type: str                           # 'wick' | 'retest'
+    level_price: float
+    level_idx: int                          # idx do candle do pivot original
+    sweep_idx: int                          # idx do candle que deflagrou o sweep
+    is_mitigated: bool
+    mitigation_idx: Optional[int]
+    pd_zone: Optional[str]                  # 'premium' | 'discount' | 'equilibrium' | None
+
+
+@dataclass
 class TrailingExtremes:
     """Mapeia `trailingExtremes` UDT (Pine linhas 22-28).
 
