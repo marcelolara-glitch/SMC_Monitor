@@ -40,7 +40,19 @@ from .order_blocks import (
 from .pivots import (
     detect_pivots,
     COL_SWING_HIGH_LEVEL,
+    COL_SWING_HIGH_IDX,
     COL_SWING_LOW_LEVEL,
+    COL_SWING_LOW_IDX,
+    COL_INTERNAL_HIGH_LEVEL,
+    COL_INTERNAL_HIGH_IDX,
+    COL_INTERNAL_LOW_LEVEL,
+    COL_INTERNAL_LOW_IDX,
+    COL_EQUAL_HIGH_LEVEL,
+    COL_EQUAL_HIGH_IDX,
+    COL_EQUAL_HIGH_ALERT,
+    COL_EQUAL_LOW_LEVEL,
+    COL_EQUAL_LOW_IDX,
+    COL_EQUAL_LOW_ALERT,
 )
 from .state import EngineState
 from .structure import (
@@ -93,10 +105,22 @@ __all__ = [
     "TrailingExtremes",
     # State container
     "EngineState",
-    # Onda 3 — detecção de pivots
+    # Onda 3 — detecção de pivots (expansão completa para uso pela Onda 8)
     "detect_pivots",
     "COL_SWING_HIGH_LEVEL",
+    "COL_SWING_HIGH_IDX",
     "COL_SWING_LOW_LEVEL",
+    "COL_SWING_LOW_IDX",
+    "COL_INTERNAL_HIGH_LEVEL",
+    "COL_INTERNAL_HIGH_IDX",
+    "COL_INTERNAL_LOW_LEVEL",
+    "COL_INTERNAL_LOW_IDX",
+    "COL_EQUAL_HIGH_LEVEL",
+    "COL_EQUAL_HIGH_IDX",
+    "COL_EQUAL_HIGH_ALERT",
+    "COL_EQUAL_LOW_LEVEL",
+    "COL_EQUAL_LOW_IDX",
+    "COL_EQUAL_LOW_ALERT",
     # Onda 4 — trailing extremes + Premium/Discount
     "compute_trailing_extremes",
     "COL_TRAILING_TOP",
