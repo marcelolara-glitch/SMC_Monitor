@@ -202,18 +202,79 @@ class OrderBlock:
 
 @dataclass
 class FairValueGap:
-    """Mapeia `fairValueGap` UDT (Pine linhas 30-33).
+    """Mapeia `fairValueGap` UDT (Pine linhas 30-33), estendido na Onda 7.
 
-    Pine fonte:
-        @udt
-        class fairValueGap:
-            top: float = na(float)
-            bottom: float = na(float)
-            bias: int = na(int)
+    OBJETIVO
+        UDT canônico de Fair Value Gap produzido por
+        `smc_engine.fvg.detect_fair_value_gaps` (Onda 7). Os 3 campos
+        originais (`top`, `bottom`, `bias`) mapeiam 1:1 o UDT Pine. Os
+        7 campos novos (`bar_time`, `t_creation`, `t_mitigation`,
+        `t_invalidation`, `state`, `is_inverse`, `is_double`)
+        suportam o ciclo de vida multi-candle do FVG em pandas e
+        reservam hooks para as Ondas 7.1 (Inverse FVG) e 7.2
+        (Double FVG / BPR).
+
+    FONTE DE DADOS
+        Pine fonte:
+            @udt
+            class fairValueGap:
+                top: float = na(float)
+                bottom: float = na(float)
+                bias: int = na(int)
+
+        Convenção temporal (briefing Onda 7 §4.5 + D5):
+            `bar_time` = timestamp do **primeiro** candle do padrão
+                de 3 (= âncora estrutural; define o nível do gap).
+            `t_creation` = timestamp do **terceiro** candle (momento
+                em que o gap fica conhecido; alinhado com Mapa
+                §7.6.1).
+            Em FVG, `bar_time ≠ t_creation` por construção — diferente
+                da Wave 6 OB onde coincidem (P12).
+
+        Convenção geométrica do gap (briefing Onda 7 §4.4 invariante 1):
+            `top` = limite superior do gap (sempre maior).
+            `bottom` = limite inferior do gap (sempre menor).
+            Para bullish: top = low[t], bottom = high[t-2].
+            Para bearish: top = low[t-2], bottom = high[t]
+                (normalizado — diferente do Pine literal onde
+                top = high[t] < bottom = low[t-2]).
+
+    LIMITAÇÕES CONHECIDAS
+        Wave 7 emite apenas `state ∈ {'active', 'mitigated'}`. Hook
+            para futuro `'breaker'` análogo à Onda 6.2 fica reservado
+            implicitamente via campo string.
+        Wave 7 NÃO popula `t_invalidation` — sempre None. Hook para
+            semântica futura de invalidação pós-mitigação.
+        Wave 7 NÃO detecta Inverse FVG (Onda 7.1) — campo
+            `is_inverse` sempre False.
+        Wave 7 NÃO detecta Double FVG / BPR (Onda 7.2) — campo
+            `is_double` sempre False.
+        Wave 7 NÃO consume timeframe MTF (Onda 7.3) — assinatura
+            atual é single-TF.
+        Wave 7 NÃO aplica multiplicador `volatility_threshold` do
+            LuxAlgo pago — hook reservado em assinatura futura.
+
+    NÃO FAZER
+        Não renomear `top`, `bottom`, `bias` — fiel ao Pine linhas
+            46-50 e à Wave 1.
+        Não preencher os 4 campos hook (`is_inverse`, `is_double`,
+            e parâmetros MTF/volatility_threshold da assinatura) em
+            Wave 7.
+        Não adicionar métodos comportamentais (is_mitigated, etc.) —
+            ciclo de vida é responsabilidade do módulo `fvg`.
+        Não inferir `bar_time = t_creation` por analogia com Wave 6
+            P12 — em FVG são distintos por construção (D5).
     """
     top: Optional[float] = None
     bottom: Optional[float] = None
     bias: Optional[int] = None
+    bar_time: Optional[int] = None
+    t_creation: Optional[int] = None
+    t_mitigation: Optional[int] = None
+    t_invalidation: Optional[int] = None
+    state: str = 'active'
+    is_inverse: bool = False
+    is_double: bool = False
 
 
 @dataclass

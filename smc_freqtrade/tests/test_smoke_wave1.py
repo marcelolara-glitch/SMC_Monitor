@@ -149,15 +149,32 @@ def test_order_block_default_is_all_none() -> None:
 # ----- UDT FairValueGap -----
 
 def test_fair_value_gap_field_count_matches_pine() -> None:
-    """Pine `fairValueGap` UDT tem 3 campos (linhas 30-33)."""
-    assert len(FairValueGap.__dataclass_fields__) == 3
+    """Pine `fairValueGap` UDT tem 3 campos (linhas 30-33); Onda 7
+    estende com 7 campos (`bar_time`, `t_creation`, `t_mitigation`,
+    `t_invalidation`, `state`, `is_inverse`, `is_double`) conforme
+    briefing Onda 7 §2 P3 / §4.3. Os 3 originais permanecem
+    presentes e nomeados verbatim do Pine."""
+    fields = FairValueGap.__dataclass_fields__
+    assert len(fields) == 10
+    for pine_field in ('top', 'bottom', 'bias'):
+        assert pine_field in fields
 
 
 def test_fair_value_gap_default_is_all_none() -> None:
     fvg = FairValueGap()
+    # 3 campos originais (Pine UDT) — todos defaultam para None.
     assert fvg.top is None
     assert fvg.bottom is None
     assert fvg.bias is None
+    # 4 campos de lifecycle — todos None em Wave 7 antes da detecção.
+    assert fvg.bar_time is None
+    assert fvg.t_creation is None
+    assert fvg.t_mitigation is None
+    assert fvg.t_invalidation is None
+    # Defaults canônicos para state + hooks Onda 7.1/7.2.
+    assert fvg.state == 'active'
+    assert fvg.is_inverse is False
+    assert fvg.is_double is False
 
 
 # ----- UDT TrailingExtremes -----
