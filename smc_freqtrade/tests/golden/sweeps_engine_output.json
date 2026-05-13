@@ -1,0 +1,1438 @@
+{
+  "meta": {
+    "source_csv": "/home/user/SMC_Monitor/smc_freqtrade/tests/golden/data/btc_usdt_swap_4h_window.csv",
+    "csv_hash": "1a3f746cfe6095ad544c46c66e1500306627ea5224cdc3708ef994af2b3ef3fa",
+    "hash_match_expected": true,
+    "candle_count": 720,
+    "first_candle": "2026-01-01T00:00:00+00:00",
+    "last_candle": "2026-04-30T20:00:00+00:00",
+    "engine_version": "smc_freqtrade VERSION 0.7.0 (Onda 8 mergeada, bump pendente)",
+    "detector_params": {
+      "pivot_sources": [
+        "equal",
+        "internal"
+      ],
+      "sweep_max_extension_bars": 300,
+      "sweep_max_pivot_age_bars": 2000,
+      "qualify_with_pd_zone": false
+    },
+    "event_counts": {
+      "sweep_bullish_retest": 31,
+      "sweep_bullish_wick": 27,
+      "mitigation_bullish_sweep_area": 21,
+      "sweep_bearish_retest": 20,
+      "sweep_bearish_wick": 27,
+      "mitigation_bearish_sweep_area": 21
+    },
+    "total_events": 147
+  },
+  "events": [
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 34,
+      "sweep_timestamp": "2026-01-06T16:00:00+00:00",
+      "level_price": 91806.0,
+      "level_idx": 19,
+      "level_timestamp": "2026-01-04T04:00:00+00:00",
+      "candle_high": 93728.1,
+      "candle_low": 91221.9,
+      "candle_close": 92062.4
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 39,
+      "sweep_timestamp": "2026-01-07T12:00:00+00:00",
+      "level_price": 91221.9,
+      "level_idx": 34,
+      "level_timestamp": "2026-01-06T16:00:00+00:00",
+      "candle_high": 92291.1,
+      "candle_low": 90900.5,
+      "candle_close": 91296.3
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 40,
+      "sweep_timestamp": "2026-01-07T16:00:00+00:00",
+      "level_price": 90811.1,
+      "level_idx": 22,
+      "level_timestamp": "2026-01-04T16:00:00+00:00",
+      "candle_high": 91744.0,
+      "candle_low": 90614.7,
+      "candle_close": 91144.5
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 40,
+      "mitigation_timestamp": "2026-01-07T16:00:00+00:00",
+      "candle_close": 91144.5
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 42,
+      "mitigation_timestamp": "2026-01-08T00:00:00+00:00",
+      "candle_close": 90778.9
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 43,
+      "sweep_timestamp": "2026-01-08T04:00:00+00:00",
+      "level_price": 90811.1,
+      "level_idx": 22,
+      "level_timestamp": "2026-01-04T16:00:00+00:00",
+      "candle_high": 91150.0,
+      "candle_low": 89566.6,
+      "candle_close": 90486.7
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 61,
+      "sweep_timestamp": "2026-01-11T04:00:00+00:00",
+      "level_price": 90791.3,
+      "level_idx": 56,
+      "level_timestamp": "2026-01-10T08:00:00+00:00",
+      "candle_high": 90824.3,
+      "candle_low": 90550.0,
+      "candle_close": 90675.4
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 63,
+      "mitigation_timestamp": "2026-01-11T12:00:00+00:00",
+      "candle_close": 90830.0
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 65,
+      "sweep_timestamp": "2026-01-11T20:00:00+00:00",
+      "level_price": 90342.1,
+      "level_idx": 59,
+      "level_timestamp": "2026-01-10T20:00:00+00:00",
+      "candle_high": 91000.0,
+      "candle_low": 90155.1,
+      "candle_close": 90962.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 74,
+      "sweep_timestamp": "2026-01-13T08:00:00+00:00",
+      "level_price": 92283.0,
+      "level_idx": 70,
+      "level_timestamp": "2026-01-12T16:00:00+00:00",
+      "candle_high": 92648.0,
+      "candle_low": 91886.4,
+      "candle_close": 91963.9
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 75,
+      "mitigation_timestamp": "2026-01-13T12:00:00+00:00",
+      "candle_close": 93412.2
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 79,
+      "sweep_timestamp": "2026-01-14T04:00:00+00:00",
+      "level_price": 94778.8,
+      "level_idx": 29,
+      "level_timestamp": "2026-01-05T20:00:00+00:00",
+      "candle_high": 95757.0,
+      "candle_low": 94505.0,
+      "candle_close": 95179.5
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 94,
+      "sweep_timestamp": "2026-01-16T16:00:00+00:00",
+      "level_price": 95089.0,
+      "level_idx": 89,
+      "level_timestamp": "2026-01-15T20:00:00+00:00",
+      "candle_high": 95188.0,
+      "candle_low": 94461.9,
+      "candle_close": 94959.5
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 108,
+      "sweep_timestamp": "2026-01-19T00:00:00+00:00",
+      "level_price": 92283.0,
+      "level_idx": 70,
+      "level_timestamp": "2026-01-12T16:00:00+00:00",
+      "candle_high": 93625.2,
+      "candle_low": 91816.7,
+      "candle_close": 92637.7
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 115,
+      "sweep_timestamp": "2026-01-20T04:00:00+00:00",
+      "level_price": 90882.0,
+      "level_idx": 71,
+      "level_timestamp": "2026-01-12T20:00:00+00:00",
+      "candle_high": 92450.9,
+      "candle_low": 90711.1,
+      "candle_close": 91131.8
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 117,
+      "sweep_timestamp": "2026-01-20T12:00:00+00:00",
+      "level_price": 90064.4,
+      "level_idx": 69,
+      "level_timestamp": "2026-01-12T12:00:00+00:00",
+      "candle_high": 91340.0,
+      "candle_low": 89806.4,
+      "candle_close": 90638.0
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 117,
+      "mitigation_timestamp": "2026-01-20T12:00:00+00:00",
+      "candle_close": 90638.0
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 118,
+      "sweep_timestamp": "2026-01-20T16:00:00+00:00",
+      "level_price": 89268.0,
+      "level_idx": 45,
+      "level_timestamp": "2026-01-08T12:00:00+00:00",
+      "candle_high": 90922.0,
+      "candle_low": 89225.0,
+      "candle_close": 89680.0
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 118,
+      "sweep_timestamp": "2026-01-20T16:00:00+00:00",
+      "level_price": 90882.0,
+      "level_idx": 71,
+      "level_timestamp": "2026-01-12T20:00:00+00:00",
+      "candle_high": 90922.0,
+      "candle_low": 89225.0,
+      "candle_close": 89680.0
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 118,
+      "mitigation_timestamp": "2026-01-20T16:00:00+00:00",
+      "candle_close": 89680.0
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 119,
+      "mitigation_timestamp": "2026-01-20T20:00:00+00:00",
+      "candle_close": 88387.3
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 121,
+      "sweep_timestamp": "2026-01-21T04:00:00+00:00",
+      "level_price": 90064.4,
+      "level_idx": 69,
+      "level_timestamp": "2026-01-12T12:00:00+00:00",
+      "candle_high": 90080.0,
+      "candle_low": 89050.0,
+      "candle_close": 89171.3
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 123,
+      "sweep_timestamp": "2026-01-21T12:00:00+00:00",
+      "level_price": 90342.1,
+      "level_idx": 59,
+      "level_timestamp": "2026-01-10T20:00:00+00:00",
+      "candle_high": 90541.7,
+      "candle_low": 88151.0,
+      "candle_close": 90228.8
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 124,
+      "sweep_timestamp": "2026-01-21T16:00:00+00:00",
+      "level_price": 87716.1,
+      "level_idx": 119,
+      "level_timestamp": "2026-01-20T20:00:00+00:00",
+      "candle_high": 90428.5,
+      "candle_low": 87200.1,
+      "candle_close": 90315.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 136,
+      "sweep_timestamp": "2026-01-23T16:00:00+00:00",
+      "level_price": 90348.2,
+      "level_idx": 125,
+      "level_timestamp": "2026-01-21T20:00:00+00:00",
+      "candle_high": 91180.0,
+      "candle_low": 89431.0,
+      "candle_close": 89943.1
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 141,
+      "sweep_timestamp": "2026-01-24T12:00:00+00:00",
+      "level_price": 89158.8,
+      "level_idx": 137,
+      "level_timestamp": "2026-01-23T20:00:00+00:00",
+      "candle_high": 89559.5,
+      "candle_low": 89112.1,
+      "candle_close": 89239.3
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 144,
+      "mitigation_timestamp": "2026-01-25T00:00:00+00:00",
+      "candle_close": 88924.0
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 146,
+      "sweep_timestamp": "2026-01-25T08:00:00+00:00",
+      "level_price": 88453.1,
+      "level_idx": 129,
+      "level_timestamp": "2026-01-22T12:00:00+00:00",
+      "candle_high": 88729.4,
+      "candle_low": 88074.8,
+      "candle_close": 88523.3
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 147,
+      "mitigation_timestamp": "2026-01-25T12:00:00+00:00",
+      "candle_close": 88415.8
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 148,
+      "mitigation_timestamp": "2026-01-25T16:00:00+00:00",
+      "candle_close": 86464.9
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 150,
+      "sweep_timestamp": "2026-01-26T00:00:00+00:00",
+      "level_price": 87716.1,
+      "level_idx": 119,
+      "level_timestamp": "2026-01-20T20:00:00+00:00",
+      "candle_high": 87912.0,
+      "candle_low": 86458.7,
+      "candle_close": 87228.0
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 153,
+      "sweep_timestamp": "2026-01-26T12:00:00+00:00",
+      "level_price": 88453.1,
+      "level_idx": 129,
+      "level_timestamp": "2026-01-22T12:00:00+00:00",
+      "candle_high": 88863.7,
+      "candle_low": 87281.3,
+      "candle_close": 87599.9
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 157,
+      "sweep_timestamp": "2026-01-27T04:00:00+00:00",
+      "level_price": 88863.7,
+      "level_idx": 153,
+      "level_timestamp": "2026-01-26T12:00:00+00:00",
+      "candle_high": 88968.0,
+      "candle_low": 88232.9,
+      "candle_close": 88287.5
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 161,
+      "mitigation_timestamp": "2026-01-27T20:00:00+00:00",
+      "candle_close": 89209.1
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 162,
+      "sweep_timestamp": "2026-01-28T00:00:00+00:00",
+      "level_price": 88968.0,
+      "level_idx": 157,
+      "level_timestamp": "2026-01-27T04:00:00+00:00",
+      "candle_high": 89461.7,
+      "candle_low": 88936.6,
+      "candle_close": 89087.2
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 163,
+      "sweep_timestamp": "2026-01-28T04:00:00+00:00",
+      "level_price": 88863.7,
+      "level_idx": 153,
+      "level_timestamp": "2026-01-26T12:00:00+00:00",
+      "candle_high": 89365.8,
+      "candle_low": 88779.9,
+      "candle_close": 89098.7
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 183,
+      "sweep_timestamp": "2026-01-31T12:00:00+00:00",
+      "level_price": 80918.1,
+      "level_idx": 174,
+      "level_timestamp": "2026-01-30T00:00:00+00:00",
+      "candle_high": 83111.9,
+      "candle_low": 80770.9,
+      "candle_close": 81258.7
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 184,
+      "mitigation_timestamp": "2026-01-31T16:00:00+00:00",
+      "candle_close": 77712.3
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 192,
+      "sweep_timestamp": "2026-02-02T00:00:00+00:00",
+      "level_price": 75658.0,
+      "level_idx": 184,
+      "level_timestamp": "2026-01-31T16:00:00+00:00",
+      "candle_high": 78119.5,
+      "candle_low": 74569.6,
+      "candle_close": 76281.2
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 202,
+      "sweep_timestamp": "2026-02-03T16:00:00+00:00",
+      "level_price": 74569.6,
+      "level_idx": 192,
+      "level_timestamp": "2026-02-02T00:00:00+00:00",
+      "candle_high": 78110.5,
+      "candle_low": 72912.6,
+      "candle_close": 74900.1
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 202,
+      "mitigation_timestamp": "2026-02-03T16:00:00+00:00",
+      "candle_close": 74900.1
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 207,
+      "mitigation_timestamp": "2026-02-04T12:00:00+00:00",
+      "candle_close": 74101.9
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 208,
+      "sweep_timestamp": "2026-02-04T16:00:00+00:00",
+      "level_price": 72912.6,
+      "level_idx": 202,
+      "level_timestamp": "2026-02-03T16:00:00+00:00",
+      "candle_high": 74217.0,
+      "candle_low": 72123.4,
+      "candle_close": 73889.9
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 210,
+      "mitigation_timestamp": "2026-02-05T00:00:00+00:00",
+      "candle_close": 71194.9
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 233,
+      "sweep_timestamp": "2026-02-08T20:00:00+00:00",
+      "level_price": 71700.0,
+      "level_idx": 221,
+      "level_timestamp": "2026-02-06T20:00:00+00:00",
+      "candle_high": 72276.0,
+      "candle_low": 69933.4,
+      "candle_close": 70300.1
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 243,
+      "sweep_timestamp": "2026-02-10T12:00:00+00:00",
+      "level_price": 68249.2,
+      "level_idx": 237,
+      "level_timestamp": "2026-02-09T12:00:00+00:00",
+      "candle_high": 69578.9,
+      "candle_low": 67866.7,
+      "candle_close": 69249.4
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 246,
+      "mitigation_timestamp": "2026-02-11T00:00:00+00:00",
+      "candle_close": 68155.9
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 247,
+      "sweep_timestamp": "2026-02-11T04:00:00+00:00",
+      "level_price": 68249.2,
+      "level_idx": 237,
+      "level_timestamp": "2026-02-09T12:00:00+00:00",
+      "candle_high": 68294.2,
+      "candle_low": 66523.7,
+      "candle_close": 67000.0
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 249,
+      "sweep_timestamp": "2026-02-11T12:00:00+00:00",
+      "level_price": 67866.7,
+      "level_idx": 243,
+      "level_timestamp": "2026-02-10T12:00:00+00:00",
+      "candle_high": 68800.0,
+      "candle_low": 65721.5,
+      "candle_close": 66488.9
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 255,
+      "sweep_timestamp": "2026-02-12T12:00:00+00:00",
+      "level_price": 68340.8,
+      "level_idx": 251,
+      "level_timestamp": "2026-02-11T20:00:00+00:00",
+      "candle_high": 68390.0,
+      "candle_low": 66970.0,
+      "candle_close": 67103.2
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 256,
+      "sweep_timestamp": "2026-02-12T16:00:00+00:00",
+      "level_price": 65721.5,
+      "level_idx": 249,
+      "level_timestamp": "2026-02-11T12:00:00+00:00",
+      "candle_high": 67200.0,
+      "candle_low": 65080.0,
+      "candle_close": 65760.3
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 261,
+      "mitigation_timestamp": "2026-02-13T12:00:00+00:00",
+      "candle_close": 68656.5
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 280,
+      "sweep_timestamp": "2026-02-16T16:00:00+00:00",
+      "level_price": 68036.4,
+      "level_idx": 274,
+      "level_timestamp": "2026-02-15T16:00:00+00:00",
+      "candle_high": 68219.8,
+      "candle_low": 67464.6,
+      "candle_close": 67880.9
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 285,
+      "sweep_timestamp": "2026-02-17T12:00:00+00:00",
+      "level_price": 67237.4,
+      "level_idx": 279,
+      "level_timestamp": "2026-02-16T12:00:00+00:00",
+      "candle_high": 68333.0,
+      "candle_low": 66566.0,
+      "candle_close": 67349.9
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 292,
+      "mitigation_timestamp": "2026-02-18T16:00:00+00:00",
+      "candle_close": 66138.2
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 295,
+      "sweep_timestamp": "2026-02-19T04:00:00+00:00",
+      "level_price": 67237.4,
+      "level_idx": 279,
+      "level_timestamp": "2026-02-16T12:00:00+00:00",
+      "candle_high": 67290.1,
+      "candle_low": 66650.3,
+      "candle_close": 67171.7
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 297,
+      "sweep_timestamp": "2026-02-19T12:00:00+00:00",
+      "level_price": 65826.6,
+      "level_idx": 292,
+      "level_timestamp": "2026-02-18T16:00:00+00:00",
+      "candle_high": 66725.0,
+      "candle_low": 65600.0,
+      "candle_close": 66370.8
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 301,
+      "sweep_timestamp": "2026-02-20T04:00:00+00:00",
+      "level_price": 67290.1,
+      "level_idx": 295,
+      "level_timestamp": "2026-02-19T04:00:00+00:00",
+      "candle_high": 67993.7,
+      "candle_low": 67078.1,
+      "candle_close": 67800.0
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 310,
+      "sweep_timestamp": "2026-02-21T16:00:00+00:00",
+      "level_price": 68288.0,
+      "level_idx": 302,
+      "level_timestamp": "2026-02-20T08:00:00+00:00",
+      "candle_high": 68636.1,
+      "candle_low": 68060.5,
+      "candle_close": 68516.7
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 318,
+      "mitigation_timestamp": "2026-02-23T00:00:00+00:00",
+      "candle_close": 64899.2
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 320,
+      "sweep_timestamp": "2026-02-23T08:00:00+00:00",
+      "level_price": 66428.1,
+      "level_idx": 303,
+      "level_timestamp": "2026-02-20T12:00:00+00:00",
+      "candle_high": 66578.0,
+      "candle_low": 65533.4,
+      "candle_close": 66170.6
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 322,
+      "sweep_timestamp": "2026-02-23T16:00:00+00:00",
+      "level_price": 64232.0,
+      "level_idx": 318,
+      "level_timestamp": "2026-02-23T00:00:00+00:00",
+      "candle_high": 65711.2,
+      "candle_low": 64020.5,
+      "candle_close": 64268.7
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 324,
+      "mitigation_timestamp": "2026-02-24T00:00:00+00:00",
+      "candle_close": 63562.2
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 334,
+      "sweep_timestamp": "2026-02-25T16:00:00+00:00",
+      "level_price": 69236.2,
+      "level_idx": 282,
+      "level_timestamp": "2026-02-17T00:00:00+00:00",
+      "candle_high": 69513.9,
+      "candle_low": 67364.0,
+      "candle_close": 69001.7
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 340,
+      "sweep_timestamp": "2026-02-26T16:00:00+00:00",
+      "level_price": 66578.0,
+      "level_idx": 320,
+      "level_timestamp": "2026-02-23T08:00:00+00:00",
+      "candle_high": 67888.0,
+      "candle_low": 66446.4,
+      "candle_close": 67556.2
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 352,
+      "sweep_timestamp": "2026-02-28T16:00:00+00:00",
+      "level_price": 66446.4,
+      "level_idx": 340,
+      "level_timestamp": "2026-02-26T16:00:00+00:00",
+      "candle_high": 66665.6,
+      "candle_low": 64636.7,
+      "candle_close": 66322.2
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 364,
+      "sweep_timestamp": "2026-03-02T16:00:00+00:00",
+      "level_price": 68829.5,
+      "level_idx": 337,
+      "level_timestamp": "2026-02-26T04:00:00+00:00",
+      "candle_high": 70077.4,
+      "candle_low": 68529.5,
+      "candle_close": 68927.5
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 366,
+      "sweep_timestamp": "2026-03-03T00:00:00+00:00",
+      "level_price": 68200.0,
+      "level_idx": 343,
+      "level_timestamp": "2026-02-27T04:00:00+00:00",
+      "candle_high": 69242.1,
+      "candle_low": 68194.1,
+      "candle_close": 68349.9
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 373,
+      "mitigation_timestamp": "2026-03-04T04:00:00+00:00",
+      "candle_close": 69456.9
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 374,
+      "sweep_timestamp": "2026-03-04T08:00:00+00:00",
+      "level_price": 71097.7,
+      "level_idx": 239,
+      "level_timestamp": "2026-02-09T20:00:00+00:00",
+      "candle_high": 71877.9,
+      "candle_low": 69100.0,
+      "candle_close": 71088.4
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 374,
+      "sweep_timestamp": "2026-03-04T08:00:00+00:00",
+      "level_price": 69236.2,
+      "level_idx": 282,
+      "level_timestamp": "2026-02-17T00:00:00+00:00",
+      "candle_high": 71877.9,
+      "candle_low": 69100.0,
+      "candle_close": 71088.4
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 375,
+      "sweep_timestamp": "2026-03-04T12:00:00+00:00",
+      "level_price": 70929.0,
+      "level_idx": 272,
+      "level_timestamp": "2026-02-15T08:00:00+00:00",
+      "candle_high": 73453.0,
+      "candle_low": 70564.1,
+      "candle_close": 73352.2
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 375,
+      "mitigation_timestamp": "2026-03-04T12:00:00+00:00",
+      "candle_close": 73352.2
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 404,
+      "sweep_timestamp": "2026-03-09T08:00:00+00:00",
+      "level_price": 68167.6,
+      "level_idx": 398,
+      "level_timestamp": "2026-03-08T08:00:00+00:00",
+      "candle_high": 68425.6,
+      "candle_low": 67286.3,
+      "candle_close": 67732.5
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 405,
+      "mitigation_timestamp": "2026-03-09T12:00:00+00:00",
+      "candle_close": 68833.8
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 426,
+      "sweep_timestamp": "2026-03-13T00:00:00+00:00",
+      "level_price": 71755.2,
+      "level_idx": 411,
+      "level_timestamp": "2026-03-10T12:00:00+00:00",
+      "candle_high": 71988.0,
+      "candle_low": 70345.2,
+      "candle_close": 71372.0
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 427,
+      "sweep_timestamp": "2026-03-13T04:00:00+00:00",
+      "level_price": 71297.7,
+      "level_idx": 418,
+      "level_timestamp": "2026-03-11T16:00:00+00:00",
+      "candle_high": 71647.6,
+      "candle_low": 71125.2,
+      "candle_close": 71586.9
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 428,
+      "mitigation_timestamp": "2026-03-13T08:00:00+00:00",
+      "candle_close": 72200.1
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 429,
+      "sweep_timestamp": "2026-03-13T12:00:00+00:00",
+      "level_price": 71755.2,
+      "level_idx": 411,
+      "level_timestamp": "2026-03-10T12:00:00+00:00",
+      "candle_high": 73866.7,
+      "candle_low": 71701.0,
+      "candle_close": 71800.0
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 430,
+      "sweep_timestamp": "2026-03-13T16:00:00+00:00",
+      "level_price": 70779.2,
+      "level_idx": 422,
+      "level_timestamp": "2026-03-12T08:00:00+00:00",
+      "candle_high": 72216.8,
+      "candle_low": 70777.2,
+      "candle_close": 71140.9
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 444,
+      "sweep_timestamp": "2026-03-16T00:00:00+00:00",
+      "level_price": 73866.7,
+      "level_idx": 429,
+      "level_timestamp": "2026-03-13T12:00:00+00:00",
+      "candle_high": 74316.5,
+      "candle_low": 72213.7,
+      "candle_close": 73548.0
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 448,
+      "mitigation_timestamp": "2026-03-16T16:00:00+00:00",
+      "candle_close": 73930.0
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 449,
+      "sweep_timestamp": "2026-03-16T20:00:00+00:00",
+      "level_price": 73866.7,
+      "level_idx": 429,
+      "level_timestamp": "2026-03-13T12:00:00+00:00",
+      "candle_high": 74880.0,
+      "candle_low": 73829.6,
+      "candle_close": 74842.3
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 449,
+      "mitigation_timestamp": "2026-03-16T20:00:00+00:00",
+      "candle_close": 74842.3
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 451,
+      "sweep_timestamp": "2026-03-17T04:00:00+00:00",
+      "level_price": 74030.0,
+      "level_idx": 376,
+      "level_timestamp": "2026-03-04T16:00:00+00:00",
+      "candle_high": 74650.0,
+      "candle_low": 73750.0,
+      "candle_close": 74215.8
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 464,
+      "sweep_timestamp": "2026-03-19T08:00:00+00:00",
+      "level_price": 70250.2,
+      "level_idx": 433,
+      "level_timestamp": "2026-03-14T04:00:00+00:00",
+      "candle_high": 70533.8,
+      "candle_low": 69856.5,
+      "candle_close": 69920.2
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 465,
+      "sweep_timestamp": "2026-03-19T12:00:00+00:00",
+      "level_price": 69156.0,
+      "level_idx": 421,
+      "level_timestamp": "2026-03-12T04:00:00+00:00",
+      "candle_high": 70130.9,
+      "candle_low": 68755.0,
+      "candle_close": 69375.0
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 479,
+      "sweep_timestamp": "2026-03-21T20:00:00+00:00",
+      "level_price": 68755.0,
+      "level_idx": 465,
+      "level_timestamp": "2026-03-19T12:00:00+00:00",
+      "candle_high": 70472.7,
+      "candle_low": 68518.8,
+      "candle_close": 68889.3
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 479,
+      "mitigation_timestamp": "2026-03-21T20:00:00+00:00",
+      "candle_close": 68889.3
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 480,
+      "sweep_timestamp": "2026-03-22T00:00:00+00:00",
+      "level_price": 69354.6,
+      "level_idx": 472,
+      "level_timestamp": "2026-03-20T16:00:00+00:00",
+      "candle_high": 69576.8,
+      "candle_low": 68188.0,
+      "candle_close": 69304.6
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 482,
+      "sweep_timestamp": "2026-03-22T08:00:00+00:00",
+      "level_price": 68167.6,
+      "level_idx": 398,
+      "level_timestamp": "2026-03-08T08:00:00+00:00",
+      "candle_high": 68951.0,
+      "candle_low": 68001.0,
+      "candle_close": 68182.0
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 482,
+      "mitigation_timestamp": "2026-03-22T08:00:00+00:00",
+      "candle_close": 68182.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 488,
+      "sweep_timestamp": "2026-03-23T08:00:00+00:00",
+      "level_price": 71087.7,
+      "level_idx": 477,
+      "level_timestamp": "2026-03-21T12:00:00+00:00",
+      "candle_high": 71487.0,
+      "candle_low": 67876.3,
+      "candle_close": 70099.9
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 493,
+      "mitigation_timestamp": "2026-03-24T04:00:00+00:00",
+      "candle_close": 71260.7
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 494,
+      "sweep_timestamp": "2026-03-24T08:00:00+00:00",
+      "level_price": 71087.7,
+      "level_idx": 477,
+      "level_timestamp": "2026-03-21T12:00:00+00:00",
+      "candle_high": 71339.7,
+      "candle_low": 70814.0,
+      "candle_close": 71128.1
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 500,
+      "mitigation_timestamp": "2026-03-25T08:00:00+00:00",
+      "candle_close": 71643.6
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 507,
+      "sweep_timestamp": "2026-03-26T12:00:00+00:00",
+      "level_price": 68868.1,
+      "level_idx": 496,
+      "level_timestamp": "2026-03-24T16:00:00+00:00",
+      "candle_high": 69843.3,
+      "candle_low": 68495.1,
+      "candle_close": 69052.1
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 508,
+      "mitigation_timestamp": "2026-03-26T16:00:00+00:00",
+      "candle_close": 68507.0
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 509,
+      "sweep_timestamp": "2026-03-26T20:00:00+00:00",
+      "level_price": 68868.1,
+      "level_idx": 496,
+      "level_timestamp": "2026-03-24T16:00:00+00:00",
+      "candle_high": 69456.0,
+      "candle_low": 68400.0,
+      "candle_close": 68799.5
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 514,
+      "sweep_timestamp": "2026-03-27T16:00:00+00:00",
+      "level_price": 65566.9,
+      "level_idx": 401,
+      "level_timestamp": "2026-03-08T20:00:00+00:00",
+      "candle_high": 66267.8,
+      "candle_low": 65511.6,
+      "candle_close": 66000.8
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 527,
+      "sweep_timestamp": "2026-03-29T20:00:00+00:00",
+      "level_price": 65511.6,
+      "level_idx": 514,
+      "level_timestamp": "2026-03-27T16:00:00+00:00",
+      "candle_high": 66768.7,
+      "candle_low": 64930.8,
+      "candle_close": 65980.4
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 528,
+      "sweep_timestamp": "2026-03-30T00:00:00+00:00",
+      "level_price": 67307.6,
+      "level_idx": 485,
+      "level_timestamp": "2026-03-22T20:00:00+00:00",
+      "candle_high": 67496.2,
+      "candle_low": 65762.0,
+      "candle_close": 67146.5
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 531,
+      "sweep_timestamp": "2026-03-30T12:00:00+00:00",
+      "level_price": 67114.2,
+      "level_idx": 522,
+      "level_timestamp": "2026-03-29T00:00:00+00:00",
+      "candle_high": 68198.9,
+      "candle_low": 67054.2,
+      "candle_close": 67601.2
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 531,
+      "sweep_timestamp": "2026-03-30T12:00:00+00:00",
+      "level_price": 68115.8,
+      "level_idx": 508,
+      "level_timestamp": "2026-03-26T16:00:00+00:00",
+      "candle_high": 68198.9,
+      "candle_low": 67054.2,
+      "candle_close": 67601.2
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 538,
+      "sweep_timestamp": "2026-03-31T16:00:00+00:00",
+      "level_price": 68388.9,
+      "level_idx": 534,
+      "level_timestamp": "2026-03-31T00:00:00+00:00",
+      "candle_high": 68575.1,
+      "candle_low": 66696.2,
+      "candle_close": 67809.4
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 541,
+      "mitigation_timestamp": "2026-04-01T04:00:00+00:00",
+      "candle_close": 68655.2
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 542,
+      "sweep_timestamp": "2026-04-01T08:00:00+00:00",
+      "level_price": 68388.9,
+      "level_idx": 534,
+      "level_timestamp": "2026-03-31T00:00:00+00:00",
+      "candle_high": 68834.8,
+      "candle_low": 68350.1,
+      "candle_close": 68687.9
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 549,
+      "sweep_timestamp": "2026-04-02T12:00:00+00:00",
+      "level_price": 65946.0,
+      "level_idx": 536,
+      "level_timestamp": "2026-03-31T08:00:00+00:00",
+      "candle_high": 67077.0,
+      "candle_low": 65653.0,
+      "candle_close": 66818.1
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 561,
+      "sweep_timestamp": "2026-04-04T12:00:00+00:00",
+      "level_price": 67400.0,
+      "level_idx": 550,
+      "level_timestamp": "2026-04-02T16:00:00+00:00",
+      "candle_high": 67550.0,
+      "candle_low": 66980.0,
+      "candle_close": 67346.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 567,
+      "sweep_timestamp": "2026-04-05T12:00:00+00:00",
+      "level_price": 67550.0,
+      "level_idx": 561,
+      "level_timestamp": "2026-04-04T12:00:00+00:00",
+      "candle_high": 67846.1,
+      "candle_low": 66650.1,
+      "candle_close": 67281.0
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 569,
+      "mitigation_timestamp": "2026-04-05T20:00:00+00:00",
+      "candle_close": 69008.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 570,
+      "sweep_timestamp": "2026-04-06T00:00:00+00:00",
+      "level_price": 69315.8,
+      "level_idx": 541,
+      "level_timestamp": "2026-04-01T04:00:00+00:00",
+      "candle_high": 69587.9,
+      "candle_low": 68748.0,
+      "candle_close": 69099.9
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 572,
+      "mitigation_timestamp": "2026-04-06T08:00:00+00:00",
+      "candle_close": 69592.5
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 573,
+      "sweep_timestamp": "2026-04-06T12:00:00+00:00",
+      "level_price": 69315.8,
+      "level_idx": 541,
+      "level_timestamp": "2026-04-01T04:00:00+00:00",
+      "candle_high": 69935.0,
+      "candle_low": 69130.0,
+      "candle_close": 69923.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 581,
+      "sweep_timestamp": "2026-04-07T20:00:00+00:00",
+      "level_price": 71989.0,
+      "level_idx": 500,
+      "level_timestamp": "2026-03-25T08:00:00+00:00",
+      "candle_high": 72773.9,
+      "candle_low": 68975.6,
+      "candle_close": 71904.6
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 591,
+      "mitigation_timestamp": "2026-04-09T12:00:00+00:00",
+      "candle_close": 72105.7
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 592,
+      "sweep_timestamp": "2026-04-09T16:00:00+00:00",
+      "level_price": 71989.0,
+      "level_idx": 500,
+      "level_timestamp": "2026-03-25T08:00:00+00:00",
+      "candle_high": 72518.3,
+      "candle_low": 71666.7,
+      "candle_close": 72060.7
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 593,
+      "sweep_timestamp": "2026-04-09T20:00:00+00:00",
+      "level_price": 72876.5,
+      "level_idx": 585,
+      "level_timestamp": "2026-04-08T12:00:00+00:00",
+      "candle_high": 73146.1,
+      "candle_low": 71541.9,
+      "candle_close": 71759.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 597,
+      "sweep_timestamp": "2026-04-10T12:00:00+00:00",
+      "level_price": 73249.4,
+      "level_idx": 453,
+      "level_timestamp": "2026-03-17T12:00:00+00:00",
+      "candle_high": 73288.0,
+      "candle_low": 71868.8,
+      "candle_close": 72418.3
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 597,
+      "sweep_timestamp": "2026-04-10T12:00:00+00:00",
+      "level_price": 73249.4,
+      "level_idx": 453,
+      "level_timestamp": "2026-03-17T12:00:00+00:00",
+      "candle_high": 73288.0,
+      "candle_low": 71868.8,
+      "candle_close": 72418.3
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 598,
+      "mitigation_timestamp": "2026-04-10T16:00:00+00:00",
+      "candle_close": 73194.0
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 599,
+      "sweep_timestamp": "2026-04-10T20:00:00+00:00",
+      "level_price": 72876.5,
+      "level_idx": 585,
+      "level_timestamp": "2026-04-08T12:00:00+00:00",
+      "candle_high": 73452.3,
+      "candle_low": 72678.5,
+      "candle_close": 72925.8
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 606,
+      "sweep_timestamp": "2026-04-12T00:00:00+00:00",
+      "level_price": 71388.9,
+      "level_idx": 596,
+      "level_timestamp": "2026-04-10T08:00:00+00:00",
+      "candle_high": 73107.1,
+      "candle_low": 71270.2,
+      "candle_close": 71557.7
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 609,
+      "mitigation_timestamp": "2026-04-12T12:00:00+00:00",
+      "candle_close": 70869.5
+    },
+    {
+      "type": "sweep_bearish_retest",
+      "sweep_idx": 611,
+      "sweep_timestamp": "2026-04-12T20:00:00+00:00",
+      "level_price": 71388.9,
+      "level_idx": 596,
+      "level_timestamp": "2026-04-10T08:00:00+00:00",
+      "candle_high": 71425.2,
+      "candle_low": 70456.0,
+      "candle_close": 70707.9
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 617,
+      "sweep_timestamp": "2026-04-13T20:00:00+00:00",
+      "level_price": 74773.3,
+      "level_idx": 454,
+      "level_timestamp": "2026-03-17T16:00:00+00:00",
+      "candle_high": 74876.5,
+      "candle_low": 72977.8,
+      "candle_close": 74385.5
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 621,
+      "sweep_timestamp": "2026-04-14T12:00:00+00:00",
+      "level_price": 75983.8,
+      "level_idx": 450,
+      "level_timestamp": "2026-03-17T00:00:00+00:00",
+      "candle_high": 76000.0,
+      "candle_low": 74250.0,
+      "candle_close": 75280.4
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 621,
+      "mitigation_timestamp": "2026-04-14T12:00:00+00:00",
+      "candle_close": 75280.4
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 622,
+      "sweep_timestamp": "2026-04-14T16:00:00+00:00",
+      "level_price": 73799.1,
+      "level_idx": 604,
+      "level_timestamp": "2026-04-11T16:00:00+00:00",
+      "candle_high": 75668.3,
+      "candle_low": 73777.0,
+      "candle_close": 74175.0
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 633,
+      "sweep_timestamp": "2026-04-16T12:00:00+00:00",
+      "level_price": 73443.0,
+      "level_idx": 625,
+      "level_timestamp": "2026-04-15T04:00:00+00:00",
+      "candle_high": 74990.0,
+      "candle_low": 73220.2,
+      "candle_close": 74660.0
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 635,
+      "sweep_timestamp": "2026-04-16T20:00:00+00:00",
+      "level_price": 75391.9,
+      "level_idx": 629,
+      "level_timestamp": "2026-04-15T20:00:00+00:00",
+      "candle_high": 75522.3,
+      "candle_low": 74747.0,
+      "candle_close": 75106.7
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 638,
+      "sweep_timestamp": "2026-04-17T08:00:00+00:00",
+      "level_price": 76000.0,
+      "level_idx": 621,
+      "level_timestamp": "2026-04-14T12:00:00+00:00",
+      "candle_high": 76348.0,
+      "candle_low": 74961.4,
+      "candle_close": 75544.1
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 638,
+      "mitigation_timestamp": "2026-04-17T08:00:00+00:00",
+      "candle_close": 75544.1
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 639,
+      "mitigation_timestamp": "2026-04-17T12:00:00+00:00",
+      "candle_close": 77740.1
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 640,
+      "sweep_timestamp": "2026-04-17T16:00:00+00:00",
+      "level_price": 76935.4,
+      "level_idx": 204,
+      "level_timestamp": "2026-02-04T00:00:00+00:00",
+      "candle_high": 78323.0,
+      "candle_low": 76920.6,
+      "candle_close": 77354.6
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 644,
+      "sweep_timestamp": "2026-04-18T08:00:00+00:00",
+      "level_price": 76000.0,
+      "level_idx": 621,
+      "level_timestamp": "2026-04-14T12:00:00+00:00",
+      "candle_high": 77016.0,
+      "candle_low": 75733.3,
+      "candle_close": 76008.5
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 646,
+      "sweep_timestamp": "2026-04-18T16:00:00+00:00",
+      "level_price": 75391.9,
+      "level_idx": 629,
+      "level_timestamp": "2026-04-15T20:00:00+00:00",
+      "candle_high": 76172.0,
+      "candle_low": 75370.0,
+      "candle_close": 75609.8
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 667,
+      "sweep_timestamp": "2026-04-22T04:00:00+00:00",
+      "level_price": 78323.0,
+      "level_idx": 640,
+      "level_timestamp": "2026-04-17T16:00:00+00:00",
+      "candle_high": 78420.2,
+      "candle_low": 77323.4,
+      "candle_close": 77977.8
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 669,
+      "sweep_timestamp": "2026-04-22T12:00:00+00:00",
+      "level_price": 79244.3,
+      "level_idx": 196,
+      "level_timestamp": "2026-02-02T16:00:00+00:00",
+      "candle_high": 79375.3,
+      "candle_low": 78062.5,
+      "candle_close": 79233.1
+    },
+    {
+      "type": "mitigation_bearish_sweep_area",
+      "mitigation_idx": 669,
+      "mitigation_timestamp": "2026-04-22T12:00:00+00:00",
+      "candle_close": 79233.1
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 670,
+      "sweep_timestamp": "2026-04-22T16:00:00+00:00",
+      "level_price": 79376.0,
+      "level_idx": 186,
+      "level_timestamp": "2026-02-01T00:00:00+00:00",
+      "candle_high": 79443.4,
+      "candle_low": 78592.0,
+      "candle_close": 78798.4
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 676,
+      "sweep_timestamp": "2026-04-23T16:00:00+00:00",
+      "level_price": 76924.5,
+      "level_idx": 662,
+      "level_timestamp": "2026-04-21T08:00:00+00:00",
+      "candle_high": 78470.0,
+      "candle_low": 76911.1,
+      "candle_close": 77674.2
+    },
+    {
+      "type": "sweep_bullish_wick",
+      "sweep_idx": 688,
+      "sweep_timestamp": "2026-04-25T16:00:00+00:00",
+      "level_price": 77202.2,
+      "level_idx": 683,
+      "level_timestamp": "2026-04-24T20:00:00+00:00",
+      "candle_high": 77413.3,
+      "candle_low": 77034.5,
+      "candle_close": 77292.0
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 693,
+      "sweep_timestamp": "2026-04-26T12:00:00+00:00",
+      "level_price": 77839.6,
+      "level_idx": 686,
+      "level_timestamp": "2026-04-25T08:00:00+00:00",
+      "candle_high": 78138.9,
+      "candle_low": 77705.2,
+      "candle_close": 78005.2
+    },
+    {
+      "type": "sweep_bearish_wick",
+      "sweep_idx": 696,
+      "sweep_timestamp": "2026-04-27T00:00:00+00:00",
+      "level_price": 79443.4,
+      "level_idx": 670,
+      "level_timestamp": "2026-04-22T16:00:00+00:00",
+      "candle_high": 79489.9,
+      "candle_low": 78340.0,
+      "candle_close": 79055.9
+    },
+    {
+      "type": "sweep_bullish_retest",
+      "sweep_idx": 696,
+      "sweep_timestamp": "2026-04-27T00:00:00+00:00",
+      "level_price": 78546.9,
+      "level_idx": 678,
+      "level_timestamp": "2026-04-24T00:00:00+00:00",
+      "candle_high": 79489.9,
+      "candle_low": 78340.0,
+      "candle_close": 79055.9
+    },
+    {
+      "type": "mitigation_bullish_sweep_area",
+      "mitigation_idx": 699,
+      "mitigation_timestamp": "2026-04-27T12:00:00+00:00",
+      "candle_close": 76758.1
+    }
+  ]
+}
