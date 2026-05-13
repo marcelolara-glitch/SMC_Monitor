@@ -590,6 +590,56 @@ pivots, EQH/EQL, FVG, OB), tolerâncias e procedimento de
 comparação engine ↔ visual, ver
 `docs/REFERENCIA_VALIDACAO_VISUAL_LUXALGO.md`.
 
+#### 7.6.3 — Caixas de Fair Value Gap: refinamento de §7.6.1
+
+Para Fair Value Gaps (caixas pequenas no LuxAlgo SMC, tipicamente
+preenchidas com cor translúcida), a regra genérica de §7.6.1
+("FVG | Candle de criação = terceiro do padrão") aplica-se como
+ponto de validação. Esta subseção adiciona convenções específicas
+de label e mapeamento engine↔visual, necessárias para o spot-check
+híbrido da Onda 7:
+
+- **"Caixa do FVG" =** retângulo pequeno no chart, projetado
+  horizontalmente do primeiro candle do padrão de 3 (= `bar_time`
+  no UDT) até a primeira vela em que o gap é considerado mitigado
+  (`t_mitigation`), ou até a vela atual se o FVG ainda estiver
+  ativo.
+- **"Fim da caixa" =** `t_mitigation` quando preenchido; vela
+  atual (ou último candle visível no screenshot) caso ativo.
+- **Mapeamento engine ↔ visual:**
+  - `bar_time` da engine ↔ candle esquerdo da caixa visual (±1).
+    NOTA: em FVG, `bar_time` ≠ `t_creation` por construção
+    (`bar_time` = primeiro candle do padrão; `t_creation` =
+    terceiro candle, quando o gap fica conhecido — ver decisão
+    D5 do plan Onda 7).
+  - `t_creation` da engine ↔ vela em que a caixa "aparece" no
+    LuxAlgo (terceiro candle do padrão de 3), também ±1.
+  - `t_mitigation` da engine ↔ candle direito onde a caixa termina
+    no LuxAlgo (±1).
+  - `[bottom, top]` da engine ↔ bordas inferior/superior da caixa
+    visual (tolerância ±0.5% do preço).
+- **Caixas ainda ativas no screenshot:** se a caixa se estende até
+  o limite direito do screenshot, verificar `t_mitigation is
+  pd.NaT` no ledger; comparar `bar_time` contra a borda esquerda
+  da caixa.
+- **Assimetria de armazenamento bullish vs bearish:** o ledger
+  armazena `top > bottom` para ambos os lados por convenção
+  geométrica normalizada (decisão Wave 7 §7.10). O Pine literal
+  inverte para bearish; ver §7.10 para a justificativa e as
+  implicações de mitigação.
+- **Caixas "preenchidas parcialmente" no LuxAlgo:** wick que entra
+  na caixa mas não atravessa a borda oposta NÃO mitiga o FVG na
+  Wave 7 (semântica full-fill simétrica). Ledger reporta `state =
+  'active'` nesses casos.
+
+Esta subseção é referência canônica para o spot-check da Onda 7
+(PR #49) e para spot-checks futuros das sub-ondas 7.1, 7.2, 7.3.
+
+Para regras temporais detalhadas por tipo de marcador (BOS, CHoCH,
+pivots, EQH/EQL, FVG, OB), tolerâncias e procedimento de
+comparação engine ↔ visual, ver
+`docs/REFERENCIA_VALIDACAO_VISUAL_LUXALGO.md`.
+
 ### 7.7 Para os Conflitos A/B/C do mapa
 
 - **Conflito A (multi-TF):** fechado pela arquitetura Freqtrade (`@informative`).
@@ -620,8 +670,10 @@ de no gratuito) são **diferenças documentadas, NÃO bugs**:
 | Hide Overlap | Onda 6.x | Pendente — flag de pós-filtro em `order_blocks.py` |
 | Strong/Weak Volume % | Onda 6.x | Pendente — análoga a Volumetric OB para swing extremos |
 | Premium/Discount com 4 níveis | Onda 4.x refinamento | Pendente — Equilibrium ganha top e bottom em vez de linha única |
-| Inverse FVG | Onda 7.x | Pendente |
-| Double FVG / Balanced Price Range | Onda 7.x | Pendente |
+| Inverse FVG | Onda 7.1 | **Decidido** — hook campo `is_inverse` em `types.py` / `fvg.py` |
+| Double FVG / Balanced Price Range | Onda 7.2 | **Decidido** — hook campo `is_double` em `types.py` / `fvg.py` |
+| FVG Multi-Timeframe (`fairValueGapsTimeframeInput`) | Onda 7.3 | **Decidido** — hook parâmetro `df_fvg_tf` reservado na assinatura |
+| Volatility Threshold multiplicativo (pago) | Onda 7.x | **Decidido** — hook parâmetro `volatility_threshold` reservado na assinatura |
 | Liquidity Grabs (varrida) | Onda 8 | Já mapeada — decisão #5 |
 | Liquidity Trendlines | Decisão de escopo | Categoria C |
 | Chart Pattern Detection | Decisão de escopo | Categoria C |
@@ -656,6 +708,42 @@ dogmática mas bate com o LuxAlgo gratuito, **a engine está
 correta**. Marcelo decide caso-a-caso se a divergência justifica
 investigação adicional ao `SMC_PRINCIPIOS_E_LEGADO.md` (PR de doc
 dedicado, NÃO bloqueia ondas em curso).
+
+### 7.10 Divergências intencionais da portagem vs LuxAlgo gratuito
+
+Categoria distinta de §7.8 (features do pago não implementadas) e
+§7.9 (dogma SMC vs LuxAlgo gratuito): divergências entre a
+**portagem Python** e o **LuxAlgo gratuito (Pine literal)** que
+foram introduzidas conscientemente durante uma onda, com
+justificativa documentada.
+
+**Princípio canônico (releitura de §7.1)**: a portagem prioriza
+fidelidade ao LuxAlgo gratuito sobre fidelidade ao dogma SMC. Mas
+quando uma decisão de implementação técnica (vetorização,
+consistência geométrica, normalização de schema) gera divergência
+inevitável do Pine literal, a divergência é registrada aqui com
+plano de validação empírica.
+
+**Divergências registradas**:
+
+| # | Divergência | Pine literal | Portagem | Onda | Validação |
+|---|---|---|---|---|---|
+| 1 | Bearish FVG mitigation semantics | First-touch (predicate `high > high[t]`, pois Pine armazena `top = high[t]`) | Full-fill simétrico (predicate `high > low[t-2]`, com convenção normalizada `top > bottom` para ambos os lados) | Onda 7 | 5 fvg_ids candidatos (8, 11, 15, 69, 70) do golden 4h 2026-01 a 2026-04 reservados para validação visual no TradingView (LuxAlgo gratuito); spot-check PR #49 reportou 9/9 match de estado nos 9 FVGs ratificados, mas V4/V5 não discriminam entre as duas semânticas |
+
+**Quando uma divergência desta categoria é admissível**:
+
+1. A divergência é descoberta e documentada DURANTE a onda (não
+   pós-hoc), com decisão registrada nas LIMITAÇÕES CONHECIDAS do
+   módulo.
+2. O spot-check da onda reporta 0 blocking sob a semântica
+   adotada.
+3. Há plano explícito de validação empírica futura (candidatos
+   discriminadores no golden) caso queira-se fechar a questão.
+
+Cada entrada nesta tabela é candidata a revisão se validação visual
+futura mostrar que o Pine literal está alinhado com a leitura visual
+do LuxAlgo gratuito e a portagem não — nesse caso, reverter para a
+semântica Pine.
 
 ---
 
