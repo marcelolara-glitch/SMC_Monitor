@@ -1,0 +1,106 @@
+sweep_idx,type,sweep_timestamp,level_price,level_idx,level_timestamp,status,observacao
+34,sweep_bullish_retest,2026-01-06T16:00:00+00:00,91806.0,19,2026-01-04T04:00:00+00:00,not_found,Sem box/linha verde no candle Jan 6 ~91.8k
+39,sweep_bullish_wick,2026-01-07T12:00:00+00:00,91221.9,34,2026-01-06T16:00:00+00:00,partial_match,"Nivel/box verde proximo em Jan 7/8, sem borda clara no candle 12:00"
+40,sweep_bullish_wick,2026-01-07T16:00:00+00:00,90811.1,22,2026-01-04T16:00:00+00:00,partial_match,"Mesmo cluster verde de Jan 7/8; preco bate, candle de inicio nao claro"
+43,sweep_bearish_retest,2026-01-08T04:00:00+00:00,90811.1,22,2026-01-04T16:00:00+00:00,partial_match,Mesmo nivel da zona verde de Jan 7/8; nao aparece como box vermelho
+61,sweep_bearish_wick,2026-01-11T04:00:00+00:00,90791.3,56,2026-01-10T08:00:00+00:00,not_found,Sem box/linha vermelha claro em Jan 11 ~90.8k
+65,sweep_bullish_wick,2026-01-11T20:00:00+00:00,90342.1,59,2026-01-10T20:00:00+00:00,partial_match,Nivel dentro da zona verde estendida perto de 90.3k; sem nova borda no candle
+74,sweep_bearish_wick,2026-01-13T08:00:00+00:00,92283.0,70,2026-01-12T16:00:00+00:00,exact_match,Box vermelho em Jan 13 ~92.3k
+79,sweep_bullish_retest,2026-01-14T04:00:00+00:00,94778.8,29,2026-01-05T20:00:00+00:00,exact_match,Box/linha verde em Jan 14 ~94.8k
+94,sweep_bearish_retest,2026-01-16T16:00:00+00:00,95089.0,89,2026-01-15T20:00:00+00:00,partial_match,Nivel cai sobre zona verde/teal remanescente; vermelho nao fica claro
+108,sweep_bullish_retest,2026-01-19T00:00:00+00:00,92283.0,70,2026-01-12T16:00:00+00:00,exact_match,Box/linha verde em Jan 19 ~92.3k
+115,sweep_bullish_wick,2026-01-20T04:00:00+00:00,90882.0,71,2026-01-12T20:00:00+00:00,partial_match,Cai dentro da zona verde antiga ~90.9k; sem inicio de box claro em Jan 20
+117,sweep_bullish_wick,2026-01-20T12:00:00+00:00,90064.4,69,2026-01-12T12:00:00+00:00,partial_match,"Preco coincide com a zona verde ~90.0k, parece extensao de objeto anterior"
+118,sweep_bearish_retest,2026-01-20T16:00:00+00:00,90882.0,71,2026-01-12T20:00:00+00:00,partial_match,Nivel dentro de zona verde antiga em Jan 20; sem box vermelho
+118,sweep_bullish_wick,2026-01-20T16:00:00+00:00,89268.0,45,2026-01-08T12:00:00+00:00,partial_match,Regiao dentro/na borda da zona verde inferior; evento exato nao separavel
+121,sweep_bearish_retest,2026-01-21T04:00:00+00:00,90064.4,69,2026-01-12T12:00:00+00:00,partial_match,Nivel dentro de zona verde ~90k; sem vermelho nitido
+123,sweep_bearish_retest,2026-01-21T12:00:00+00:00,90342.1,59,2026-01-10T20:00:00+00:00,exact_match,Box/linha vermelha em Jan 21 ~90.3k
+124,sweep_bullish_wick,2026-01-21T16:00:00+00:00,87716.1,119,2026-01-20T20:00:00+00:00,not_found,Sem box/linha verde novo em Jan 21 ~87.7k
+136,sweep_bearish_wick,2026-01-23T16:00:00+00:00,90348.2,125,2026-01-21T20:00:00+00:00,partial_match,Nivel cai em zona/linha vermelha estendida; sem inicio nitido no candle Jan 23
+141,sweep_bullish_wick,2026-01-24T12:00:00+00:00,89158.8,137,2026-01-23T20:00:00+00:00,not_found,Sem marca verde visivel no candle de Jan 24 ~89.2k
+146,sweep_bullish_wick,2026-01-25T08:00:00+00:00,88453.1,129,2026-01-22T12:00:00+00:00,not_found,Sem box/linha verde claro em Jan 25 ~88.45k
+150,sweep_bearish_retest,2026-01-26T00:00:00+00:00,87716.1,119,2026-01-20T20:00:00+00:00,not_found,Sem box vermelho em Jan 26 ~87.7k
+153,sweep_bearish_retest,2026-01-26T12:00:00+00:00,88453.1,129,2026-01-22T12:00:00+00:00,exact_match,Box/linha vermelha em Jan 26 ~88.45k
+157,sweep_bearish_wick,2026-01-27T04:00:00+00:00,88863.7,153,2026-01-26T12:00:00+00:00,partial_match,"Marca vermelha proxima em Jan 27/28, candle/nivel nao perfeitamente isolaveis"
+162,sweep_bullish_retest,2026-01-28T00:00:00+00:00,88968.0,157,2026-01-27T04:00:00+00:00,partial_match,"Objeto proximo em Jan 28, aparece como zona vermelha/ambigua"
+163,sweep_bullish_retest,2026-01-28T04:00:00+00:00,88863.7,153,2026-01-26T12:00:00+00:00,partial_match,"Mesmo cluster Jan 28; preco proximo, cor/inicio ambiguos"
+183,sweep_bullish_wick,2026-01-31T12:00:00+00:00,80918.1,174,2026-01-30T00:00:00+00:00,cannot_verify,Evento no canto esquerdo/sob UI da captura Jan31-Feb15
+192,sweep_bullish_wick,2026-02-02T00:00:00+00:00,75658.0,184,2026-01-31T16:00:00+00:00,exact_match,Box verde visivel em Feb 2 no nivel ~75.7k
+202,sweep_bullish_wick,2026-02-03T16:00:00+00:00,74569.6,192,2026-02-02T00:00:00+00:00,exact_match,Box verde em Feb 3/4 no nivel ~74.6k
+208,sweep_bullish_wick,2026-02-04T16:00:00+00:00,72912.6,202,2026-02-03T16:00:00+00:00,exact_match,Box verde em Feb 4/5 no nivel ~72.9k
+233,sweep_bearish_wick,2026-02-08T20:00:00+00:00,71700.0,221,2026-02-06T20:00:00+00:00,exact_match,Box vermelho em Feb 8/9 ~71.7k
+243,sweep_bullish_wick,2026-02-10T12:00:00+00:00,68249.2,237,2026-02-09T12:00:00+00:00,exact_match,Box/linha verde em Feb 10 ~68.25k
+247,sweep_bearish_retest,2026-02-11T04:00:00+00:00,68249.2,237,2026-02-09T12:00:00+00:00,exact_match,Linha/box vermelha em Feb 11 ~68.25k
+249,sweep_bearish_retest,2026-02-11T12:00:00+00:00,67866.7,243,2026-02-10T12:00:00+00:00,partial_match,"Marca vermelha proxima, nivel/candle nao batem limpos"
+255,sweep_bearish_wick,2026-02-12T12:00:00+00:00,68340.8,251,2026-02-11T20:00:00+00:00,exact_match,Linha/box vermelho em Feb 12 ~68.3k
+256,sweep_bullish_wick,2026-02-12T16:00:00+00:00,65721.5,249,2026-02-11T12:00:00+00:00,exact_match,Box verde em Feb 12/13 no nivel ~65.7k
+280,sweep_bearish_retest,2026-02-16T16:00:00+00:00,68036.4,274,2026-02-15T16:00:00+00:00,not_found,Sem box vermelho claro em Feb 16 ~68.0k
+285,sweep_bullish_wick,2026-02-17T12:00:00+00:00,67237.4,279,2026-02-16T12:00:00+00:00,exact_match,Box verde em Feb 17 ~67.2k
+295,sweep_bearish_retest,2026-02-19T04:00:00+00:00,67237.4,279,2026-02-16T12:00:00+00:00,exact_match,Linha/box vermelha em Feb 19 ~67.2k
+297,sweep_bullish_wick,2026-02-19T12:00:00+00:00,65826.6,292,2026-02-18T16:00:00+00:00,not_found,Nao ha nova marca verde clara em Feb 19 ~65.8k
+301,sweep_bullish_retest,2026-02-20T04:00:00+00:00,67290.1,295,2026-02-19T04:00:00+00:00,partial_match,"Objeto proximo em Feb 20 ~67.3k, visualmente vermelho/ambiguo"
+310,sweep_bullish_retest,2026-02-21T16:00:00+00:00,68288.0,302,2026-02-20T08:00:00+00:00,exact_match,Linha/box verde em Feb 21 ~68.3k
+320,sweep_bearish_retest,2026-02-23T08:00:00+00:00,66428.1,303,2026-02-20T12:00:00+00:00,not_found,Sem box vermelho visivel no candle Feb 23 ~66.4k
+322,sweep_bullish_wick,2026-02-23T16:00:00+00:00,64232.0,318,2026-02-23T00:00:00+00:00,not_found,Sem box verde visivel em Feb 23 ~64.2k
+334,sweep_bearish_wick,2026-02-25T16:00:00+00:00,69236.2,282,2026-02-17T00:00:00+00:00,not_found,"Wick alta em Feb 25, sem box vermelho no nivel ~69.2k"
+340,sweep_bullish_retest,2026-02-26T16:00:00+00:00,66578.0,320,2026-02-23T08:00:00+00:00,not_found,Sem box verde claro em Feb 26 ~66.6k
+352,sweep_bearish_retest,2026-02-28T16:00:00+00:00,66446.4,340,2026-02-26T16:00:00+00:00,not_found,Sem box vermelho claro em Feb 28 ~66.4k
+364,sweep_bullish_retest,2026-03-02T16:00:00+00:00,68829.5,337,2026-02-26T04:00:00+00:00,not_found,Sem marca verde clara em Mar 2 ~68.8k
+366,sweep_bullish_retest,2026-03-03T00:00:00+00:00,68200.0,343,2026-02-27T04:00:00+00:00,not_found,Sem marca verde clara em Mar 3 ~68.2k
+374,sweep_bearish_wick,2026-03-04T08:00:00+00:00,71097.7,239,2026-02-09T20:00:00+00:00,partial_match,"Objeto visivel na regiao de Mar 4, preco/cor se confundem com box verde/retest"
+374,sweep_bullish_retest,2026-03-04T08:00:00+00:00,69236.2,282,2026-02-17T00:00:00+00:00,not_found,No candle Mar 4 ha objeto verde mais alto; nada claro em ~69.2k
+375,sweep_bullish_retest,2026-03-04T12:00:00+00:00,70929.0,272,2026-02-15T08:00:00+00:00,exact_match,Box/linha verde em Mar 4 ~70.9k
+404,sweep_bearish_wick,2026-03-09T08:00:00+00:00,68167.6,398,2026-03-08T08:00:00+00:00,partial_match,"Nivel visivel perto de Mar 9, objeto nao aparece como vermelho limpo"
+426,sweep_bearish_wick,2026-03-13T00:00:00+00:00,71755.2,411,2026-03-10T12:00:00+00:00,exact_match,Box vermelho no topo de Mar 13 ~71.8k
+427,sweep_bullish_retest,2026-03-13T04:00:00+00:00,71297.7,418,2026-03-11T16:00:00+00:00,exact_match,Box/linha verde em Mar 13 ~71.3k
+429,sweep_bullish_retest,2026-03-13T12:00:00+00:00,71755.2,411,2026-03-10T12:00:00+00:00,partial_match,Nivel sobreposto ao box vermelho do topo de Mar 13; verde nao fica limpo
+430,sweep_bullish_retest,2026-03-13T16:00:00+00:00,70779.2,422,2026-03-12T08:00:00+00:00,exact_match,Box/linha verde em Mar 13 ~70.8k
+444,sweep_bearish_wick,2026-03-16T00:00:00+00:00,73866.7,429,2026-03-13T12:00:00+00:00,exact_match,Box vermelho no topo de Mar 16 ~73.9k
+449,sweep_bullish_retest,2026-03-16T20:00:00+00:00,73866.7,429,2026-03-13T12:00:00+00:00,exact_match,Box/linha verde em Mar 16 ~73.9k
+451,sweep_bullish_retest,2026-03-17T04:00:00+00:00,74030.0,376,2026-03-04T16:00:00+00:00,exact_match,Continuacao do cluster verde Mar 16/17 ~74.0k
+464,sweep_bearish_retest,2026-03-19T08:00:00+00:00,70250.2,433,2026-03-14T04:00:00+00:00,exact_match,Linha/box vermelha em Mar 19 ~70.25k
+465,sweep_bullish_wick,2026-03-19T12:00:00+00:00,69156.0,421,2026-03-12T04:00:00+00:00,exact_match,Box/linha verde em Mar 19 ~69.2k
+479,sweep_bullish_wick,2026-03-21T20:00:00+00:00,68755.0,465,2026-03-19T12:00:00+00:00,exact_match,Box verde em Mar 21/22 ~68.8k
+480,sweep_bearish_retest,2026-03-22T00:00:00+00:00,69354.6,472,2026-03-20T16:00:00+00:00,exact_match,Linha/box vermelha em Mar 22 ~69.35k
+482,sweep_bullish_retest,2026-03-22T08:00:00+00:00,68167.6,398,2026-03-08T08:00:00+00:00,exact_match,Linha/box verde em Mar 22 ~68.2k
+488,sweep_bearish_wick,2026-03-23T08:00:00+00:00,71087.7,477,2026-03-21T12:00:00+00:00,exact_match,Box vermelho em Mar 23 ~71.1k
+494,sweep_bullish_retest,2026-03-24T08:00:00+00:00,71087.7,477,2026-03-21T12:00:00+00:00,exact_match,Linha/box verde em Mar 24 ~71.1k
+507,sweep_bullish_wick,2026-03-26T12:00:00+00:00,68868.1,496,2026-03-24T16:00:00+00:00,exact_match,Box verde em Mar 26/27 no nivel ~68.9k
+509,sweep_bearish_retest,2026-03-26T20:00:00+00:00,68868.1,496,2026-03-24T16:00:00+00:00,partial_match,Nivel compartilhado com box verde de Mar 26/27; vermelho nao fica isolado
+514,sweep_bullish_wick,2026-03-27T16:00:00+00:00,65566.9,401,2026-03-08T20:00:00+00:00,exact_match,Box verde inferior em Mar 27 ~65.6k
+527,sweep_bullish_wick,2026-03-29T20:00:00+00:00,65511.6,514,2026-03-27T16:00:00+00:00,exact_match,Box verde inferior no fim de Mar 29 ~65.5k
+528,sweep_bearish_retest,2026-03-30T00:00:00+00:00,67307.6,485,2026-03-22T20:00:00+00:00,exact_match,Box/linha vermelha em Mar 30 ~67.3k
+531,sweep_bearish_retest,2026-03-30T12:00:00+00:00,68115.8,508,2026-03-26T16:00:00+00:00,not_found,Sem box vermelho claro em Mar 30 ~68.1k
+531,sweep_bullish_retest,2026-03-30T12:00:00+00:00,67114.2,522,2026-03-29T00:00:00+00:00,partial_match,"Mar 30 mostra marcas proximas, box verde do nivel nao fica isolado"
+538,sweep_bearish_wick,2026-03-31T16:00:00+00:00,68388.9,534,2026-03-31T00:00:00+00:00,exact_match,Box/linha vermelha em Mar 31 ~68.4k
+542,sweep_bullish_retest,2026-04-01T08:00:00+00:00,68388.9,534,2026-03-31T00:00:00+00:00,partial_match,"Objeto visivel em Apr 1 ~68.4k, aparece como zona vermelha/oposta"
+549,sweep_bullish_wick,2026-04-02T12:00:00+00:00,65946.0,536,2026-03-31T08:00:00+00:00,exact_match,Box verde inferior em Apr 2 ~65.9k
+561,sweep_bearish_wick,2026-04-04T12:00:00+00:00,67400.0,550,2026-04-02T16:00:00+00:00,partial_match,"Marca vermelha proxima em Apr 4/5, inicio no candle nao claro"
+567,sweep_bearish_wick,2026-04-05T12:00:00+00:00,67550.0,561,2026-04-04T12:00:00+00:00,exact_match,Box vermelho em Apr 5 ~67.55k
+570,sweep_bearish_wick,2026-04-06T00:00:00+00:00,69315.8,541,2026-04-01T04:00:00+00:00,exact_match,Box vermelho em Apr 6 ~69.3k
+573,sweep_bullish_retest,2026-04-06T12:00:00+00:00,69315.8,541,2026-04-01T04:00:00+00:00,partial_match,Mesmo nivel do box vermelho de Apr 6; cor/oposicao divergente
+581,sweep_bearish_wick,2026-04-07T20:00:00+00:00,71989.0,500,2026-03-25T08:00:00+00:00,exact_match,Box vermelho iniciado em Apr 7/8 ~72.0k
+592,sweep_bullish_retest,2026-04-09T16:00:00+00:00,71989.0,500,2026-03-25T08:00:00+00:00,partial_match,Nivel coincide com zona vermelha ~72.0k; verde nao fica claro
+593,sweep_bearish_wick,2026-04-09T20:00:00+00:00,72876.5,585,2026-04-08T12:00:00+00:00,exact_match,Box vermelho em Apr 9/10 ~72.9k
+597,sweep_bearish_retest,2026-04-10T12:00:00+00:00,73249.4,453,2026-03-17T12:00:00+00:00,exact_match,Box/linha vermelha em Apr 10 ~73.25k
+597,sweep_bearish_wick,2026-04-10T12:00:00+00:00,73249.4,453,2026-03-17T12:00:00+00:00,exact_match,Box vermelho em Apr 10 ~73.25k
+599,sweep_bullish_retest,2026-04-10T20:00:00+00:00,72876.5,585,2026-04-08T12:00:00+00:00,partial_match,Nivel coincide com zona vermelha de Apr 9/10; verde nao fica claro
+606,sweep_bullish_wick,2026-04-12T00:00:00+00:00,71388.9,596,2026-04-10T08:00:00+00:00,exact_match,Linha/box verde em Apr 12 ~71.4k
+611,sweep_bearish_retest,2026-04-12T20:00:00+00:00,71388.9,596,2026-04-10T08:00:00+00:00,partial_match,Nivel coincide com linha/box verde em Apr 12; vermelho nao aparece limpo
+617,sweep_bearish_wick,2026-04-13T20:00:00+00:00,74773.3,454,2026-03-17T16:00:00+00:00,not_found,Nao vi box vermelho claro em Apr 13 ~74.8k
+621,sweep_bearish_wick,2026-04-14T12:00:00+00:00,75983.8,450,2026-03-17T00:00:00+00:00,exact_match,Linha/box vermelho em Apr 14 ~76.0k
+622,sweep_bullish_retest,2026-04-14T16:00:00+00:00,73799.1,604,2026-04-11T16:00:00+00:00,exact_match,Linha/box verde em Apr 14 ~73.8k
+633,sweep_bullish_wick,2026-04-16T12:00:00+00:00,73443.0,625,2026-04-15T04:00:00+00:00,exact_match,Box verde longo iniciado em Apr 16 ~73.4k
+635,sweep_bearish_wick,2026-04-16T20:00:00+00:00,75391.9,629,2026-04-15T20:00:00+00:00,exact_match,Box/linha vermelha em Apr 16 ~75.4k
+638,sweep_bearish_wick,2026-04-17T08:00:00+00:00,76000.0,621,2026-04-14T12:00:00+00:00,exact_match,Box vermelho em Apr 17 ~76.0k
+640,sweep_bullish_retest,2026-04-17T16:00:00+00:00,76935.4,204,2026-02-04T00:00:00+00:00,exact_match,Linha/box verde em Apr 17 ~76.9k
+644,sweep_bullish_retest,2026-04-18T08:00:00+00:00,76000.0,621,2026-04-14T12:00:00+00:00,exact_match,Box/linha verde em Apr 18 ~76.0k
+646,sweep_bullish_retest,2026-04-18T16:00:00+00:00,75391.9,629,2026-04-15T20:00:00+00:00,exact_match,Box/linha verde em Apr 18 ~75.4k
+667,sweep_bearish_wick,2026-04-22T04:00:00+00:00,78323.0,640,2026-04-17T16:00:00+00:00,exact_match,Box vermelho no topo de Apr 22 ~78.3k
+669,sweep_bearish_wick,2026-04-22T12:00:00+00:00,79244.3,196,2026-02-02T16:00:00+00:00,exact_match,Box vermelho superior em Apr 22 ~79.2k
+670,sweep_bearish_wick,2026-04-22T16:00:00+00:00,79376.0,186,2026-02-01T00:00:00+00:00,exact_match,Box vermelho superior em Apr 22 ~79.4k
+676,sweep_bullish_retest,2026-04-23T16:00:00+00:00,76924.5,662,2026-04-21T08:00:00+00:00,exact_match,Linha/box verde em Apr 23 ~76.9k
+688,sweep_bullish_wick,2026-04-25T16:00:00+00:00,77202.2,683,2026-04-24T20:00:00+00:00,exact_match,Linha/box verde em Apr 25 ~77.2k
+693,sweep_bullish_retest,2026-04-26T12:00:00+00:00,77839.6,686,2026-04-25T08:00:00+00:00,exact_match,Linha/box verde em Apr 26 ~77.8k
+696,sweep_bearish_wick,2026-04-27T00:00:00+00:00,79443.4,670,2026-04-22T16:00:00+00:00,exact_match,Box vermelho no topo de Apr 27 ~79.4k
+696,sweep_bullish_retest,2026-04-27T00:00:00+00:00,78546.9,678,2026-04-24T00:00:00+00:00,partial_match,Mesmo candle do box vermelho de topo Apr 27; verde em ~78.5k nao fica limpo
