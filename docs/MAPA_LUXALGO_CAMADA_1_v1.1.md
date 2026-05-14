@@ -300,8 +300,16 @@ Ordem sugerida para implementar a engine, do mais isolado para o mais acoplado. 
 
 ### Onda 4 — Trailing e premium/discount
 
-5. **`smc_engine/trailing.py`** — porta `updateTrailingExtremes`. Stateful mas trivial.
-6. **`smc_engine/premium_discount.py`** — **não existe no LuxAlgo**, mas é trivial: derivar Premium/Discount/Equilibrium do `trailing.top` e `trailing.bottom`.
+5. **`smc_engine/trailing.py`** — porta `updateTrailingExtremes` e inclui
+   Premium / Discount / Equilibrium como função pura sobre `trailing.top` /
+   `trailing.bottom`.
+
+**Nota (decisão de arquitetura, 2026-05-14):** Premium/Discount foi
+**absorvido em `trailing.py`** em vez de ganhar módulo próprio
+`premium_discount.py`. Razão: PD é função pura (sem estado próprio,
+sem dependência fora de `trailing.top`/`trailing.bottom`), portanto
+não justifica módulo separado. Ver `smc_engine/trailing.py` (constantes
+`PD_ZONE_PREMIUM` / `PD_ZONE_DISCOUNT` e derivação inline da zona).
 
 **Validação:** assertions sobre faixa correta dada `(trailing_top, trailing_bottom, close)`.
 
@@ -321,23 +329,39 @@ Ordem sugerida para implementar a engine, do mais isolado para o mais acoplado. 
 
 ### Onda 7 — Fair Value Gaps
 
-9. **`smc_engine/fair_value_gaps.py`** — porta `drawFairValueGaps` e `deleteFairValueGaps`.
+9. **`smc_engine/fvg.py`** — porta `drawFairValueGaps` e `deleteFairValueGaps`.
 
-**v1.1 — assinatura concreta:**
+**Assinatura mergeada (Onda 7, PR #49):**
 
 ```python
 def detect_fair_value_gaps(
-    df_base: pd.DataFrame,
-    df_fvg_tf: pd.DataFrame | None = None,
-    state: EngineState | None = None,
-) -> pd.DataFrame:
+    df: pd.DataFrame,
+    *,
+    auto_threshold: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Se df_fvg_tf is None: FVG no mesmo TF de df_base (caso comum).
-    Se df_fvg_tf passado: FVG num TF maior (caso LuxAlgo com fairValueGapsTimeframeInput).
-       O segundo DataFrame deve ter sido mergeado via merge_informative_pair antes,
-       garantindo zero lookahead.
+    Retorna (ledger, df_per_candle):
+      - ledger: um row por FVG com lifecycle (`bar_time`, `t_creation`,
+        `t_mitigation`, `t_invalidation`, `state ∈ {'active','mitigated'}`).
+      - df_per_candle: df original + 4 colunas boolean agregadas
+        (BULLISH/BEARISH × CREATED/MITIGATED).
     """
 ```
+
+**Nota (alinhamento Mapa ↔ código mergeado):**
+
+- **Nome do módulo:** `fvg.py` (não `fair_value_gaps.py`). Renomear
+  pós-merge quebraria imports históricos por zero ganho funcional.
+- **Parâmetro `df_fvg_tf`:** previsto na v1.1 do Mapa mas **movido para
+  hook futuro Onda 7.3 (FVG MTF)**. A assinatura mergeada é mono-TF
+  (`df` único). O hook está reservado e documentado nas
+  **LIMITAÇÕES CONHECIDAS** do `fvg.py`. Ver §7.8 deste mapa
+  (linha "FVG Multi-Timeframe").
+- **Parâmetro `volatility_threshold`:** previsto na v1.1 mas **movido
+  para hook futuro Onda 7.x**. Reservado nas LIMITAÇÕES CONHECIDAS.
+  Ver §7.8 (linha "Volatility Threshold multiplicativo").
+- **Parâmetro `state`:** não necessário — a engine FVG é stateless
+  (DataFrame in, DataFrame+ledger out).
 
 **Conflito B aplicado:** **não replicar `lookahead_on`**. Confiar no merge feito pelo Freqtrade. Documentar atraso de 1 candle do TF maior em relação ao output do TradingView.
 
@@ -356,7 +380,9 @@ def detect_fair_value_gaps(
 11. **`smc_engine/engine.py`** — função `analyze(dataframe, **params)` que recebe um `DataFrame` e retorna um `DataFrame` com colunas adicionadas. Internamente chama os módulos das ondas 3-8 na ordem correta.
 12. **`smc_engine/__init__.py`** — exporta `analyze` como API pública principal, mais os módulos individuais para uso avançado.
 
-**Validação:** rodar engine completa contra `btc_4h_30days.csv`, comparar **todos os 16 eventos** contra golden dataset do TradingView.
+**Validação:** rodar engine completa contra `btc_4h_30days.csv`, comparar **todos os 22 tipos de evento** (conforme `tests/golden/schema/golden_schema.json:51-75`) contra golden ratificado.
+
+**Nota (decomposição dos 22 tipos):** 4 BOS (bullish/bearish × internal/swing) + 4 CHoCH (bullish/bearish × internal/swing) + 8 OB (formed/mitigated × 4 variantes bullish/bearish×internal/swing) + 4 FVG (formed/mitigated × bullish/bearish) + 2 EQ (EQH/EQL). Total: 22 `event_type` enumerados no schema. PD zones (premium/equilibrium/discount) são tratadas separadamente em `zones[]` (3 `zone_type`).
 
 ### Onda 9.5 — Máquina de estados (novo nas v1.1)
 
@@ -792,6 +818,22 @@ Esta seção rastreia exatamente onde a verificação documental do Freqtrade to
 | §6 Onda 10 (IStrategy) | "Esta etapa depende da verificação documental" | Esqueleto verbatim verificado | Verificação Freqtrade §7.3 |
 | §8 (Decisões pendentes) | 6 itens, sendo 4 abertos | 7 itens (1 novo), sendo 3 abertos | Consolidação geral |
 | §7 (Validação golden) | "comparar contra exportação manual do TradingView" sem precisar versão | Reescrita completa fixando indicador (gratuito), janela, escopo, tolerância, fluxo, exclusões | PR Golden Infra (Mai/2026) |
+
+---
+
+## 11. Histórico de revisões pós-v1.1
+
+Patches documentais aplicados ao Mapa após a publicação da v1.1, sem
+bump de versão (não alteram VERSION nem código de produção).
+
+- **2026-05-14 — Patch documental pré-Onda 9**
+  - §6 Onda 4: remoção de `premium_discount.py` (absorvido em `trailing.py`).
+  - §6 Onda 7: nome do módulo (`fvg.py`) e assinatura
+    (`detect_fair_value_gaps(df, *, auto_threshold=False) -> tuple[df,df]`)
+    alinhados ao código mergeado na Onda 7 (PR #49). `df_fvg_tf` movido
+    para hook Onda 7.3; `volatility_threshold` movido para hook Onda 7.x.
+  - §6 Onda 9: "16 eventos" → "22 tipos de evento", alinhado ao schema
+    canônico `tests/golden/schema/golden_schema.json`.
 
 ---
 
