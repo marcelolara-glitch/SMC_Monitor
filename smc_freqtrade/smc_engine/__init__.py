@@ -7,7 +7,9 @@ OBJETIVO
     Premium/Discount. Onda 5 expõe BOS/CHoCH formal. Onda 6 expõe
     Order Blocks com mitigação. Onda 7 expõe Fair Value Gaps com
     mitigação. Onda 8 expõe Liquidity Sweep (indicador gratuito do
-    LuxAlgo, separado do SMC principal).
+    LuxAlgo, separado do SMC principal). Onda 9: `analyze()`
+    orquestra os 6 detectores das Ondas 3-8. Vide
+    `smc_engine.engine.analyze`.
 
 FONTE DE DADOS
     Não consome dados — apenas declarações. Os tipos espelham verbatim
@@ -15,13 +17,18 @@ FONTE DE DADOS
     tools/pynecore-validation/luxalgo_smc_compute_only.py.
 
 LIMITAÇÕES CONHECIDAS
-    Não há função analyze() ainda. Tentativa de uso para detecção SMC
-    completa falha com ImportError até Onda 9.
+    Presets de SMCConfig (luxalgo_default, conservative, aggressive)
+    adiados para Onda 10.
 
 NÃO FAZER
     Não importar de freqtrade aqui (engine é Python puro).
     Não adicionar lógica SMC neste módulo.
 """
+from pathlib import Path as _Path
+
+_VERSION_PATH = _Path(__file__).resolve().parent.parent / "VERSION"
+__version__ = _VERSION_PATH.read_text(encoding="utf-8").strip()
+
 from .fvg import (
     detect_fair_value_gaps,
     COL_FVG_BULLISH_CREATED,
@@ -114,7 +121,17 @@ from .types import (
     Trend,
 )
 
+# === Onda 9 — Engine ===
+from .config import SMCConfig
+from .engine import analyze
+from .result import AnalyzeResult
+
 __all__ = [
+    "__version__",
+    # Onda 9 — engine orquestradora
+    "analyze",
+    "SMCConfig",
+    "AnalyzeResult",
     # Dataclasses (UDTs)
     "Pivot",
     "Trend",

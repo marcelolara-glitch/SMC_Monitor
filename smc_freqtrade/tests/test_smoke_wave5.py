@@ -40,7 +40,6 @@ NÃO FAZER
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -51,55 +50,6 @@ from smc_engine import (
     detect_pivots,
     detect_structure,
 )
-
-
-@pytest.fixture
-def synthetic_df() -> pd.DataFrame:
-    """Fixture §5.1 — 450 candles com 5 fases de price action.
-
-    Fase 1 (0-129):     setup — forma swing_low (low[0]=89.5,
-                        detectado em X=50) e swing_high (close peak
-                        ~candle 80, detectado em X=130).
-    Fase 2 (130-153):   close cruza swing_high_level upward → BOS
-                        bullish (bias prévio = pd.NA).
-    Fase 3 (210-214):   close cruza swing_low_level downward →
-                        CHoCH bearish (bias prévio = BULLISH).
-    Fase 4 (300-311):   close cruza novo swing_high_level upward →
-                        CHoCH bullish (bias prévio = BEARISH).
-    Fase 5 (390-413):   close cruza outro novo swing_high_level
-                        upward → BOS bullish (bias atual = BULLISH).
-
-    Wiggle gaussiano + wicks variáveis garantem internal pivots
-    (length=5) ao longo da série, fornecendo eventos para
-    test_smoke_wave5_internal_sequence e
-    test_smoke_wave5_confluence_filter.
-    """
-    n = 450
-    rng = np.random.RandomState(42)
-
-    landmarks = [
-        (0, 90.0), (5, 100.0), (50, 100.0), (80, 115.0), (110, 100.0),
-        (130, 100.0), (170, 130.0), (210, 130.0), (215, 85.0), (245, 85.0),
-        (250, 120.0), (270, 100.0), (300, 100.0), (320, 140.0), (340, 150.0),
-        (370, 130.0), (390, 130.0), (430, 165.0), (449, 160.0),
-    ]
-    base = np.zeros(n)
-    for (i_a, p_a), (i_b, p_b) in zip(landmarks, landmarks[1:]):
-        base[i_a:i_b + 1] = np.linspace(p_a, p_b, i_b - i_a + 1)
-
-    closes = base + rng.normal(0, 1.5, n)
-    opens = closes + rng.normal(0, 0.8, n)
-    upper_wicks = np.abs(rng.normal(0.5, 0.4, n))
-    lower_wicks = np.abs(rng.normal(0.5, 0.4, n))
-    highs = np.maximum(opens, closes) + upper_wicks
-    lows = np.minimum(opens, closes) - lower_wicks
-
-    return pd.DataFrame({
-        'open': opens,
-        'high': highs,
-        'low': lows,
-        'close': closes,
-    })
 
 
 def test_smoke_wave5_swing_sequence(synthetic_df):
