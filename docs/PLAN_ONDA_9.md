@@ -38,6 +38,18 @@ Toda a infraestrutura técnica do golden (CSV de 720 candles BTC-USDT-SWAP
 validador, schema) já existe em `smc_freqtrade/tests/golden/` e é
 referência canônica para este plano.
 
+**Refinamentos pós-review (2026-05-14):** este plano sofreu 4
+patches após review do PR #55, fechando decisões que estavam
+punted ao PR de implementação:
+
+1. Threshold mínimo do df: `>= max(pivot_swings_length, ob_atr_length) + 3`.
+2. Sem `df.copy()` outer no `analyze()`; teste de invariante cobre.
+3. PD zones com bounds candle-a-candle (min/max ao longo da sequência).
+4. `meta.ratified` virou campo de schema canônico (micro-PR
+   pré-requisito da Onda 9).
+
+Ver Apêndice B para checklist de aprovação.
+
 ---
 
 ## Seção 1 — `analyze()` e `AnalyzeResult`
@@ -114,13 +126,29 @@ Pontos da assinatura:
 
 1. `df` é `pd.DataFrame` não-vazio. Erro se `len(df) == 0`.
 2. As 5 colunas obrigatórias existem. Erro listando ausentes.
-3. Comprimento mínimo: `len(df) >= max(config.pivot_swings_length,
-   config.atr_length) + 3` (justificativa: pivots precisam de N candles
-   para detectar swing, ATR Wilder seed precisa de `atr_length`, FVG
-   precisa de t >= 2). Decisão: levantar `ValueError` claro em vez de
-   produzir output silencioso de NaN. Threshold sugerido: 203 candles
-   (200 ATR + 3 mínimo). **A decidir no PR de implementação:** valor
-   exato versus warning + execução parcial.
+3. **Comprimento mínimo:** `len(df) >= max(config.pivot_swings_length,
+   config.ob_atr_length) + 3`. Justificativa: pivots Pine usam janela
+   centrada de `swings_length` candles para detectar swing
+   (precisa ≥ `swings_length` no início da série), ATR Wilder seed
+   consome `ob_atr_length` candles (`order_blocks.py` linha de
+   `ta.atr(atr_length)`), e os módulos comparativos (`structure`,
+   `fvg`) precisam de pelo menos t=2 referencial. Com defaults
+   (`swings_length=50`, `ob_atr_length=200`), o threshold concreto
+   é **203 candles**.
+
+   **Decisão fechada (2026-05-14 review):** levantar `ValueError`
+   com mensagem explicativa em vez de warning + execução parcial.
+   Razão: output parcial com colunas NaN no início da série é
+   armadilha para callers que iteram por candle — falha silenciosa.
+   Mensagem de erro deve incluir o threshold derivado e o `len(df)`
+   observado.
+
+   Exemplo de mensagem:
+   ```
+   analyze() requer len(df) >= 203 candles
+   (max(pivot_swings_length=50, ob_atr_length=200) + 3);
+   recebeu len(df)=180.
+   ```
 4. Tipo do `date` é homogêneo (todo `pd.Timestamp` OU todo `int64`).
    Sem coerção implícita: chamador é responsável por normalizar antes.
 
@@ -523,7 +551,9 @@ def analyze(df, config=None):
 
     _validate_input(df, config)  # §1.2
 
-    work = df.copy()             # imutabilidade do input
+    # Sem df.copy() outer — cada detector já faz cópia interna
+    # (decisão fechada no review 2026-05-14, §3.4).
+    work = df
 
     # 1. Pivots (base de tudo)
     work = detect_pivots(
@@ -601,25 +631,41 @@ clara no AnalyzeResult.
 
 ### 3.4 Estratégia anti-mutação
 
-Cada detector da Onda 3-8 já chama `df.copy()` internamente
-(conferido no código mergeado). `analyze()` faz mais uma cópia
-defensiva no input (`work = df.copy()`) por dois motivos:
+Cada detector das Ondas 3-8 já chama `df.copy()` internamente
+(conferido no código mergeado: `pivots.py`, `trailing.py`,
+`structure.py`, `order_blocks.py`, `fvg.py`, `liquidity_sweep.py`
+todos abrem com `df = df.copy()` ou equivalente).
 
-1. **Garantia explícita** — se algum detector futuro esquecer o
-   `df.copy()` interno, o input original ainda fica protegido.
-2. **Auditabilidade** — explicita a intenção "engine não muta input"
-   no orquestrador, não confiando apenas em convenção dos
-   detectores.
+`analyze()` **não** faz cópia outer redundante. A imutabilidade do
+input é garantida pelas cópias internas dos detectores.
 
-**Custo de memória:** O(n × colunas_input). Para 720 candles × ~10
-colunas OHLC + date, isso é desprezível (~50KB). Aceitável.
+**Decisão fechada (2026-05-14 review):** confiar nas cópias dos
+detectores e validar a invariante via teste de integração, não
+via duplicação de cópias.
 
-**Custo cumulativo dos 6 `df.copy()` internos:** cada detector
-cria nova cópia, então o pipeline aloca ~7 dataframes (1 outer + 6
-inner). O detector descarta a cópia anterior na atribuição (`work =
-detect_X(work, ...)`), Python GC libera. Pico ~3× tamanho final.
-Para 720 candles, ainda desprezível. **Não otimizar prematuramente
-nesta onda.**
+**Teste de invariante** (em `tests/test_integration_invariants.py`,
+§6.1 deste plano):
+
+```python
+def test_analyze_does_not_mutate_input():
+    df_before = make_synth_df()
+    df_snapshot = df_before.copy()
+    analyze(df_before)
+    pd.testing.assert_frame_equal(df_before, df_snapshot)
+```
+
+Se algum detector futuro esquecer a cópia interna, o teste pega
+imediatamente. Custo de manter o teste: ~5 linhas; custo de manter
+a cópia outer: O(n × colunas) por chamada em produção (negligível
+em scale 720, mas conceitualmente impuro).
+
+**Custo cumulativo dos `df.copy()` internos:** 6 cópias sequenciais
+(~7 dataframes em pico antes do GC). Para 720 candles × ~50 colunas
+finais, pico < 500KB. Aceitável.
+
+**Não otimizar prematuramente nesta onda.** Onda 10 (backtest em
+milhares de iterações) pode revelar custo real e abrir issue
+separado para perfil.
 
 ### 3.5 Error behavior
 
@@ -770,15 +816,38 @@ mergeado.)
      - candle_idx = t.
      - screenshot_id = "" (placeholder; preenchido no spot-check).
 
-5. Mapeia pd_zone → zones[]
-   - Sequências de pd_zone == 'premium' viram 1 zone com
-     valid_from_utc / valid_until_utc.
-   - Idem para 'discount' e 'equilibrium'.
-   - upper_bound = trailing_top no início da sequência.
-   - lower_bound = trailing_bottom no início.
-     (Justificativa: zona é definida no instante de mudança; bounds
-     refletem snapshot. A decidir no PR de implementação se vamos
-     atualizar bounds a cada candle ou manter snapshot inicial.)
+5. Mapeia `pd_zone` → `zones[]` (decisão fechada no review
+   2026-05-14: bounds candle-a-candle)
+
+   - Sequências contíguas de mesmo `pd_zone` viram 1 zone com
+     `valid_from_utc` (primeiro candle da sequência) e
+     `valid_until_utc` (último candle da sequência).
+   - `zone_type`: `'premium' | 'discount' | 'equilibrium'`, mapping
+     direto.
+   - `upper_bound`: `df['trailing_top'].iloc[idx_from:idx_until+1].max()`
+     — máximo de `trailing_top` ao longo da sequência inteira da zona.
+   - `lower_bound`: `df['trailing_bottom'].iloc[idx_from:idx_until+1].min()`
+     — mínimo de `trailing_bottom` ao longo da sequência inteira da zona.
+
+   **Justificativa (candle-a-candle vs snapshot):** as zonas
+   Premium/Discount/Equilibrium do LuxAlgo são dinâmicas — o
+   trailing extremes pode se expandir/contrair dentro de uma mesma
+   zona (sem alterar `pd_zone`). Bounds snapshot do início perde
+   informação sobre o range real ocupado pela zona durante sua
+   validade. Bounds candle-a-candle (`max`/`min` ao longo da
+   sequência) preservam o envelope geométrico completo da zona,
+   facilitando spot-check visual contra TradingView (onde a
+   visualização sombreia a zona conforme trailing top/bottom mudam).
+
+   **Equilíbrio:** `equilibrium` ocorre exatamente quando
+   `pd_ratio == 0.5` (vide §6.1 ponto e). Sequência de equilíbrio
+   em prática tem 1 candle só, mas o mapping suporta sequência mais
+   longa se ocorrer.
+
+   **Borderline:** se `pd_zone is pd.NA` em algum candle (caso
+   extremo: trailing_top == trailing_bottom, `pd_ratio == NaN`),
+   interromper a sequência corrente — esse candle não vai em
+   nenhuma zone.
 
 6. Monta meta canônica
    - indicator: "LuxAlgo - Smart Money Concepts"
@@ -938,6 +1007,21 @@ Três novos arquivos de teste, todos em `smc_freqtrade/tests/`:
      bit-idênticos.
    - Implementação: rodar duas vezes em sequência, comparar.
 
+   **g.** Anti-mutação do input:
+
+   - `analyze(df)` não muta `df` recebido. Asseverável via:
+
+     ```python
+     def test_analyze_does_not_mutate_input():
+         df_before = make_synth_df()
+         df_snapshot = df_before.copy()
+         _ = analyze(df_before)
+         pd.testing.assert_frame_equal(df_before, df_snapshot)
+     ```
+
+   - Cobre regressão futura onde algum detector esqueça a cópia
+     interna. Vide §3.4 (estratégia anti-mutação).
+
 ### 6.2 Pendência de schema dos ledgers
 
 Os ledgers de OB e FVG têm schemas distintos (conferido no código):
@@ -1023,14 +1107,33 @@ explícito desse uso na docstring.
 
 ### 7.4 `meta.ratified` e validador
 
-O schema atual (`golden_schema.json`) **não tem** o campo
-`ratified` em `meta`. Engine vai adicionar como campo extra. O
-schema usa JSON Schema draft-07 sem `additionalProperties: false`
-em `meta`, então campos extras passam pela validação.
+**Decisão fechada no review 2026-05-14:** `meta.ratified` e
+`meta.ratification_notes` serão **adicionados ao schema canônico**
+via micro-PR separado, mergeado **antes** da impl da Onda 9.
 
-**Decisão:** manter `meta.ratified` como convenção informal (campo
-extra). Se quisermos torná-lo canônico, abrir PR separado para
-atualizar o schema. Não bloquear Onda 9 com mudança de schema.
+Justificativa: campos extras não-schema são pegadinha — futuro
+contribuidor lê o schema e presume que `ratified` não existe. Patch
+de schema é trivial (similar em peso ao patch documental PR #54).
+
+**Estado pós-micro-PR:** schema canônico inclui:
+
+```json
+"meta": {
+  "properties": {
+    ...,
+    "ratified": { "type": "boolean" },
+    "ratification_notes": { "type": "string" }
+  },
+  "required": [ ..., "ratified" ]
+}
+```
+
+Onda 9 emite `ratified: false` e `ratification_notes: ""` no JSON
+gerado pela engine. Marcelo flipa `ratified: true` e preenche notas
+durante spot-check, via commit dedicado.
+
+**Pré-requisito desta onda:** micro-PR de schema deve estar mergeado
+antes do PR de implementação da Onda 9.
 
 ### 7.5 Ambiguidade de `ob_top` / `ob_bottom` no evento mitigado
 
@@ -1147,6 +1250,13 @@ passos 5-6-7-8 em PR "feat: golden generator + integration tests")
 ## Apêndice B — Checklist de aprovação
 
 Antes de partir para o briefing de implementação, Marcelo confirma:
+
+**Decisões fechadas no review 2026-05-14 (PR #55 review):**
+
+- [x] §1.2 — Threshold mínimo: `len(df) >= max(pivot_swings_length, ob_atr_length) + 3`, levanta ValueError.
+- [x] §3.4 — Sem `df.copy()` outer; teste de invariante (§6.1 item g) cobre.
+- [x] §5.2 — PD zones com bounds candle-a-candle (min/max ao longo da sequência).
+- [x] **Pré-requisito:** micro-PR de schema (adiciona `meta.ratified` e `meta.ratification_notes` ao `golden_schema.json`) será mergeado **antes** da impl da Onda 9.
 
 - [ ] §1 — Assinatura de `analyze(df, config)` está OK.
 - [ ] §1 — Localização `result.py` está OK (vs `types.py`).
