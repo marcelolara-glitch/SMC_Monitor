@@ -18,6 +18,8 @@
         "ohlcv_csv_sha256",
         "extracted_by",
         "structured_by",
+        "ratified",
+        "ratification_notes",
         "produced_at_utc",
         "scope_included",
         "scope_excluded",
@@ -35,6 +37,14 @@
         "ohlcv_csv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "extracted_by": { "type": "string" },
         "structured_by": { "type": "string" },
+        "ratified": {
+          "type": "boolean",
+          "description": "Indica se este golden JSON foi validado visualmente por humano contra screenshots do indicador no TradingView. False = engine output nao-ratificado. True = match +/-1 candle confirmado por Marcelo via spot-check."
+        },
+        "ratification_notes": {
+          "type": "string",
+          "description": "Notas livres do ratificador: IDs flagados para re-validacao, casos limite, decisoes de interpretacao. Pode ser string vazia se nao ha notas relevantes."
+        },
         "produced_at_utc": { "type": "string", "format": "date-time" },
         "scope_included": { "type": "array", "items": { "type": "string" } },
         "scope_excluded": { "type": "array", "items": { "type": "string" } },

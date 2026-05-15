@@ -919,9 +919,19 @@ Conferido contra `golden_schema.json:51-75` e código dos detectores.
 
 - `screenshots[]`: array vazio. Preenchido por Marcelo durante
   spot-check (URLs ou descrições por screenshot_id).
-- `meta.ratified` no schema atual: campo extra, não obrigatório (o
-  schema não fecha `additionalProperties` em `meta`). Engine grava
-  `false`; Marcelo flipa para `true` após validação visual completa.
+
+**Campos emitidos com placeholders:**
+
+- `meta.ratified`: emitido como `false`. Marcelo flipa para `true`
+  após spot-check completo, via commit dedicado.
+- `meta.ratification_notes`: emitido como string vazia. Marcelo
+  preenche durante/após spot-check (IDs flagados, decisões de
+  interpretação, casos limite).
+
+Ambos os campos são canônicos no schema (ver `tests/golden/schema/
+golden_schema.json`, ratificados via micro-PR pré-Onda 9). Engine
+emite valores iniciais conforme padrão "engine produz, humano
+ratifica" (§7.4).
 
 ### 5.5 Decisão: script one-shot vs toolkit permanente
 

@@ -11,6 +11,8 @@
     "ohlcv_csv_sha256": "PLACEHOLDER_SHA256_TO_BE_FILLED_AFTER_OHLCV_FETCH",
     "extracted_by": "Marcelo Lara - referencia visual TradingView",
     "structured_by": "Claude.ai + Claude Code",
+    "ratified": false,
+    "ratification_notes": "",
     "produced_at_utc": "PLACEHOLDER",
     "scope_included": [
       "BOS bullish/bearish (internal e swing)",
