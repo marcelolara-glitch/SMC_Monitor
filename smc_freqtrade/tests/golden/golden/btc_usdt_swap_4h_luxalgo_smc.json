@@ -1,19 +1,19 @@
 {
   "meta": {
-    "indicator": "LuxAlgo - Smart Money Concepts",
-    "indicator_version": "PLACEHOLDER",
+    "indicator": "smc_engine (LuxAlgo-aligned, engine-first)",
+    "indicator_version": "engine v0.9.0",
     "tradingview_timezone": "UTC",
     "instrument": "BTC-USDT-SWAP",
     "exchange": "OKX",
     "timeframe": "4h",
-    "window_start_utc": "PLACEHOLDER",
-    "window_end_utc": "PLACEHOLDER",
-    "ohlcv_csv_sha256": "PLACEHOLDER_SHA256_TO_BE_FILLED_AFTER_OHLCV_FETCH",
-    "extracted_by": "Marcelo Lara - referencia visual TradingView",
-    "structured_by": "Claude.ai + Claude Code",
-    "ratified": false,
-    "ratification_notes": "",
-    "produced_at_utc": "PLACEHOLDER",
+    "window_start_utc": "2026-01-01T00:00:00Z",
+    "window_end_utc": "2026-04-30T20:00:00Z",
+    "ohlcv_csv_sha256": "1a3f746cfe6095ad544c46c66e1500306627ea5224cdc3708ef994af2b3ef3fa",
+    "extracted_by": "smc_engine.analyze() v0.9.0",
+    "structured_by": "smc_engine engine-first; spot-check pendente",
+    "ratified": true,
+    "ratification_notes": "Spot-check Onda 9 concluido 2026-05-17.\nCobertura: 226 events + 34 zones gerados pela engine smc_engine\nv0.9.0 sobre 720 candles 4H BTC-USDT-SWAP (OKX, 2026-01-01 a\n2026-04-30). Ratificacao via spot-check hibrido (GPT-5 com visao\n+ validacao manual Marcelo) contra LuxAlgo SMC Concepts (gratuito)\nno TradingView com configuracao canonica (Internal Structure ON,\nInternal Order Blocks = 20, swings = 50, equal threshold = 0.1).\nResumo da validacao (passada 1, panoramica):\n- 226 events: 49 exact_match, 27 partial_match, 25 not_found, 125 cannot_verify\n- 34 zones:    0 exact_match,  6 partial_match,  0 not_found,  28 cannot_verify\n- 125 cannot_verify em events: limitacao de screenshots panoramicos\n  (mitigations e zones leves invisiveis em zoom amplo)\n- 22 dos 25 not_found em ob_*_internal_formed: investigados em\n  diagnostico read-only (ver abaixo).\nDiagnostico tecnico dos 22 ob_*_internal_formed not_found:\nEngine matematicamente correta. Equivalencia 1:1 confirmada com\nPine LuxAlgo verbatim (luxalgo_smc_compute_only.py: storeOrdeBlock\nem linhas 223-236). Janela [pivot_pos:break_pos) equivalente a\nparsedHighs.slice(p_ivot.barIndex, bar_index). Pivot lido via\nffill() reflete semantica Persistent do Pine. Gap medio 7.4\ncandles, correlacao gap x range = 0.08 (descartada hipotese de\nffill amplo).\nCausa raiz da divergencia visual (H6 do diagnostico):\n1. OBs mitigados NAO sao desenhados pelo LuxAlgo TradingView -\n   cobre maioria dos casos validados manualmente.\n2. Cap de 20 internal OBs no display do LuxAlgo pode desempilhar\n   OBs ativos antigos.\n3. ob_id=7 (candle 184, active, range 3772 igual ao range intrabar\n   do candle 174) permanece como issue aberta para reinvestigacao\n   futura - registrada na secao 12 do Mapa Camada 1.\nClassificacao dos 22 ob_*_internal_formed: excluded_by_lux_render\n(comportamento esperado, nao falso positivo da engine).\nDivergencias documentadas conhecidas:\n- Bearish FVG full-fill simetrico (Onda 7, intencional vs Pine\n  first-touch).\n- EQH/EQL: engine 0 detectados, LuxAlgo TradingView mostra alguns\n  visualmente (divergencia de formula registrada como pendencia\n  para Onda 7.x ou 9.x).\nRatificador: Marcelo Lara.\nSpot-check via: GPT-5 (passada 1) + validacao manual visual TradingView (5 casos focados).\nDiagnostico tecnico via: Claude Code agent (read-only, sem alteracao em order_blocks.py).\nDecisao: ratificar 226 events + 34 zones com nota tecnica para os\n22 ob_*_internal_formed como excluded_by_lux_render.",
+    "produced_at_utc": "2026-05-18T20:12:26Z",
     "scope_included": [
       "BOS bullish/bearish (internal e swing)",
       "CHoCH bullish/bearish (internal e swing)",
@@ -36,6 +36,1854 @@
     "match_tolerance_candles": 1
   },
   "screenshots": [],
-  "events": [],
-  "zones": []
+  "events": [
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-01-05T04:00:00Z",
+      "candle_idx": 25,
+      "screenshot_id": "",
+      "fvg_top": 92112.3,
+      "fvg_bottom": 91555.7
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-01-05T16:00:00Z",
+      "candle_idx": 28,
+      "screenshot_id": "",
+      "fvg_top": 93195.0,
+      "fvg_bottom": 93132.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-01-06T04:00:00Z",
+      "candle_idx": 31,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-01-06T16:00:00Z",
+      "candle_idx": 34,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-01-12T00:00:00Z",
+      "candle_idx": 66,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-01-12T00:00:00Z",
+      "candle_idx": 66,
+      "screenshot_id": "",
+      "ob_top": 90686.0,
+      "ob_bottom": 90049.4
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-01-12T04:00:00Z",
+      "candle_idx": 67,
+      "screenshot_id": "",
+      "fvg_top": 91353.0,
+      "fvg_bottom": 91000.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-01-12T08:00:00Z",
+      "candle_idx": 68,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-01-13T12:00:00Z",
+      "candle_idx": 75,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-01-13T12:00:00Z",
+      "candle_idx": 75,
+      "screenshot_id": "",
+      "ob_top": 91633.0,
+      "ob_bottom": 90064.4
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-01-13T16:00:00Z",
+      "candle_idx": 76,
+      "screenshot_id": "",
+      "fvg_top": 93017.3,
+      "fvg_bottom": 92648.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-01-14T00:00:00Z",
+      "candle_idx": 78,
+      "screenshot_id": "",
+      "fvg_top": 95100.1,
+      "fvg_bottom": 94207.2
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-01-14T16:00:00Z",
+      "candle_idx": 82,
+      "screenshot_id": "",
+      "fvg_top": 96176.2,
+      "fvg_bottom": 95306.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-01-15T16:00:00Z",
+      "candle_idx": 88,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-01-18T20:00:00Z",
+      "candle_idx": 107,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-01-18T20:00:00Z",
+      "candle_idx": 107,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-01-18T20:00:00Z",
+      "candle_idx": 107,
+      "screenshot_id": "",
+      "ob_top": 95768.9,
+      "ob_bottom": 94262.0
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-19T00:00:00Z",
+      "candle_idx": 108,
+      "screenshot_id": "",
+      "fvg_top": 95020.0,
+      "fvg_bottom": 93625.2
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-01-19T00:00:00Z",
+      "candle_idx": 108,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-19T04:00:00Z",
+      "candle_idx": 109,
+      "screenshot_id": "",
+      "fvg_top": 93555.0,
+      "fvg_bottom": 92805.6
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-01-20T04:00:00Z",
+      "candle_idx": 115,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-01-20T04:00:00Z",
+      "candle_idx": 115,
+      "screenshot_id": "",
+      "ob_top": 93625.2,
+      "ob_bottom": 91816.7
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-20T08:00:00Z",
+      "candle_idx": 116,
+      "screenshot_id": "",
+      "fvg_top": 92207.1,
+      "fvg_bottom": 91394.5
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-01-20T12:00:00Z",
+      "candle_idx": 117,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-01-20T12:00:00Z",
+      "candle_idx": 117,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-01-25T12:00:00Z",
+      "candle_idx": 147,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-01-25T12:00:00Z",
+      "candle_idx": 147,
+      "screenshot_id": "",
+      "ob_top": 91180.0,
+      "ob_bottom": 89431.0
+    },
+    {
+      "event_type": "bos_bearish_swing",
+      "timestamp_utc": "2026-01-25T16:00:00Z",
+      "candle_idx": 148,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_swing_formed",
+      "timestamp_utc": "2026-01-25T16:00:00Z",
+      "candle_idx": 148,
+      "screenshot_id": "",
+      "ob_top": 97900.0,
+      "ob_bottom": 96707.1
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-25T20:00:00Z",
+      "candle_idx": 149,
+      "screenshot_id": "",
+      "fvg_top": 88333.0,
+      "fvg_bottom": 86975.4
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-01-26T08:00:00Z",
+      "candle_idx": 152,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-29T04:00:00Z",
+      "candle_idx": 169,
+      "screenshot_id": "",
+      "fvg_top": 88830.3,
+      "fvg_bottom": 88379.4
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-01-29T12:00:00Z",
+      "candle_idx": 171,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-01-29T12:00:00Z",
+      "candle_idx": 171,
+      "screenshot_id": "",
+      "ob_top": 90599.3,
+      "ob_bottom": 88963.6
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-29T16:00:00Z",
+      "candle_idx": 172,
+      "screenshot_id": "",
+      "fvg_top": 87700.0,
+      "fvg_bottom": 85592.2
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-30T04:00:00Z",
+      "candle_idx": 175,
+      "screenshot_id": "",
+      "fvg_top": 83781.4,
+      "fvg_bottom": 83288.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-01-30T16:00:00Z",
+      "candle_idx": 178,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-01-31T16:00:00Z",
+      "candle_idx": 184,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-31T16:00:00Z",
+      "candle_idx": 184,
+      "screenshot_id": "",
+      "fvg_top": 82536.7,
+      "fvg_bottom": 82185.0
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-01-31T16:00:00Z",
+      "candle_idx": 184,
+      "screenshot_id": "",
+      "ob_top": 84690.2,
+      "ob_bottom": 80918.1
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-01-31T20:00:00Z",
+      "candle_idx": 185,
+      "screenshot_id": "",
+      "fvg_top": 80770.9,
+      "fvg_bottom": 79194.2
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-02T12:00:00Z",
+      "candle_idx": 195,
+      "screenshot_id": "",
+      "fvg_top": 77511.1,
+      "fvg_bottom": 76931.7
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-02T16:00:00Z",
+      "candle_idx": 196,
+      "screenshot_id": "",
+      "fvg_top": 78224.6,
+      "fvg_bottom": 77930.7
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-02T20:00:00Z",
+      "candle_idx": 197,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-03T16:00:00Z",
+      "candle_idx": 202,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-03T20:00:00Z",
+      "candle_idx": 203,
+      "screenshot_id": "",
+      "fvg_top": 77014.2,
+      "fvg_bottom": 76917.3
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-04T16:00:00Z",
+      "candle_idx": 208,
+      "screenshot_id": "",
+      "fvg_top": 75620.8,
+      "fvg_bottom": 74217.0
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-02-05T00:00:00Z",
+      "candle_idx": 210,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-02-05T00:00:00Z",
+      "candle_idx": 210,
+      "screenshot_id": "",
+      "ob_top": 76935.4,
+      "ob_bottom": 75431.5
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-05T04:00:00Z",
+      "candle_idx": 211,
+      "screenshot_id": "",
+      "fvg_top": 71818.8,
+      "fvg_bottom": 71591.8
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-05T08:00:00Z",
+      "candle_idx": 212,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-05T16:00:00Z",
+      "candle_idx": 214,
+      "screenshot_id": "",
+      "fvg_top": 69876.0,
+      "fvg_bottom": 68656.8
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-05T20:00:00Z",
+      "candle_idx": 215,
+      "screenshot_id": "",
+      "fvg_top": 66666.0,
+      "fvg_bottom": 65676.7
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-06T04:00:00Z",
+      "candle_idx": 217,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-06T16:00:00Z",
+      "candle_idx": 220,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-06T16:00:00Z",
+      "candle_idx": 220,
+      "screenshot_id": "",
+      "fvg_top": 68368.5,
+      "fvg_bottom": 66724.6
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-06T20:00:00Z",
+      "candle_idx": 221,
+      "screenshot_id": "",
+      "fvg_top": 69800.0,
+      "fvg_bottom": 69162.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-07T04:00:00Z",
+      "candle_idx": 223,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-07T08:00:00Z",
+      "candle_idx": 224,
+      "screenshot_id": "",
+      "fvg_top": 69680.3,
+      "fvg_bottom": 68778.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-07T12:00:00Z",
+      "candle_idx": 225,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-08T12:00:00Z",
+      "candle_idx": 231,
+      "screenshot_id": "",
+      "fvg_top": 70662.0,
+      "fvg_bottom": 69687.9
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-09T08:00:00Z",
+      "candle_idx": 236,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-09T12:00:00Z",
+      "candle_idx": 237,
+      "screenshot_id": "",
+      "fvg_top": 70255.5,
+      "fvg_bottom": 69842.8
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-09T16:00:00Z",
+      "candle_idx": 238,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-02-11T00:00:00Z",
+      "candle_idx": 246,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-02-11T00:00:00Z",
+      "candle_idx": 246,
+      "screenshot_id": "",
+      "ob_top": 71097.7,
+      "ob_bottom": 69772.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-11T04:00:00Z",
+      "candle_idx": 247,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-11T08:00:00Z",
+      "candle_idx": 248,
+      "screenshot_id": "",
+      "fvg_top": 67963.0,
+      "fvg_bottom": 67097.1
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-11T12:00:00Z",
+      "candle_idx": 249,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-12T20:00:00Z",
+      "candle_idx": 257,
+      "screenshot_id": "",
+      "fvg_top": 66970.0,
+      "fvg_bottom": 66463.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-13T08:00:00Z",
+      "candle_idx": 260,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bullish_internal",
+      "timestamp_utc": "2026-02-13T12:00:00Z",
+      "candle_idx": 261,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-13T12:00:00Z",
+      "candle_idx": 261,
+      "screenshot_id": "",
+      "fvg_top": 66804.1,
+      "fvg_bottom": 66651.5
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-02-13T12:00:00Z",
+      "candle_idx": 261,
+      "screenshot_id": "",
+      "ob_top": 67200.0,
+      "ob_bottom": 65080.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-13T16:00:00Z",
+      "candle_idx": 262,
+      "screenshot_id": "",
+      "fvg_top": 68502.8,
+      "fvg_bottom": 67216.2
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-15T16:00:00Z",
+      "candle_idx": 274,
+      "screenshot_id": "",
+      "fvg_top": 70098.7,
+      "fvg_bottom": 69066.3
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-16T16:00:00Z",
+      "candle_idx": 280,
+      "screenshot_id": "",
+      "fvg_top": 68300.2,
+      "fvg_bottom": 68219.8
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-16T20:00:00Z",
+      "candle_idx": 281,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-17T12:00:00Z",
+      "candle_idx": 285,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-17T12:00:00Z",
+      "candle_idx": 285,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-02-18T16:00:00Z",
+      "candle_idx": 292,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-02-18T16:00:00Z",
+      "candle_idx": 292,
+      "screenshot_id": "",
+      "ob_top": 68437.0,
+      "ob_bottom": 67033.8
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-18T20:00:00Z",
+      "candle_idx": 293,
+      "screenshot_id": "",
+      "fvg_top": 66681.4,
+      "fvg_bottom": 66518.9
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-19T00:00:00Z",
+      "candle_idx": 294,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bullish_internal",
+      "timestamp_utc": "2026-02-21T12:00:00Z",
+      "candle_idx": 309,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-02-21T12:00:00Z",
+      "candle_idx": 309,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-02-21T12:00:00Z",
+      "candle_idx": 309,
+      "screenshot_id": "",
+      "ob_top": 68074.2,
+      "ob_bottom": 66428.1
+    },
+    {
+      "event_type": "bos_bearish_swing",
+      "timestamp_utc": "2026-02-23T00:00:00Z",
+      "candle_idx": 318,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-02-23T00:00:00Z",
+      "candle_idx": 318,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-02-23T00:00:00Z",
+      "candle_idx": 318,
+      "screenshot_id": "",
+      "ob_top": 68685.8,
+      "ob_bottom": 67887.9
+    },
+    {
+      "event_type": "ob_bearish_swing_formed",
+      "timestamp_utc": "2026-02-23T00:00:00Z",
+      "candle_idx": 318,
+      "screenshot_id": "",
+      "ob_top": 70929.0,
+      "ob_bottom": 70098.7
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-02-23T00:00:00Z",
+      "candle_idx": 318,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-02-23T00:00:00Z",
+      "candle_idx": 318,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-23T04:00:00Z",
+      "candle_idx": 319,
+      "screenshot_id": "",
+      "fvg_top": 67317.4,
+      "fvg_bottom": 65985.0
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-23T20:00:00Z",
+      "candle_idx": 323,
+      "screenshot_id": "",
+      "fvg_top": 65447.9,
+      "fvg_bottom": 64999.6
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-24T04:00:00Z",
+      "candle_idx": 325,
+      "screenshot_id": "",
+      "fvg_top": 63850.0,
+      "fvg_bottom": 63600.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-24T12:00:00Z",
+      "candle_idx": 327,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-25T00:00:00Z",
+      "candle_idx": 330,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-25T04:00:00Z",
+      "candle_idx": 331,
+      "screenshot_id": "",
+      "fvg_top": 64707.0,
+      "fvg_bottom": 64550.1
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-25T12:00:00Z",
+      "candle_idx": 333,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bullish_internal",
+      "timestamp_utc": "2026-02-25T16:00:00Z",
+      "candle_idx": 334,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-25T16:00:00Z",
+      "candle_idx": 334,
+      "screenshot_id": "",
+      "fvg_top": 67364.0,
+      "fvg_bottom": 65670.1
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-02-25T16:00:00Z",
+      "candle_idx": 334,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-02-25T16:00:00Z",
+      "candle_idx": 334,
+      "screenshot_id": "",
+      "ob_top": 63995.0,
+      "ob_bottom": 62400.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-25T20:00:00Z",
+      "candle_idx": 335,
+      "screenshot_id": "",
+      "fvg_top": 67578.4,
+      "fvg_bottom": 67554.8
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-26T12:00:00Z",
+      "candle_idx": 339,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-27T12:00:00Z",
+      "candle_idx": 345,
+      "screenshot_id": "",
+      "fvg_top": 67415.9,
+      "fvg_bottom": 66328.2
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-27T12:00:00Z",
+      "candle_idx": 345,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-02-28T04:00:00Z",
+      "candle_idx": 349,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-02-28T08:00:00Z",
+      "candle_idx": 350,
+      "screenshot_id": "",
+      "fvg_top": 65680.4,
+      "fvg_bottom": 64275.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-28T16:00:00Z",
+      "candle_idx": 352,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-28T16:00:00Z",
+      "candle_idx": 352,
+      "screenshot_id": "",
+      "fvg_top": 64636.7,
+      "fvg_bottom": 64275.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-02-28T20:00:00Z",
+      "candle_idx": 353,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-02-28T20:00:00Z",
+      "candle_idx": 353,
+      "screenshot_id": "",
+      "fvg_top": 66138.7,
+      "fvg_bottom": 65328.3
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-01T20:00:00Z",
+      "candle_idx": 359,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-03-02T12:00:00Z",
+      "candle_idx": 363,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-02T12:00:00Z",
+      "candle_idx": 363,
+      "screenshot_id": "",
+      "ob_top": 66468.1,
+      "ob_bottom": 65005.2
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-02T16:00:00Z",
+      "candle_idx": 364,
+      "screenshot_id": "",
+      "fvg_top": 68529.5,
+      "fvg_bottom": 66699.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-03T08:00:00Z",
+      "candle_idx": 368,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bullish_swing",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": "",
+      "fvg_top": 69100.0,
+      "fvg_bottom": 68877.0
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_swing_mitigated",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": "",
+      "ob_top": 67933.5,
+      "ob_bottom": 66073.8
+    },
+    {
+      "event_type": "ob_bullish_swing_formed",
+      "timestamp_utc": "2026-03-04T08:00:00Z",
+      "candle_idx": 374,
+      "screenshot_id": "",
+      "ob_top": 63995.0,
+      "ob_bottom": 62400.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-04T12:00:00Z",
+      "candle_idx": 375,
+      "screenshot_id": "",
+      "fvg_top": 70564.1,
+      "fvg_bottom": 69600.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-04T16:00:00Z",
+      "candle_idx": 376,
+      "screenshot_id": "",
+      "fvg_top": 72500.1,
+      "fvg_bottom": 71877.9
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-05T04:00:00Z",
+      "candle_idx": 379,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-05T16:00:00Z",
+      "candle_idx": 382,
+      "screenshot_id": "",
+      "fvg_top": 71718.7,
+      "fvg_bottom": 71622.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-06T12:00:00Z",
+      "candle_idx": 387,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-06T12:00:00Z",
+      "candle_idx": 387,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-06T16:00:00Z",
+      "candle_idx": 388,
+      "screenshot_id": "",
+      "fvg_top": 70156.8,
+      "fvg_bottom": 68755.0
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-03-08T20:00:00Z",
+      "candle_idx": 401,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-03-08T20:00:00Z",
+      "candle_idx": 401,
+      "screenshot_id": "",
+      "ob_top": 74030.0,
+      "ob_bottom": 72500.1
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-03-08T20:00:00Z",
+      "candle_idx": 401,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-10T00:00:00Z",
+      "candle_idx": 408,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-10T12:00:00Z",
+      "candle_idx": 411,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bullish_internal",
+      "timestamp_utc": "2026-03-13T00:00:00Z",
+      "candle_idx": 426,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-13T00:00:00Z",
+      "candle_idx": 426,
+      "screenshot_id": "",
+      "ob_top": 69812.8,
+      "ob_bottom": 69156.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-16T00:00:00Z",
+      "candle_idx": 444,
+      "screenshot_id": "",
+      "fvg_top": 72213.7,
+      "fvg_bottom": 71969.5
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-03-16T00:00:00Z",
+      "candle_idx": 444,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-03-16T16:00:00Z",
+      "candle_idx": 448,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-16T16:00:00Z",
+      "candle_idx": 448,
+      "screenshot_id": "",
+      "ob_top": 71275.2,
+      "ob_bottom": 70250.2
+    },
+    {
+      "event_type": "bos_bullish_swing",
+      "timestamp_utc": "2026-03-16T20:00:00Z",
+      "candle_idx": 449,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_swing_formed",
+      "timestamp_utc": "2026-03-16T20:00:00Z",
+      "candle_idx": 449,
+      "screenshot_id": "",
+      "ob_top": 67488.0,
+      "ob_bottom": 65566.9
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-17T00:00:00Z",
+      "candle_idx": 450,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-18T12:00:00Z",
+      "candle_idx": 459,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-18T16:00:00Z",
+      "candle_idx": 460,
+      "screenshot_id": "",
+      "fvg_top": 72750.0,
+      "fvg_bottom": 71964.9
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-03-19T04:00:00Z",
+      "candle_idx": 463,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-03-19T04:00:00Z",
+      "candle_idx": 463,
+      "screenshot_id": "",
+      "ob_top": 75983.8,
+      "ob_bottom": 74227.5
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-03-19T04:00:00Z",
+      "candle_idx": 463,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-03-19T12:00:00Z",
+      "candle_idx": 465,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-03-21T20:00:00Z",
+      "candle_idx": 479,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-03-21T20:00:00Z",
+      "candle_idx": 479,
+      "screenshot_id": "",
+      "ob_top": 71087.7,
+      "ob_bottom": 70426.0
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-22T00:00:00Z",
+      "candle_idx": 480,
+      "screenshot_id": "",
+      "fvg_top": 70164.5,
+      "fvg_bottom": 69576.8
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-23T08:00:00Z",
+      "candle_idx": 488,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-03-23T08:00:00Z",
+      "candle_idx": 488,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-23T12:00:00Z",
+      "candle_idx": 489,
+      "screenshot_id": "",
+      "fvg_top": 69656.2,
+      "fvg_bottom": 68874.0
+    },
+    {
+      "event_type": "choch_bullish_internal",
+      "timestamp_utc": "2026-03-24T04:00:00Z",
+      "candle_idx": 493,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-24T04:00:00Z",
+      "candle_idx": 493,
+      "screenshot_id": "",
+      "ob_top": 68465.0,
+      "ob_bottom": 67307.6
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-24T16:00:00Z",
+      "candle_idx": 496,
+      "screenshot_id": "",
+      "fvg_top": 70814.0,
+      "fvg_bottom": 69980.7
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-24T16:00:00Z",
+      "candle_idx": 496,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-25T00:00:00Z",
+      "candle_idx": 498,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-25T00:00:00Z",
+      "candle_idx": 498,
+      "screenshot_id": "",
+      "fvg_top": 70362.3,
+      "fvg_bottom": 69980.7
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-03-25T08:00:00Z",
+      "candle_idx": 500,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-25T08:00:00Z",
+      "candle_idx": 500,
+      "screenshot_id": "",
+      "ob_top": 69980.7,
+      "ob_bottom": 68868.1
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-26T04:00:00Z",
+      "candle_idx": 505,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-03-26T12:00:00Z",
+      "candle_idx": 507,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-03-26T16:00:00Z",
+      "candle_idx": 508,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-03-26T16:00:00Z",
+      "candle_idx": 508,
+      "screenshot_id": "",
+      "ob_top": 71989.0,
+      "ob_bottom": 70752.2
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-03-27T08:00:00Z",
+      "candle_idx": 512,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-27T12:00:00Z",
+      "candle_idx": 513,
+      "screenshot_id": "",
+      "fvg_top": 68258.0,
+      "fvg_bottom": 66742.6
+    },
+    {
+      "event_type": "ob_bullish_swing_mitigated",
+      "timestamp_utc": "2026-03-27T16:00:00Z",
+      "candle_idx": 514,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-03-29T20:00:00Z",
+      "candle_idx": 527,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "choch_bullish_internal",
+      "timestamp_utc": "2026-03-30T00:00:00Z",
+      "candle_idx": 528,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-03-30T00:00:00Z",
+      "candle_idx": 528,
+      "screenshot_id": "",
+      "ob_top": 66768.7,
+      "ob_bottom": 64930.8
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-30T04:00:00Z",
+      "candle_idx": 529,
+      "screenshot_id": "",
+      "fvg_top": 67131.6,
+      "fvg_bottom": 66768.7
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-03-30T16:00:00Z",
+      "candle_idx": 532,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-03-30T20:00:00Z",
+      "candle_idx": 533,
+      "screenshot_id": "",
+      "fvg_top": 67054.2,
+      "fvg_bottom": 66966.9
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-31T00:00:00Z",
+      "candle_idx": 534,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-03-31T00:00:00Z",
+      "candle_idx": 534,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-03-31T20:00:00Z",
+      "candle_idx": 539,
+      "screenshot_id": "",
+      "fvg_top": 67794.4,
+      "fvg_bottom": 67770.3
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-04-01T00:00:00Z",
+      "candle_idx": 540,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-04-02T04:00:00Z",
+      "candle_idx": 547,
+      "screenshot_id": "",
+      "fvg_top": 67926.2,
+      "fvg_bottom": 66898.9
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-05T20:00:00Z",
+      "candle_idx": 569,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-04-05T20:00:00Z",
+      "candle_idx": 569,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-05T20:00:00Z",
+      "candle_idx": 569,
+      "screenshot_id": "",
+      "ob_top": 67157.6,
+      "ob_bottom": 66572.3
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-04-06T00:00:00Z",
+      "candle_idx": 570,
+      "screenshot_id": "",
+      "fvg_top": 68748.0,
+      "fvg_bottom": 67537.5
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-07T20:00:00Z",
+      "candle_idx": 581,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-04-07T20:00:00Z",
+      "candle_idx": 581,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-04-07T20:00:00Z",
+      "candle_idx": 581,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-07T20:00:00Z",
+      "candle_idx": 581,
+      "screenshot_id": "",
+      "ob_top": 68613.8,
+      "ob_bottom": 67680.2
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-04-08T00:00:00Z",
+      "candle_idx": 582,
+      "screenshot_id": "",
+      "fvg_top": 71219.3,
+      "fvg_bottom": 69058.8
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-10T16:00:00Z",
+      "candle_idx": 598,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-10T16:00:00Z",
+      "candle_idx": 598,
+      "screenshot_id": "",
+      "ob_top": 71170.0,
+      "ob_bottom": 70422.0
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-04-12T04:00:00Z",
+      "candle_idx": 607,
+      "screenshot_id": "",
+      "fvg_top": 72864.0,
+      "fvg_bottom": 71750.0
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-04-13T16:00:00Z",
+      "candle_idx": 616,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-13T20:00:00Z",
+      "candle_idx": 617,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-04-13T20:00:00Z",
+      "candle_idx": 617,
+      "screenshot_id": "",
+      "fvg_top": 72977.8,
+      "fvg_bottom": 72424.0
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-13T20:00:00Z",
+      "candle_idx": 617,
+      "screenshot_id": "",
+      "ob_top": 71425.2,
+      "ob_bottom": 70456.0
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-04-14T00:00:00Z",
+      "candle_idx": 618,
+      "screenshot_id": "",
+      "fvg_top": 73935.5,
+      "fvg_bottom": 73468.0
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-04-14T12:00:00Z",
+      "candle_idx": 621,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-04-15T04:00:00Z",
+      "candle_idx": 625,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-17T08:00:00Z",
+      "candle_idx": 638,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-17T08:00:00Z",
+      "candle_idx": 638,
+      "screenshot_id": "",
+      "ob_top": 74990.0,
+      "ob_bottom": 73220.2
+    },
+    {
+      "event_type": "bos_bullish_swing",
+      "timestamp_utc": "2026-04-17T12:00:00Z",
+      "candle_idx": 639,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_mitigated",
+      "timestamp_utc": "2026-04-17T12:00:00Z",
+      "candle_idx": 639,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_mitigated",
+      "timestamp_utc": "2026-04-17T12:00:00Z",
+      "candle_idx": 639,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_swing_formed",
+      "timestamp_utc": "2026-04-17T12:00:00Z",
+      "candle_idx": 639,
+      "screenshot_id": "",
+      "ob_top": 66768.7,
+      "ob_bottom": 64930.8
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-04-17T16:00:00Z",
+      "candle_idx": 640,
+      "screenshot_id": "",
+      "fvg_top": 76920.6,
+      "fvg_bottom": 76348.0
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-04-18T08:00:00Z",
+      "candle_idx": 644,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_formed",
+      "timestamp_utc": "2026-04-22T04:00:00Z",
+      "candle_idx": 667,
+      "screenshot_id": "",
+      "fvg_top": 77323.4,
+      "fvg_bottom": 76400.0
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-22T12:00:00Z",
+      "candle_idx": 669,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-22T12:00:00Z",
+      "candle_idx": 669,
+      "screenshot_id": "",
+      "ob_top": 74727.1,
+      "ob_bottom": 73666.0
+    },
+    {
+      "event_type": "bos_bullish_internal",
+      "timestamp_utc": "2026-04-26T20:00:00Z",
+      "candle_idx": 695,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bullish_internal_formed",
+      "timestamp_utc": "2026-04-26T20:00:00Z",
+      "candle_idx": 695,
+      "screenshot_id": "",
+      "ob_top": 77413.3,
+      "ob_bottom": 77034.5
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-04-27T08:00:00Z",
+      "candle_idx": 698,
+      "screenshot_id": "",
+      "fvg_top": 78340.0,
+      "fvg_bottom": 77936.3
+    },
+    {
+      "event_type": "choch_bearish_internal",
+      "timestamp_utc": "2026-04-27T12:00:00Z",
+      "candle_idx": 699,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-04-27T12:00:00Z",
+      "candle_idx": 699,
+      "screenshot_id": "",
+      "ob_top": 79489.9,
+      "ob_bottom": 78340.0
+    },
+    {
+      "event_type": "ob_bullish_internal_mitigated",
+      "timestamp_utc": "2026-04-27T12:00:00Z",
+      "candle_idx": 699,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bullish_mitigated",
+      "timestamp_utc": "2026-04-28T04:00:00Z",
+      "candle_idx": 703,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "bos_bearish_internal",
+      "timestamp_utc": "2026-04-29T16:00:00Z",
+      "candle_idx": 712,
+      "screenshot_id": ""
+    },
+    {
+      "event_type": "fvg_bearish_formed",
+      "timestamp_utc": "2026-04-29T16:00:00Z",
+      "candle_idx": 712,
+      "screenshot_id": "",
+      "fvg_top": 76922.0,
+      "fvg_bottom": 76225.6
+    },
+    {
+      "event_type": "ob_bearish_internal_formed",
+      "timestamp_utc": "2026-04-29T16:00:00Z",
+      "candle_idx": 712,
+      "screenshot_id": "",
+      "ob_top": 77882.3,
+      "ob_bottom": 76922.0
+    }
+  ],
+  "zones": [
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-01T00:00:00Z",
+      "valid_until_utc": "2026-01-01T04:00:00Z",
+      "upper_bound": 88040.2,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-01T08:00:00Z",
+      "valid_until_utc": "2026-01-07T20:00:00Z",
+      "upper_bound": 94778.8,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-08T00:00:00Z",
+      "valid_until_utc": "2026-01-08T20:00:00Z",
+      "upper_bound": 94778.8,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-09T00:00:00Z",
+      "valid_until_utc": "2026-01-09T00:00:00Z",
+      "upper_bound": 94778.8,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-09T04:00:00Z",
+      "valid_until_utc": "2026-01-11T20:00:00Z",
+      "upper_bound": 94778.8,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-12T00:00:00Z",
+      "valid_until_utc": "2026-01-12T04:00:00Z",
+      "upper_bound": 94778.8,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-12T08:00:00Z",
+      "valid_until_utc": "2026-01-12T08:00:00Z",
+      "upper_bound": 94778.8,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-12T12:00:00Z",
+      "valid_until_utc": "2026-01-18T20:00:00Z",
+      "upper_bound": 97900.0,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-19T00:00:00Z",
+      "valid_until_utc": "2026-01-19T00:00:00Z",
+      "upper_bound": 97900.0,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-19T04:00:00Z",
+      "valid_until_utc": "2026-01-19T16:00:00Z",
+      "upper_bound": 97900.0,
+      "lower_bound": 87501.4
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-01-19T20:00:00Z",
+      "valid_until_utc": "2026-02-17T00:00:00Z",
+      "upper_bound": 97900.0,
+      "lower_bound": 59909.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-02-17T04:00:00Z",
+      "valid_until_utc": "2026-02-20T20:00:00Z",
+      "upper_bound": 72276.0,
+      "lower_bound": 59909.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-02-21T00:00:00Z",
+      "valid_until_utc": "2026-02-25T08:00:00Z",
+      "upper_bound": 72276.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-02-25T12:00:00Z",
+      "valid_until_utc": "2026-02-27T04:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-02-27T08:00:00Z",
+      "valid_until_utc": "2026-02-28T16:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-02-28T20:00:00Z",
+      "valid_until_utc": "2026-03-01T04:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-01T08:00:00Z",
+      "valid_until_utc": "2026-03-01T08:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-01T12:00:00Z",
+      "valid_until_utc": "2026-03-01T12:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-01T16:00:00Z",
+      "valid_until_utc": "2026-03-01T20:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-02T00:00:00Z",
+      "valid_until_utc": "2026-03-02T00:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-02T04:00:00Z",
+      "valid_until_utc": "2026-03-02T08:00:00Z",
+      "upper_bound": 70929.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-02T12:00:00Z",
+      "valid_until_utc": "2026-03-06T12:00:00Z",
+      "upper_bound": 74030.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-06T16:00:00Z",
+      "valid_until_utc": "2026-03-09T08:00:00Z",
+      "upper_bound": 74030.0,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-09T12:00:00Z",
+      "valid_until_utc": "2026-03-19T00:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 62400.0
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-19T04:00:00Z",
+      "valid_until_utc": "2026-03-20T00:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-20T04:00:00Z",
+      "valid_until_utc": "2026-03-20T04:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-20T08:00:00Z",
+      "valid_until_utc": "2026-03-23T16:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-23T20:00:00Z",
+      "valid_until_utc": "2026-03-23T20:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-24T00:00:00Z",
+      "valid_until_utc": "2026-03-24T00:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-24T04:00:00Z",
+      "valid_until_utc": "2026-03-24T08:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-24T12:00:00Z",
+      "valid_until_utc": "2026-03-25T00:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-25T04:00:00Z",
+      "valid_until_utc": "2026-03-26T00:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 65566.9
+    },
+    {
+      "zone_type": "discount",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-03-26T04:00:00Z",
+      "valid_until_utc": "2026-04-07T16:00:00Z",
+      "upper_bound": 75983.8,
+      "lower_bound": 64930.8
+    },
+    {
+      "zone_type": "premium",
+      "screenshot_id": "",
+      "valid_from_utc": "2026-04-07T20:00:00Z",
+      "valid_until_utc": "2026-04-30T20:00:00Z",
+      "upper_bound": 79489.9,
+      "lower_bound": 64930.8
+    }
+  ]
 }

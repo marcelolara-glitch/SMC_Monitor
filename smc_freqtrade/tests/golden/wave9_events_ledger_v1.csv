@@ -1,0 +1,227 @@
+candle_idx,event_type,timestamp_utc,bounds,status,observacao
+25,fvg_bullish_formed,2026-01-05T04:00:00Z,top=92112.30 bot=91555.70,cannot_verify,Regiao visivel mas caixa FVG nao e legivel no panorama
+28,fvg_bullish_formed,2026-01-05T16:00:00Z,top=93195.00 bot=93132.00,cannot_verify,Regiao visivel mas caixa FVG nao e legivel no panorama
+31,fvg_bullish_mitigated,2026-01-06T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+34,fvg_bullish_mitigated,2026-01-06T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+66,bos_bullish_internal,2026-01-12T00:00:00Z,,partial_match,Linha BOS verde visivel perto de 12 jan mas extremidade direita e bounds visuais sao aproximados
+66,ob_bullish_internal_formed,2026-01-12T00:00:00Z,top=90686.00 bot=90049.40,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+67,fvg_bullish_formed,2026-01-12T04:00:00Z,top=91353.00 bot=91000.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+68,fvg_bullish_mitigated,2026-01-12T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+75,bos_bullish_internal,2026-01-13T12:00:00Z,,exact_match,Linha BOS verde clara termina no candle de ruptura perto de 13 jan
+75,ob_bullish_internal_formed,2026-01-13T12:00:00Z,top=91633.00 bot=90064.40,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+76,fvg_bullish_formed,2026-01-13T16:00:00Z,top=93017.30 bot=92648.00,cannot_verify,Regiao visivel mas caixa FVG nao e legivel no panorama
+78,fvg_bullish_formed,2026-01-14T00:00:00Z,top=95100.10 bot=94207.20,cannot_verify,Regiao visivel mas caixa FVG nao e legivel no panorama
+82,fvg_bullish_formed,2026-01-14T16:00:00Z,top=96176.20 bot=95306.00,cannot_verify,Regiao visivel mas caixa FVG nao e legivel no panorama
+88,fvg_bullish_mitigated,2026-01-15T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+107,choch_bearish_internal,2026-01-18T20:00:00Z,,exact_match,Linha CHoCH vermelha visivel na consolidacao do topo em 18 jan
+107,fvg_bullish_mitigated,2026-01-18T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+107,ob_bearish_internal_formed,2026-01-18T20:00:00Z,top=95768.90 bot=94262.00,partial_match,Caixa vermelha proxima a 94.2-95.7k aparece na queda de 19 jan mas bounds sao imprecisos
+108,fvg_bearish_formed,2026-01-19T00:00:00Z,top=95020.00 bot=93625.20,partial_match,Caixa vermelha de gap aparece na queda de 19 jan mas bounds sao aproximados
+108,fvg_bullish_mitigated,2026-01-19T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+109,fvg_bearish_formed,2026-01-19T04:00:00Z,top=93555.00 bot=92805.60,partial_match,Segunda caixa vermelha de gap visivel na queda de 19 jan
+115,bos_bearish_internal,2026-01-20T04:00:00Z,,exact_match,Linha BOS vermelha visivel na queda de 19 a 20 jan
+115,ob_bearish_internal_formed,2026-01-20T04:00:00Z,top=93625.20 bot=91816.70,partial_match,Caixa vermelha proxima a 91.8-93.6k visivel na perna de queda
+116,fvg_bearish_formed,2026-01-20T08:00:00Z,top=92207.10 bot=91394.50,partial_match,Caixa vermelha curta visivel na continuacao da queda
+117,ob_bullish_internal_mitigated,2026-01-20T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+117,ob_bullish_internal_mitigated,2026-01-20T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+147,bos_bearish_internal,2026-01-25T12:00:00Z,,exact_match,Linha BOS vermelha visivel na ruptura de 25 jan
+147,ob_bearish_internal_formed,2026-01-25T12:00:00Z,top=91180.00 bot=89431.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+148,bos_bearish_swing,2026-01-25T16:00:00Z,,exact_match,Linha swing bearish visivel com fim no rompimento de 25 jan
+148,ob_bearish_swing_formed,2026-01-25T16:00:00Z,top=97900.00 bot=96707.10,exact_match,Caixa vermelha ampla no topo 96.7-97.9k e visivel no shot 02
+149,fvg_bearish_formed,2026-01-25T20:00:00Z,top=88333.00 bot=86975.40,partial_match,Gap bearish vermelho proximo ao rompimento de 25 jan visivel com bounds imprecisos
+152,fvg_bearish_mitigated,2026-01-26T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+169,fvg_bearish_formed,2026-01-29T04:00:00Z,top=88830.30 bot=88379.40,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+171,bos_bearish_internal,2026-01-29T12:00:00Z,,exact_match,Linha BOS vermelha visivel antes da queda forte de 29 jan
+171,ob_bearish_internal_formed,2026-01-29T12:00:00Z,top=90599.30 bot=88963.60,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+172,fvg_bearish_formed,2026-01-29T16:00:00Z,top=87700.00 bot=85592.20,exact_match,Caixa vermelha grande e FVG bearish na regiao 85.6-87.7k
+175,fvg_bearish_formed,2026-01-30T04:00:00Z,top=83781.40 bot=83288.00,partial_match,FVG bearish pequeno aparece perto da borda direita de shot 02
+178,fvg_bearish_mitigated,2026-01-30T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+184,bos_bearish_internal,2026-01-31T16:00:00Z,,partial_match,Ruptura bearish aparece na borda esquerda do shot 03 mas label fica parcialmente no limite
+184,fvg_bearish_formed,2026-01-31T16:00:00Z,top=82536.70 bot=82185.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+184,ob_bearish_internal_formed,2026-01-31T16:00:00Z,top=84690.20 bot=80918.10,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+185,fvg_bearish_formed,2026-01-31T20:00:00Z,top=80770.90 bot=79194.20,partial_match,FVG bearish na queda inicial de fev visivel na borda esquerda
+195,fvg_bullish_formed,2026-02-02T12:00:00Z,top=77511.10 bot=76931.70,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+196,fvg_bullish_formed,2026-02-02T16:00:00Z,top=78224.60 bot=77930.70,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+197,fvg_bullish_mitigated,2026-02-02T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+202,fvg_bullish_mitigated,2026-02-03T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+203,fvg_bearish_formed,2026-02-03T20:00:00Z,top=77014.20 bot=76917.30,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+208,fvg_bearish_formed,2026-02-04T16:00:00Z,top=75620.80 bot=74217.00,partial_match,Deslocamento bearish grande sugere caixa FVG mas bounds nao sao nitidos
+210,bos_bearish_internal,2026-02-05T00:00:00Z,,partial_match,BOS bearish visivel no trecho de queda de 4 a 5 fev mas endpoint e pouco nitido
+210,ob_bearish_internal_formed,2026-02-05T00:00:00Z,top=76935.40 bot=75431.50,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+211,fvg_bearish_formed,2026-02-05T04:00:00Z,top=71818.80 bot=71591.80,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+212,fvg_bearish_mitigated,2026-02-05T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+214,fvg_bearish_formed,2026-02-05T16:00:00Z,top=69876.00 bot=68656.80,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+215,fvg_bearish_formed,2026-02-05T20:00:00Z,top=66666.00 bot=65676.70,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+217,fvg_bearish_mitigated,2026-02-06T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+220,fvg_bearish_mitigated,2026-02-06T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+220,fvg_bullish_formed,2026-02-06T16:00:00Z,top=68368.50 bot=66724.60,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+221,fvg_bullish_formed,2026-02-06T20:00:00Z,top=69800.00 bot=69162.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+223,fvg_bullish_mitigated,2026-02-07T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+224,fvg_bearish_formed,2026-02-07T08:00:00Z,top=69680.30 bot=68778.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+225,fvg_bearish_mitigated,2026-02-07T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+231,fvg_bullish_formed,2026-02-08T12:00:00Z,top=70662.00 bot=69687.90,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+236,fvg_bullish_mitigated,2026-02-09T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+237,fvg_bearish_formed,2026-02-09T12:00:00Z,top=70255.50 bot=69842.80,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+238,fvg_bearish_mitigated,2026-02-09T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+246,bos_bearish_internal,2026-02-11T00:00:00Z,,exact_match,Linha BOS vermelha visivel em 11 fev
+246,ob_bearish_internal_formed,2026-02-11T00:00:00Z,top=71097.70 bot=69772.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+247,fvg_bullish_mitigated,2026-02-11T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+248,fvg_bearish_formed,2026-02-11T08:00:00Z,top=67963.00 bot=67097.10,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+249,fvg_bearish_mitigated,2026-02-11T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+257,fvg_bearish_formed,2026-02-12T20:00:00Z,top=66970.00 bot=66463.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+260,fvg_bearish_mitigated,2026-02-13T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+261,choch_bullish_internal,2026-02-13T12:00:00Z,,exact_match,Linha CHoCH verde visivel no repique de 13 fev
+261,fvg_bullish_formed,2026-02-13T12:00:00Z,top=66804.10 bot=66651.50,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+261,ob_bullish_internal_formed,2026-02-13T12:00:00Z,top=67200.00 bot=65080.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+262,fvg_bullish_formed,2026-02-13T16:00:00Z,top=68502.80 bot=67216.20,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+274,fvg_bearish_formed,2026-02-15T16:00:00Z,top=70098.70 bot=69066.30,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+280,fvg_bearish_formed,2026-02-16T16:00:00Z,top=68300.20 bot=68219.80,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+281,fvg_bearish_mitigated,2026-02-16T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+285,fvg_bullish_mitigated,2026-02-17T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+285,fvg_bullish_mitigated,2026-02-17T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+292,choch_bearish_internal,2026-02-18T16:00:00Z,,exact_match,Linha CHoCH vermelha visivel em 18 fev
+292,ob_bearish_internal_formed,2026-02-18T16:00:00Z,top=68437.00 bot=67033.80,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+293,fvg_bearish_formed,2026-02-18T20:00:00Z,top=66681.40 bot=66518.90,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+294,fvg_bearish_mitigated,2026-02-19T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+309,choch_bullish_internal,2026-02-21T12:00:00Z,,exact_match,Linha CHoCH verde visivel em 21 fev
+309,ob_bearish_internal_mitigated,2026-02-21T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+309,ob_bullish_internal_formed,2026-02-21T12:00:00Z,top=68074.20 bot=66428.10,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+318,bos_bearish_swing,2026-02-23T00:00:00Z,,exact_match,Linha BOS swing bearish termina no candle de ruptura de 23 fev
+318,choch_bearish_internal,2026-02-23T00:00:00Z,,exact_match,Linha CHoCH bearish interna tambem visivel no mesmo rompimento
+318,ob_bearish_internal_formed,2026-02-23T00:00:00Z,top=68685.80 bot=67887.90,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+318,ob_bearish_swing_formed,2026-02-23T00:00:00Z,top=70929.00 bot=70098.70,not_found,Nao vejo OB swing vermelho em 70.1-70.9k no candle de 23 fev
+318,ob_bullish_internal_mitigated,2026-02-23T00:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+318,ob_bullish_internal_mitigated,2026-02-23T00:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+319,fvg_bearish_formed,2026-02-23T04:00:00Z,top=67317.40 bot=65985.00,partial_match,FVG bearish na queda de 23 fev parece visivel mas parcialmente encoberto
+323,fvg_bearish_formed,2026-02-23T20:00:00Z,top=65447.90 bot=64999.60,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+325,fvg_bearish_formed,2026-02-24T04:00:00Z,top=63850.00 bot=63600.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+327,fvg_bearish_mitigated,2026-02-24T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+330,fvg_bearish_mitigated,2026-02-25T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+331,fvg_bullish_formed,2026-02-25T04:00:00Z,top=64707.00 bot=64550.10,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+333,fvg_bearish_mitigated,2026-02-25T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+334,choch_bullish_internal,2026-02-25T16:00:00Z,,exact_match,Linha CHoCH verde visivel no rompimento de 25 fev
+334,fvg_bullish_formed,2026-02-25T16:00:00Z,top=67364.00 bot=65670.10,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+334,ob_bearish_internal_mitigated,2026-02-25T16:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+334,ob_bullish_internal_formed,2026-02-25T16:00:00Z,top=63995.00 bot=62400.00,exact_match,Caixa azul de demanda 62.4-64.0k visivel no shot 04
+335,fvg_bullish_formed,2026-02-25T20:00:00Z,top=67578.40 bot=67554.80,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+339,fvg_bullish_mitigated,2026-02-26T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+345,fvg_bearish_formed,2026-02-27T12:00:00Z,top=67415.90 bot=66328.20,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+345,fvg_bullish_mitigated,2026-02-27T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+349,fvg_bullish_mitigated,2026-02-28T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+350,fvg_bearish_formed,2026-02-28T08:00:00Z,top=65680.40 bot=64275.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+352,fvg_bearish_mitigated,2026-02-28T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+352,fvg_bullish_formed,2026-02-28T16:00:00Z,top=64636.70 bot=64275.00,exact_match,Caixa verde pequena visivel apos o candle de alta de 28 fev
+353,fvg_bearish_mitigated,2026-02-28T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+353,fvg_bullish_formed,2026-02-28T20:00:00Z,top=66138.70 bot=65328.30,partial_match,FVG verde proximo a virada de mar visivel mas bounds imprecisos
+359,fvg_bullish_mitigated,2026-03-01T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+363,bos_bullish_internal,2026-03-02T12:00:00Z,,exact_match,Linha BOS verde visivel no inicio de mar
+363,ob_bullish_internal_formed,2026-03-02T12:00:00Z,top=66468.10 bot=65005.20,partial_match,Zona azul de demanda 65-67k aparece mas bounds nao batem perfeitamente
+364,fvg_bullish_formed,2026-03-02T16:00:00Z,top=68529.50 bot=66699.00,partial_match,Caixa verde proxima a impulsao de 2 mar visivel mas bounds aproximados
+368,fvg_bullish_mitigated,2026-03-03T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+374,bos_bullish_internal,2026-03-04T08:00:00Z,,exact_match,Linha BOS verde interna termina no candle forte de 4 mar
+374,choch_bullish_swing,2026-03-04T08:00:00Z,,exact_match,Linha CHoCH swing verde termina no candle forte de 4 mar
+374,fvg_bearish_mitigated,2026-03-04T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+374,fvg_bullish_formed,2026-03-04T08:00:00Z,top=69100.00 bot=68877.00,partial_match,FVG bullish pequeno no candle forte de 4 mar e visualmente plausivel mas pouco nitido
+374,ob_bearish_internal_mitigated,2026-03-04T08:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+374,ob_bearish_swing_mitigated,2026-03-04T08:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+374,ob_bullish_internal_formed,2026-03-04T08:00:00Z,top=67933.50 bot=66073.80,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+374,ob_bullish_swing_formed,2026-03-04T08:00:00Z,top=63995.00 bot=62400.00,exact_match,Caixa azul swing 62.4-64.0k permanece visivel no shot 05
+375,fvg_bullish_formed,2026-03-04T12:00:00Z,top=70564.10 bot=69600.00,partial_match,Caixa verde na continuacao de 4 mar visivel com bounds imprecisos
+376,fvg_bullish_formed,2026-03-04T16:00:00Z,top=72500.10 bot=71877.90,partial_match,Gap bullish superior em 4 mar aparece mas leitura de bounds e limitada
+379,fvg_bullish_mitigated,2026-03-05T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+382,fvg_bearish_formed,2026-03-05T16:00:00Z,top=71718.70 bot=71622.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+387,fvg_bullish_mitigated,2026-03-06T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+387,fvg_bullish_mitigated,2026-03-06T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+388,fvg_bearish_formed,2026-03-06T16:00:00Z,top=70156.80 bot=68755.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+401,choch_bearish_internal,2026-03-08T20:00:00Z,,exact_match,Linha CHoCH vermelha visivel na reversao de 8 mar
+401,ob_bearish_internal_formed,2026-03-08T20:00:00Z,top=74030.00 bot=72500.10,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+401,ob_bullish_internal_mitigated,2026-03-08T20:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+408,fvg_bearish_mitigated,2026-03-10T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+411,fvg_bearish_mitigated,2026-03-10T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+426,choch_bullish_internal,2026-03-13T00:00:00Z,,exact_match,Linha CHoCH verde visivel em 13 mar
+426,ob_bullish_internal_formed,2026-03-13T00:00:00Z,top=69812.80 bot=69156.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+444,fvg_bullish_formed,2026-03-16T00:00:00Z,top=72213.70 bot=71969.50,cannot_verify,Regiao esta visivel mas o FVG pequeno nao fica separavel de candles e linhas
+444,ob_bearish_internal_mitigated,2026-03-16T00:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+448,bos_bullish_internal,2026-03-16T16:00:00Z,,exact_match,Linha BOS verde interna visivel antes do rompimento swing
+448,ob_bullish_internal_formed,2026-03-16T16:00:00Z,top=71275.20 bot=70250.20,exact_match,Faixa azul 70.4-71.4k corresponde ao OB real visual
+449,bos_bullish_swing,2026-03-16T20:00:00Z,,exact_match,Linha BOS swing verde termina em 16 mar 20h
+449,ob_bullish_swing_formed,2026-03-16T20:00:00Z,top=67488.00 bot=65566.90,exact_match,Caixa azul ampla 65.6-67.5k visivel em mar
+450,fvg_bearish_mitigated,2026-03-17T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+459,fvg_bullish_mitigated,2026-03-18T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+460,fvg_bearish_formed,2026-03-18T16:00:00Z,top=72750.00 bot=71964.90,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+463,choch_bearish_internal,2026-03-19T04:00:00Z,,exact_match,Linha CHoCH vermelha visivel apos o topo de 18 mar
+463,ob_bearish_internal_formed,2026-03-19T04:00:00Z,top=75983.80 bot=74227.50,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+463,ob_bullish_internal_mitigated,2026-03-19T04:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+465,ob_bullish_internal_mitigated,2026-03-19T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+479,bos_bearish_internal,2026-03-21T20:00:00Z,,exact_match,Linha BOS vermelha visivel em 21 mar
+479,ob_bearish_internal_formed,2026-03-21T20:00:00Z,top=71087.70 bot=70426.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+480,fvg_bearish_formed,2026-03-22T00:00:00Z,top=70164.50 bot=69576.80,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+488,fvg_bearish_mitigated,2026-03-23T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+488,ob_bearish_internal_mitigated,2026-03-23T08:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+489,fvg_bullish_formed,2026-03-23T12:00:00Z,top=69656.20 bot=68874.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+493,choch_bullish_internal,2026-03-24T04:00:00Z,,exact_match,Linha CHoCH verde visivel em 24 mar
+493,ob_bullish_internal_formed,2026-03-24T04:00:00Z,top=68465.00 bot=67307.60,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+496,fvg_bearish_formed,2026-03-24T16:00:00Z,top=70814.00 bot=69980.70,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+496,fvg_bullish_mitigated,2026-03-24T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+498,fvg_bearish_mitigated,2026-03-25T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+498,fvg_bullish_formed,2026-03-25T00:00:00Z,top=70362.30 bot=69980.70,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+500,bos_bullish_internal,2026-03-25T08:00:00Z,,not_found,Nao vejo label ou linha BOS bullish clara no candle de 25 mar
+500,ob_bullish_internal_formed,2026-03-25T08:00:00Z,top=69980.70 bot=68868.10,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+505,fvg_bullish_mitigated,2026-03-26T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+507,ob_bullish_internal_mitigated,2026-03-26T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+508,choch_bearish_internal,2026-03-26T16:00:00Z,,exact_match,Linha CHoCH vermelha visivel em 26 mar
+508,ob_bearish_internal_formed,2026-03-26T16:00:00Z,top=71989.00 bot=70752.20,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+512,ob_bullish_internal_mitigated,2026-03-27T08:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+513,fvg_bearish_formed,2026-03-27T12:00:00Z,top=68258.00 bot=66742.60,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+514,ob_bullish_swing_mitigated,2026-03-27T16:00:00Z,,partial_match,Preco entra na zona azul swing mas o exato candle de mitigacao e dificil
+527,ob_bullish_internal_mitigated,2026-03-29T20:00:00Z,,partial_match,Preco toca demanda azul 65-67k no fim de mar mas fim exato da caixa e pouco nitido
+528,choch_bullish_internal,2026-03-30T00:00:00Z,,exact_match,Linha CHoCH verde visivel na alta de 30 mar
+528,ob_bullish_internal_formed,2026-03-30T00:00:00Z,top=66768.70 bot=64930.80,exact_match,OB bullish azul 64.9-66.8k visivel no fundo de 30 mar
+529,fvg_bullish_formed,2026-03-30T04:00:00Z,top=67131.60 bot=66768.70,partial_match,Caixa verde pequena junto ao impulso de 30 mar e visivel
+532,fvg_bullish_mitigated,2026-03-30T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+533,fvg_bearish_formed,2026-03-30T20:00:00Z,top=67054.20 bot=66966.90,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+534,fvg_bearish_mitigated,2026-03-31T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+534,fvg_bearish_mitigated,2026-03-31T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+539,fvg_bullish_formed,2026-03-31T20:00:00Z,top=67794.40 bot=67770.30,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+540,fvg_bullish_mitigated,2026-04-01T00:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+547,fvg_bearish_formed,2026-04-02T04:00:00Z,top=67926.20 bot=66898.90,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+569,bos_bullish_internal,2026-04-05T20:00:00Z,,exact_match,Linha BOS verde visivel em 5 abr
+569,fvg_bearish_mitigated,2026-04-05T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+569,ob_bullish_internal_formed,2026-04-05T20:00:00Z,top=67157.60 bot=66572.30,exact_match,Caixa azul de demanda 66.6-67.2k visivel no inicio de abril
+570,fvg_bullish_formed,2026-04-06T00:00:00Z,top=68748.00 bot=67537.50,exact_match,Caixa verde bullish clara no impulso de 6 abr
+581,bos_bullish_internal,2026-04-07T20:00:00Z,,exact_match,Linha BOS verde visivel em 7 abr
+581,fvg_bearish_mitigated,2026-04-07T20:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+581,ob_bearish_internal_mitigated,2026-04-07T20:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+581,ob_bullish_internal_formed,2026-04-07T20:00:00Z,top=68613.80 bot=67680.20,partial_match,Caixa verde/azulada proxima a 67.7-68.6k existe mas forma OB/FVG e ambigua
+582,fvg_bullish_formed,2026-04-08T00:00:00Z,top=71219.30 bot=69058.80,partial_match,FVG bullish grande visivel mas bounds excedem a leitura precisa no zoom
+598,bos_bullish_internal,2026-04-10T16:00:00Z,,exact_match,Linha BOS verde visivel em 10 abr
+598,ob_bullish_internal_formed,2026-04-10T16:00:00Z,top=71170.00 bot=70422.00,partial_match,Zona azul 70.4-71.4k existe mas origem visual parece posterior
+607,fvg_bearish_formed,2026-04-12T04:00:00Z,top=72864.00 bot=71750.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+616,fvg_bearish_mitigated,2026-04-13T16:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+617,bos_bullish_internal,2026-04-13T20:00:00Z,,exact_match,Linha BOS verde visivel em 13 abr
+617,fvg_bullish_formed,2026-04-13T20:00:00Z,top=72977.80 bot=72424.00,exact_match,Caixa verde bullish visivel antes da perna de alta de 14 abr
+617,ob_bullish_internal_formed,2026-04-13T20:00:00Z,top=71425.20 bot=70456.00,exact_match,OB bullish real em 70.4-71.4k confirmado visualmente
+618,fvg_bullish_formed,2026-04-14T00:00:00Z,top=73935.50 bot=73468.00,exact_match,Caixa verde bullish clara acima de 73.4k em 14 abr
+621,ob_bearish_internal_mitigated,2026-04-14T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+625,fvg_bullish_mitigated,2026-04-15T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+638,bos_bullish_internal,2026-04-17T08:00:00Z,,exact_match,Linha BOS verde interna visivel na ruptura de 17 abr
+638,ob_bullish_internal_formed,2026-04-17T08:00:00Z,top=74990.00 bot=73220.20,partial_match,Caixa azul/cinza de demanda 73.6-75.0k visivel mas bounds diferem levemente
+639,bos_bullish_swing,2026-04-17T12:00:00Z,,exact_match,Linha BOS swing verde termina em 17 abr 12h
+639,fvg_bearish_mitigated,2026-04-17T12:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+639,ob_bearish_internal_mitigated,2026-04-17T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+639,ob_bullish_swing_formed,2026-04-17T12:00:00Z,top=66768.70 bot=64930.80,cannot_verify,Faixa 64.9-66.8k fica fora da escala vertical do shot 08
+640,fvg_bullish_formed,2026-04-17T16:00:00Z,top=76920.60 bot=76348.00,cannot_verify,FVG pequeno em 76.3-76.9k nao fica claramente separado no shot 08
+644,fvg_bullish_mitigated,2026-04-18T08:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+667,fvg_bullish_formed,2026-04-22T04:00:00Z,top=77323.40 bot=76400.00,cannot_verify,Zoom panoramico nao permite confirmar caixa FVG pequena com seguranca
+669,bos_bullish_internal,2026-04-22T12:00:00Z,,exact_match,Linha BOS verde visivel em 22 abr
+669,ob_bullish_internal_formed,2026-04-22T12:00:00Z,top=74727.10 bot=73666.00,exact_match,Caixa OB bullish 73.7-74.7k visivel e estendida no shot 08
+695,bos_bullish_internal,2026-04-26T20:00:00Z,,exact_match,Linha BOS verde visivel em 26 abr
+695,ob_bullish_internal_formed,2026-04-26T20:00:00Z,top=77413.30 bot=77034.50,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+698,fvg_bearish_formed,2026-04-27T08:00:00Z,top=78340.00 bot=77936.30,not_found,Nao vejo caixa FVG vermelha clara em 77.9-78.3k
+699,choch_bearish_internal,2026-04-27T12:00:00Z,,exact_match,Linha CHoCH vermelha visivel na reversao de 27 abr
+699,ob_bearish_internal_formed,2026-04-27T12:00:00Z,top=79489.90 bot=78340.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
+699,ob_bullish_internal_mitigated,2026-04-27T12:00:00Z,,cannot_verify,Mitigacao de OB nao e verificavel com seguranca em imagem estatica
+703,fvg_bullish_mitigated,2026-04-28T04:00:00Z,,cannot_verify,Mitigacao de FVG nao e verificavel com seguranca em imagem estatica panoramica
+712,bos_bearish_internal,2026-04-29T16:00:00Z,,exact_match,Linha BOS vermelha visivel em 29 abr
+712,fvg_bearish_formed,2026-04-29T16:00:00Z,top=76922.00 bot=76225.60,partial_match,FVG bearish vermelho proximo a queda de 29 abr parece visivel mas bounds imprecisos
+712,ob_bearish_internal_formed,2026-04-29T16:00:00Z,top=77882.30 bot=76922.00,excluded_by_lux_render,"OB matematicamente correto (engine v0.9.0); nao renderizado pelo LuxAlgo TradingView devido a mitigation, cap de 20 ou caso ob_id=7 (issue aberta no Mapa secao 12). Diagnostico read-only confirmou equivalencia com Pine."
