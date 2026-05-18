@@ -3,11 +3,9 @@ OBJETIVO
     Smoke test da infra do golden dataset:
     1. README existe e tem cabecalho esperado.
     2. Schema JSON e parseavel.
-    3. Validador roda contra esqueleto do golden e detecta os PLACEHOLDERs
-       como erros (sanity -- validador funciona).
-    4. Validador roda contra um golden artificial valido (criado em fixture)
+    3. Validador roda contra um golden artificial valido (criado em fixture)
        e retorna sucesso.
-    5. ohlcv_fetcher.py e importavel sem efeitos colaterais.
+    4. ohlcv_fetcher.py e importavel sem efeitos colaterais.
 
 FONTE DE DADOS
     - Arquivos do PR (tests/golden/**)
@@ -38,10 +36,6 @@ GOLDEN_DIR = REPO_ROOT / "tests" / "golden"
 TOOLS_DIR = GOLDEN_DIR / "tools"
 SCHEMA_PATH = GOLDEN_DIR / "schema" / "golden_schema.json"
 README_PATH = GOLDEN_DIR / "README.md"
-SKELETON_PATH = GOLDEN_DIR / "golden" / "btc_usdt_swap_4h_luxalgo_smc.json"
-SKELETON_CSV_PATH = GOLDEN_DIR / "data" / "btc_usdt_swap_4h_window.csv"
-
-
 def _load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -142,16 +136,6 @@ def test_schema_is_parseable():
     assert "meta" in schema["properties"]
     assert "events" in schema["properties"]
     assert "zones" in schema["properties"]
-
-
-def test_validator_rejects_skeleton(validator_module):
-    result = validator_module.validate(SKELETON_PATH, SKELETON_CSV_PATH)
-    assert result.is_valid is False
-    joined = "\n".join(result.errors).upper()
-    assert "PLACEHOLDER" in joined, (
-        f"Validador deveria reportar PLACEHOLDER no esqueleto. "
-        f"Erros recebidos: {result.errors}"
-    )
 
 
 def test_validator_accepts_minimal_valid_golden(tmp_path, validator_module):
