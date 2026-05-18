@@ -837,6 +837,157 @@ bump de versão (não alteram VERSION nem código de produção).
 
 ---
 
+## 12. Issues abertas pós-Onda 9
+
+Issues técnicas e documentais identificadas durante o spot-check da
+Onda 9, formalmente abertas para reinvestigação em ondas futuras.
+Nenhuma é bloqueante para a evolução do projeto — a engine
+`analyze()` foi ratificada com 226 events + 34 zones (PR #59).
+
+### 12.1. ob_id=7 — Divergência visual isolada (candle 184)
+
+**Categoria:** Possível divergência semântica em `detect_structure`
+ou interpretação visual.
+**Origem:** Spot-check Onda 9, caso 1 dos 5 candles validados
+manualmente por Marcelo.
+**Estado da engine:** ob_bearish_internal_formed em
+`t_creation=2026-01-31T16:00:00Z`, `bar_high=84690.20`,
+`bar_low=80918.10`, `state='active'`.
+
+**Observação visual reportada:** caixa internal bearish
+aproximadamente em 86k-86.5k (range ~500 pontos), left edge
+próximo do candle 184. Bounds engine apontam para 80.9k-84.7k
+(range 3772 pontos).
+
+**Diagnóstico já feito:**
+- Engine matematicamente correta. Range 3772 = range intrabar
+  natural do candle 174 (O=84603,80, H=84690,20, L=80918,10,
+  C=82631,80).
+- Janela `[pivot_pos:break_pos)` = [174:184) confirmada equivalente
+  a `parsedHighs.slice(p_ivot.barIndex, bar_index)` do Pine.
+- Pivot lido via `ffill()` em pos=184 retorna corretamente 174 (5
+  candles após confirmação `pivot_internal_length=5`).
+- Hipóteses H1-H5 originais e H4' (ffill amplo) **descartadas
+  empiricamente** (correlação gap×range = 0,08).
+
+**Hipóteses remanescentes para reinvestigação:**
+1. `detect_structure` pode disparar BOS bearish em candle diferente
+   do Pine TradingView, consumindo pivot anterior (ex.: pivot=149,
+   low=86033,50, vigente até pos=178) — divergência estaria
+   upstream, não em `_emit_create_record`.
+2. Caixa em ~86k observada por Marcelo pode ser de outro OB ativo
+   visualmente próximo, não ob_id=7.
+3. Interpretação visual pode ter confundido caixa internal com
+   outro tipo (Swing, FVG, PD zone).
+
+**Plano de resolução:**
+- Re-validação manual focada em chart fresco com janela estendida
+  pós-2026-04-30, ou
+- Análise detalhada com Marcelo das caixas visíveis no candle 184
+  com zoom máximo no TradingView, ou
+- Investigação algorítmica focada em `detect_structure` linha por
+  linha contra o Pine `displayStructure` (luxalgo_smc_compute_only.py
+  linhas 238-272).
+
+**Não-bloqueante.** Engine produz histórico imutável correto; o
+problema, se existir, está em rendering visual rolling do LuxAlgo
+ou em interpretação de screenshot. Onda 10 (IStrategy Freqtrade)
+pode prosseguir.
+
+### 12.2. EQH/EQL — Divergência de fórmula
+
+**Categoria:** Divergência algorítmica suspeita em
+`smc_engine/pivots.py`.
+**Origem:** Spot-check Onda 9 (Apêndice A do GPT-5).
+
+**Sintoma:**
+- Engine produziu **0 alerts** de EQH/EQL nos 720 candles 4H
+  (`equal_high_alert` e `equal_low_alert` ambos `False` em todas
+  as linhas).
+- GPT-5 reportou ver **alguns labels EQH/EQL** desenhados pelo
+  LuxAlgo TradingView no chart correspondente.
+- Configuração canônica usada nos dois lados:
+  `equal_threshold=0.1`, `Bars Confirmation: 3` (LuxAlgo),
+  `pivot_equal_length=3` (engine).
+
+**Diagnóstico parcial:**
+- A fórmula em `smc_engine/pivots.py:234-244` exige 4 condições
+  simultâneas: `bearish_event` (ou `bullish_event`), `prev_level`
+  válido, `threshold_abs` válido (ATR estabilizado), e
+  `distance < threshold_abs`.
+- `threshold_abs = equal_threshold * atr` — com BTC 4H em alta
+  volatilidade, `0.1 × ATR` resulta em ~150-300 USD, exigindo dois
+  swing highs/lows com diferença abaixo desse valor para disparar
+  alert.
+- A engine populou `equal_high_level` em 71 candles e
+  `equal_low_level` em 72 candles (níveis candidatos via
+  forward-fill), mas zero alerts foram disparados.
+
+**Hipóteses para reinvestigação:**
+1. Fórmula do LuxAlgo Pine pode usar `<=` em vez de `<` (limite
+   inclusivo), ou tolerância em pontos absolutos em vez de
+   fração-de-ATR.
+2. Pine pode disparar alert na primeira ocorrência do
+   match-de-nível em vez de comparar candle de evento.
+3. Threshold efetivo do Pine pode ser maior que 0.1 (default
+   diferente, ou parâmetro adicional não exposto em UI).
+
+**Plano de resolução:**
+- Investigação read-only comparando `pivots.py` com
+  `luxalgo_smc_compute_only.py` linhas relativas a `equal_high` e
+  `equal_low`.
+- Pode resultar em PR de fix em `pivots.py` (provavelmente Onda
+  7.x dado o contexto de pivots) ou em registro como divergência
+  intencional documentada (modelo Onda 7.10).
+
+**Não-bloqueante.** Cobertura EQH/EQL ausente na janela atual não
+impede ratificação dos demais 19 tipos de evento.
+
+### 12.3. Inconsistência `meta.scope_included` no schema canônico
+
+**Categoria:** Inconsistência documental no template do gerador
+golden.
+**Origem:** Observação durante revisão do JSON ratificado PR #59.
+
+**Sintoma:**
+`meta.scope_included` no template emitido por
+`tests/golden/tools/generate_golden_engine_output.py` lista:
+
+```
+"EQH/EQL alerts"
+```
+
+Como tipo coberto pelo schema. Mas empiricamente esta janela
+produziu **zero** alerts (vide §12.2), e o `ratification_notes`
+documenta isso como dívida.
+
+**Plano de resolução:**
+- Opção A: Manter `scope_included` como está (declaração de
+  intenção de cobertura, não de presença na janela específica), e
+  apenas referenciar §12.2 quando aplicável.
+- Opção B: Ajustar template do gerador para distinguir "scope
+  conceitual" (tipos cobertos pelo schema) vs "scope efetivo"
+  (tipos com pelo menos 1 ocorrência na janela). Implicaria PR
+  pequeno em `generate_golden_engine_output.py`.
+
+**Decisão preferencial:** Opção A (mais simples, não há perda de
+informação porque §12.2 já cobre a divergência específica). PR
+opcional para a Opção B fica disponível como melhoria menor.
+
+**Não-bloqueante.** Apenas dívida documental.
+
+---
+
+### Resumo §12
+
+| Issue | Categoria | Bloqueante | Onda candidata para resolução |
+|---|---|---|---|
+| 12.1 ob_id=7 | Divergência visual isolada | Não | Pós-Onda 10 ou em janela fresca |
+| 12.2 EQH/EQL formula | Divergência algorítmica | Não | Onda 7.x ou 9.x |
+| 12.3 scope_included | Documental | Não | Melhoria opcional |
+
+---
+
 **Fim do mapa Camada 1 v1.1.**
 
 SHA-256 do arquivo fonte mapeado: `9433ca63fc85f5613f307d0964347193c98578f58daf10cdbb391a98b6bbf8b1`
