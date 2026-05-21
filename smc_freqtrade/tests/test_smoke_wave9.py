@@ -73,7 +73,7 @@ def test_analyze_meta_fields(synthetic_df: pd.DataFrame) -> None:
     """meta tem 4 campos obrigatórios."""
     result = analyze(synthetic_df)
     assert result.meta['engine_version'] == __version__
-    assert result.meta['engine_version'] == '0.9.0'
+    assert result.meta['engine_version'] == '0.9.1'
     # Wave 8.1 adicionou detect_eqh_eql ao pipeline (7 módulos).
     assert len(result.meta['modules_run']) == 7
     assert 'detect_eqh_eql' in result.meta['modules_run']
