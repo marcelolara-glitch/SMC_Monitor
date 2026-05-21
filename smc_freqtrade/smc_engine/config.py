@@ -1,13 +1,16 @@
 """SMCConfig — Configuração unificada da engine SMC.
 
 OBJETIVO
-    Centralizar os 14 parâmetros das Ondas 3-8 numa única dataclass
-    imutável, com validação semântica e defaults LuxAlgo-aligned.
+    Centralizar os parâmetros das Ondas 3-8 (+ Wave 8.1 EQH/EQL fix)
+    numa única dataclass imutável, com validação semântica e defaults
+    LuxAlgo-aligned.
 
 FONTE DE DADOS
     Defaults extraídos verbatim das assinaturas dos 6 detectores em
     smc_engine/{pivots,trailing,structure,order_blocks,fvg,
-    liquidity_sweep}.py.
+    liquidity_sweep}.py. Wave 8.1: defaults canônicos do Pine LuxAlgo
+    `ICT Concepts` (margin=4, lookback=50, count>2 → eq_min_pivots=3,
+    ta.atr(10)).
 
 LIMITAÇÕES CONHECIDAS
     Presets (luxalgo_default, conservative, aggressive) adiados para
@@ -26,6 +29,9 @@ from typing import Literal
 
 PIVOT_MIN_LENGTH = 2
 SWEEP_VALID_SOURCES = ('swing', 'internal', 'equal')
+# Wave 8.1 — Pine LuxAlgo `ICT Concepts`: input.float(4, minval=2, maxval=7).
+EQ_MARGIN_MIN = 2.0
+EQ_MARGIN_MAX = 7.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +54,14 @@ class SMCConfig:
     sweep_max_extension_bars: int = 300
     sweep_max_pivot_age_bars: int = 2000
     sweep_qualify_with_pd_zone: bool = False
+    # Wave 8.1 — EQH/EQL canônico (Pine LuxAlgo `ICT Concepts`)
+    # Banda dinâmica: atr(eq_atr_length) / (10 / eq_margin).
+    # Detecção: 3+ swings same-direction dentro da banda, look-back de
+    # eq_lookback_pivots pivots prévios.
+    eq_atr_length: int = 10
+    eq_margin: float = 4.0
+    eq_lookback_pivots: int = 50
+    eq_min_pivots: int = 3
 
     def __post_init__(self) -> None:
         """Validações semânticas. Levanta ValueError em violações."""
@@ -93,4 +107,24 @@ class SMCConfig:
             raise ValueError(
                 f"sweep_pivot_sources contém valores inválidos: {invalid_sources}. "
                 f"Aceitos: {SWEEP_VALID_SOURCES}"
+            )
+        # Wave 8.1 — EQH/EQL canônico.
+        if self.eq_atr_length < 1:
+            raise ValueError(
+                f"eq_atr_length deve ser >= 1, recebeu {self.eq_atr_length}"
+            )
+        if not EQ_MARGIN_MIN <= self.eq_margin <= EQ_MARGIN_MAX:
+            raise ValueError(
+                f"eq_margin deve estar em [{EQ_MARGIN_MIN}, {EQ_MARGIN_MAX}] "
+                f"(Pine LuxAlgo input.float minval/maxval); recebeu {self.eq_margin}"
+            )
+        if self.eq_lookback_pivots < 1:
+            raise ValueError(
+                f"eq_lookback_pivots deve ser >= 1, recebeu {self.eq_lookback_pivots}"
+            )
+        if self.eq_min_pivots < 2:
+            raise ValueError(
+                f"eq_min_pivots deve ser >= 2 (Pine `count > 2` exige 3+; "
+                f"valor mínimo conceitual é 2 — duas observações iguais formam "
+                f"uma 'igualdade'); recebeu {self.eq_min_pivots}"
             )
