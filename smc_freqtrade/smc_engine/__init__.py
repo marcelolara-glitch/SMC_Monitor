@@ -63,6 +63,7 @@ from .order_blocks import (
     COL_OB_SWING_BULLISH_MITIGATED,
 )
 from .pivots import (
+    detect_eqh_eql,
     detect_pivots,
     COL_SWING_HIGH_LEVEL,
     COL_SWING_HIGH_IDX,
@@ -78,6 +79,16 @@ from .pivots import (
     COL_EQUAL_LOW_LEVEL,
     COL_EQUAL_LOW_IDX,
     COL_EQUAL_LOW_ALERT,
+    COL_EQUAL_HIGH_BAND_HIGH,
+    COL_EQUAL_HIGH_BAND_LOW,
+    COL_EQUAL_HIGH_PIVOT_COUNT,
+    COL_EQUAL_HIGH_LEVEL_MIDPOINT,
+    COL_EQUAL_HIGH_PIVOT_INDICES,
+    COL_EQUAL_LOW_BAND_HIGH,
+    COL_EQUAL_LOW_BAND_LOW,
+    COL_EQUAL_LOW_PIVOT_COUNT,
+    COL_EQUAL_LOW_LEVEL_MIDPOINT,
+    COL_EQUAL_LOW_PIVOT_INDICES,
 )
 from .state import EngineState
 from .structure import (
@@ -158,6 +169,18 @@ __all__ = [
     "COL_EQUAL_LOW_LEVEL",
     "COL_EQUAL_LOW_IDX",
     "COL_EQUAL_LOW_ALERT",
+    # Wave 8.1 — EQH/EQL canônico (Pine LuxAlgo `ICT Concepts`)
+    "detect_eqh_eql",
+    "COL_EQUAL_HIGH_BAND_HIGH",
+    "COL_EQUAL_HIGH_BAND_LOW",
+    "COL_EQUAL_HIGH_PIVOT_COUNT",
+    "COL_EQUAL_HIGH_LEVEL_MIDPOINT",
+    "COL_EQUAL_HIGH_PIVOT_INDICES",
+    "COL_EQUAL_LOW_BAND_HIGH",
+    "COL_EQUAL_LOW_BAND_LOW",
+    "COL_EQUAL_LOW_PIVOT_COUNT",
+    "COL_EQUAL_LOW_LEVEL_MIDPOINT",
+    "COL_EQUAL_LOW_PIVOT_INDICES",
     # Onda 4 — trailing extremes + Premium/Discount
     "compute_trailing_extremes",
     "COL_TRAILING_TOP",

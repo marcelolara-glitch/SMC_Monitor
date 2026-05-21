@@ -894,54 +894,60 @@ problema, se existir, está em rendering visual rolling do LuxAlgo
 ou em interpretação de screenshot. Onda 10 (IStrategy Freqtrade)
 pode prosseguir.
 
-### 12.2. EQH/EQL — Divergência de fórmula
+### 12.2. EQH/EQL — Divergência de fórmula — **RESOLVIDO (Wave 8.1)**
 
-**Categoria:** Divergência algorítmica suspeita em
-`smc_engine/pivots.py`.
+**Categoria:** Divergência algorítmica em `smc_engine/pivots.py`.
 **Origem:** Spot-check Onda 9 (Apêndice A do GPT-5).
+**Status:** **Resolvido em Wave 8.1** (branch
+`claude/fix-eqh-eql-detection-19OSj`). Fórmula canônica do Pine
+LuxAlgo `ICT Concepts` (free) portada em
+`smc_engine.pivots.detect_eqh_eql`, encaixada na pipeline da
+`engine.analyze()` após `detect_pivots`.
 
-**Sintoma:**
-- Engine produziu **0 alerts** de EQH/EQL nos 720 candles 4H
-  (`equal_high_alert` e `equal_low_alert` ambos `False` em todas
-  as linhas).
-- GPT-5 reportou ver **alguns labels EQH/EQL** desenhados pelo
-  LuxAlgo TradingView no chart correspondente.
-- Configuração canônica usada nos dois lados:
-  `equal_threshold=0.1`, `Bars Confirmation: 3` (LuxAlgo),
-  `pivot_equal_length=3` (engine).
+**Sintoma histórico:**
+- Engine produzia **0 alerts** de EQH/EQL nos 720 candles 4H.
+- LuxAlgo TradingView mostrava alguns labels EQH/EQL na chart
+  correspondente.
 
-**Diagnóstico parcial:**
-- A fórmula em `smc_engine/pivots.py:234-244` exige 4 condições
-  simultâneas: `bearish_event` (ou `bullish_event`), `prev_level`
-  válido, `threshold_abs` válido (ATR estabilizado), e
-  `distance < threshold_abs`.
-- `threshold_abs = equal_threshold * atr` — com BTC 4H em alta
-  volatilidade, `0.1 × ATR` resulta em ~150-300 USD, exigindo dois
-  swing highs/lows com diferença abaixo desse valor para disparar
-  alert.
-- A engine populou `equal_high_level` em 71 candles e
-  `equal_low_level` em 72 candles (níveis candidatos via
-  forward-fill), mas zero alerts foram disparados.
+**Causa identificada:**
+Fórmula efetiva divergia da do Pine LuxAlgo. Tabela comparativa
+(Wave 8.1 briefing §4.3):
 
-**Hipóteses para reinvestigação:**
-1. Fórmula do LuxAlgo Pine pode usar `<=` em vez de `<` (limite
-   inclusivo), ou tolerância em pontos absolutos em vez de
-   fração-de-ATR.
-2. Pine pode disparar alert na primeira ocorrência do
-   match-de-nível em vez de comparar candle de evento.
-3. Threshold efetivo do Pine pode ser maior que 0.1 (default
-   diferente, ou parâmetro adicional não exposto em UI).
+| Aspecto | Wave 3 (anterior) | Wave 8.1 (canônica) |
+|---|---|---|
+| Threshold | fixo `0.1 × atr(200)` | dinâmico `atr(10)/a` com `a = 10/margin` |
+| Min. pivots | 2 (apenas anterior) | 3+ within band |
+| Lookback | toda história (via ffill+shift) | últimos 50 pivots same-direction |
+| Filtro direção | ambas | só same-direction (highs com highs) |
 
-**Plano de resolução:**
-- Investigação read-only comparando `pivots.py` com
-  `luxalgo_smc_compute_only.py` linhas relativas a `equal_high` e
-  `equal_low`.
-- Pode resultar em PR de fix em `pivots.py` (provavelmente Onda
-  7.x dado o contexto de pivots) ou em registro como divergência
-  intencional documentada (modelo Onda 7.10).
+**Resolução implementada:**
+- Nova função `detect_eqh_eql()` em `smc_engine/pivots.py` usando
+  a fórmula canônica extraída do Pine LuxAlgo `ICT Concepts`
+  (Wave 8.1 briefing §4.1).
+- 4 parâmetros novos em `SMCConfig`: `eq_atr_length=10`,
+  `eq_margin=4.0`, `eq_lookback_pivots=50`, `eq_min_pivots=3`.
+- Pool de detecção: equal-length pivots (length=3, mesmo
+  rendering visual do LuxAlgo SMC TradingView), não swing-length
+  pivots.
+- Colunas legadas `equal_high_alert` / `equal_low_alert` mantidas
+  com nova semântica; metadados novos: `equal_*_band_high`,
+  `equal_*_band_low`, `equal_*_pivot_count`,
+  `equal_*_level_midpoint`, `equal_*_pivot_indices`.
 
-**Não-bloqueante.** Cobertura EQH/EQL ausente na janela atual não
-impede ratificação dos demais 19 tipos de evento.
+**Resultado sobre o golden 720 candles 4H:**
+- **5 EQH** + **5 EQL** alerts detectados (vs 0 anteriores).
+- Os 226 events + 34 zones ratificados em Onda 9 permanecem
+  **inalterados em quantidade e identidade**.
+- Ledger gerado em `tests/golden/wave8_1_eqheql_events.csv` para
+  ratificação visual em PR separado.
+
+**Divergência residual documentada:**
+A versão paga do PAC pode usar pool diferente (briefing §4.1
+discute opções `aZZ` ZigZag do ICT Concepts vs equal-length da
+LuxAlgo SMC). Decisão Wave 8.1: usar equal-length pivots para
+alinhar com o rendering visual do indicador gratuito (única
+fonte ratificável). Re-investigar se PR de ratificação visual
+indicar divergência sistemática.
 
 ### 12.3. Inconsistência `meta.scope_included` no schema canônico
 

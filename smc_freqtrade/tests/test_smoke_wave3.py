@@ -178,59 +178,49 @@ def test_internal_pivots_detection_with_size_5() -> None:
 
 
 # ============================================================
-# 5. equal high alert dentro do threshold
+# 5. equal_high_alert legado em detect_pivots() é placeholder
 # ============================================================
+#
+# Wave 8.1 movereu a detecção EQH/EQL canônica para detect_eqh_eql.
+# detect_pivots() continua produzindo equal_high_level/equal_low_level
+# (consumidos por liquidity_sweep) mas equal_*_alert agora é
+# all-False — sobrescrito pela função nova quando engine.analyze()
+# orquestra. Testes funcionais da nova semântica vivem em
+# tests/test_smoke_wave8_1.py.
 
-def test_equal_high_alert_when_within_threshold() -> None:
-    """Sequência trough -> peak1 (100) -> trough -> peak2 (100.5).
-    equal_length=3, atr fixa=10, threshold=0.1 -> threshold_abs=1.0.
-    Distância entre peaks = 0.5 < 1.0 -> alert dispara em X=43.
+def test_equal_alert_columns_in_detect_pivots_are_legacy_all_false() -> None:
+    """Wave 8.1: detect_pivots() produz equal_high_alert/equal_low_alert
+    como placeholders all-False. A semântica real (banda dinâmica
+    atr(10)/a, 3+ swings same-direction) vive em detect_eqh_eql, que
+    sobrescreve estas colunas dentro de engine.analyze().
+
+    O nível (`equal_high_level`/`equal_low_level`) continua sendo
+    materializado normalmente (liquidity_sweep consome).
     """
-    n = 60
-    df = _make_flat_df(n)
-    df.loc[10, 'low'] = 5.0     # trough 1 -> equal_low em X=13
-    df.loc[20, 'high'] = 100.0  # peak 1  -> equal_high em X=23
-    df.loc[30, 'low'] = 5.0     # trough 2 -> equal_low em X=33
-    df.loc[40, 'high'] = 100.5  # peak 2  -> equal_high em X=43 (alert)
-
-    atr = pd.Series(np.full(n, 10.0), index=df.index)
-    out = detect_pivots(
-        df, equal_length=3, equal_threshold=0.1, atr=atr,
-    )
-
-    # Os 2 equal_high se materializam nos candles esperados.
-    assert np.isclose(out['equal_high_level'].iloc[23], 100.0)
-    assert np.isclose(out['equal_high_level'].iloc[43], 100.5)
-
-    # No primeiro pico não há prev_equal_high_level conhecido -> alert False.
-    assert bool(out['equal_high_alert'].iloc[23]) is False
-    # No segundo pico, distância 0.5 < 1.0 -> alert True.
-    assert bool(out['equal_high_alert'].iloc[43]) is True
-
-
-# ============================================================
-# 6. equal high alert FORA do threshold
-# ============================================================
-
-def test_equal_high_alert_NOT_triggered_when_outside_threshold() -> None:
-    """Mesma sequência do teste 5 mas peak 2 = 105 (distância 5.0 >
-    threshold_abs=1.0). Alert nunca dispara em nenhum candle."""
     n = 60
     df = _make_flat_df(n)
     df.loc[10, 'low'] = 5.0
     df.loc[20, 'high'] = 100.0
     df.loc[30, 'low'] = 5.0
-    df.loc[40, 'high'] = 105.0  # distância 5.0 > 1.0
+    df.loc[40, 'high'] = 100.5
 
     atr = pd.Series(np.full(n, 10.0), index=df.index)
     out = detect_pivots(
         df, equal_length=3, equal_threshold=0.1, atr=atr,
     )
 
-    # Pico 2 ainda materializa o nível, mas alert não dispara.
-    assert np.isclose(out['equal_high_level'].iloc[43], 105.0)
+    # Níveis ainda materializam (são interface estável para sweep).
+    assert np.isclose(out['equal_high_level'].iloc[23], 100.0)
+    assert np.isclose(out['equal_high_level'].iloc[43], 100.5)
+
+    # Alerts são placeholder all-False — interface legada.
     assert not out['equal_high_alert'].any(), (
-        'equal_high_alert deveria ser False em todos os candles'
+        'equal_high_alert em detect_pivots() deve ser placeholder '
+        'all-False (Wave 8.1: lógica real vive em detect_eqh_eql)'
+    )
+    assert not out['equal_low_alert'].any(), (
+        'equal_low_alert em detect_pivots() deve ser placeholder '
+        'all-False (Wave 8.1: lógica real vive em detect_eqh_eql)'
     )
 
 

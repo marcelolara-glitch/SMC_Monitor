@@ -38,7 +38,7 @@ from .config import SMCConfig
 from .fvg import detect_fair_value_gaps
 from .liquidity_sweep import detect_liquidity_sweeps
 from .order_blocks import detect_order_blocks
-from .pivots import detect_pivots
+from .pivots import detect_eqh_eql, detect_pivots
 from .result import AnalyzeResult
 from .structure import detect_structure
 from .trailing import compute_trailing_extremes
@@ -137,6 +137,16 @@ def analyze(
         equal_length=config.pivot_equal_length,
         equal_threshold=config.pivot_equal_threshold,
     )
+    # Wave 8.1 — sobrescreve equal_*_alert legados com a fórmula
+    # canônica do Pine LuxAlgo `ICT Concepts` (banda dinâmica
+    # atr(10)/a + 3+ swings same-direction).
+    work = detect_eqh_eql(
+        work,
+        eq_atr_length=config.eq_atr_length,
+        eq_margin=config.eq_margin,
+        eq_lookback_pivots=config.eq_lookback_pivots,
+        eq_min_pivots=config.eq_min_pivots,
+    )
     work = compute_trailing_extremes(work)
     work = detect_structure(
         work,
@@ -165,6 +175,7 @@ def analyze(
         'engine_version': __version__,
         'modules_run': [
             'detect_pivots',
+            'detect_eqh_eql',
             'compute_trailing_extremes',
             'detect_structure',
             'detect_order_blocks',
