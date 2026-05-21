@@ -91,20 +91,19 @@ COL_EQUAL_LOW_IDX = 'equal_low_idx'
 COL_EQUAL_HIGH_ALERT = 'equal_high_alert'
 COL_EQUAL_LOW_ALERT = 'equal_low_alert'
 
-# Wave 8.1 — Metadados canônicos do EQH/EQL detectado.
-# Banda é centrada no midpoint dos pivots dentro do match (Pine
-# `Buyside Liquidity box` no nível `(minP+maxP)/2` com tolerância
-# `atr/a`). Pivot count exclui pivots fora da banda.
-COL_EQUAL_HIGH_BAND_HIGH = 'equal_high_band_high'
-COL_EQUAL_HIGH_BAND_LOW = 'equal_high_band_low'
-COL_EQUAL_HIGH_PIVOT_COUNT = 'equal_high_pivot_count'
+# Wave 8.2 — Metadados canônicos do EQH/EQL detectado (SMC Concepts).
+# Pine compara 2 pivots same-direction consecutivos contra `0.1 * atr(200)`.
+# Midpoint = média dos 2 pivots; pivot_indices = bar_indices dos dois.
 COL_EQUAL_HIGH_LEVEL_MIDPOINT = 'equal_high_level_midpoint'
 COL_EQUAL_HIGH_PIVOT_INDICES = 'equal_high_pivot_indices'
-COL_EQUAL_LOW_BAND_HIGH = 'equal_low_band_high'
-COL_EQUAL_LOW_BAND_LOW = 'equal_low_band_low'
-COL_EQUAL_LOW_PIVOT_COUNT = 'equal_low_pivot_count'
 COL_EQUAL_LOW_LEVEL_MIDPOINT = 'equal_low_level_midpoint'
 COL_EQUAL_LOW_PIVOT_INDICES = 'equal_low_pivot_indices'
+
+# Constante canônica: o Pine LuxAlgo SMC Concepts usa `ta.atr(200)`
+# hardcoded para o threshold de EQH/EQL (linhas 124 e 165/182 do
+# Pine fonte em tools/pynecore-validation/luxalgo_smc_compute_only.py).
+# Não parametrizado em SMCConfig — fiel à fonte.
+EQ_ATR_LENGTH_CANONICAL = 200
 
 
 # ============================================================
@@ -238,20 +237,15 @@ def _detect_pivots_for_mode(
             COL_INTERNAL_LOW_LEVEL: low_level,
             COL_INTERNAL_LOW_IDX: low_idx,
         }
-    # mode == 'equal' — replica Pine linhas 165-166 e 182-183 (LuxAlgo SMC).
-    # OBSOLETO (Wave 8.1, briefing §4.3): `equal_high_alert` /
-    # `equal_low_alert` aqui produzidos são SOBRESCRITOS por
-    # `detect_eqh_eql()` na ordem da `engine.analyze()`. A fórmula
-    # canônica (Pine `ICT Concepts`) usa banda dinâmica `atr/a` e exige
-    # 3+ swings same-direction, não 2 com threshold estático. Mantido
-    # neste módulo apenas para preservar a assinatura de
-    # `detect_pivots()` (Wave 3) e produzir `equal_*_level/idx` (Wave 8
-    # liquidity_sweep consome). Os booleans abaixo são placeholders
-    # all-False — qualquer consumidor que precise da semântica antiga
-    # deve usar o pacote dedicado, não esta detecção legada.
+    # mode == 'equal' — emite só os pivots (level/idx). A detecção do
+    # alerta vive em `detect_eqh_eql()` (Wave 8.2, fiel ao Pine SMC
+    # Concepts: 2 pivots consecutivos vs threshold estático
+    # `0.1 * atr(200)`). Os booleans `equal_*_alert` abaixo são
+    # placeholders all-False — sobrescritos quando `engine.analyze()`
+    # orquestra. Consumidores diretos de `detect_pivots()` que precisem
+    # da semântica nova devem chamar `detect_eqh_eql()` em seguida.
     # `equal_threshold` e `atr` retidos na assinatura para compatibilidade
-    # (callers da Wave 3 ainda passam) mas não utilizados — fórmula
-    # canônica vive em detect_eqh_eql() (Wave 8.1).
+    # (callers Wave 3 ainda passam) mas não utilizados aqui.
     del equal_threshold, atr
     equal_high_alert_legacy = pd.Series(False, index=df.index, dtype='bool')
     equal_low_alert_legacy = pd.Series(False, index=df.index, dtype='bool')
@@ -333,121 +327,106 @@ def detect_pivots(
 
 
 # ============================================================
-# Wave 8.1 — EQH/EQL canônico (Pine LuxAlgo `ICT Concepts`).
+# Wave 8.2 — EQH/EQL canônico (Pine LuxAlgo `SMC Concepts`).
 # ============================================================
 
 def detect_eqh_eql(
     df: pd.DataFrame,
     *,
     atr: pd.Series | None = None,
-    eq_atr_length: int = 10,
-    eq_margin: float = 4.0,
-    eq_lookback_pivots: int = 50,
-    eq_min_pivots: int = 3,
+    threshold: float = 0.1,
 ) -> pd.DataFrame:
-    """
-    OBJETIVO
-        Detectar Equal Highs (EQH) e Equal Lows (EQL) usando a fórmula
-        canônica extraída do Pine LuxAlgo `ICT Concepts` (free), per
-        briefing Wave 8.1 §4.1. Substitui a detecção legada (threshold
-        estático `0.1 * atr(200)` sobre 2 pivots) por banda dinâmica
-        `atr(eq_atr_length) / (10/eq_margin)` exigindo `eq_min_pivots`
-        swings same-direction dentro da banda.
+    """Detecta Equal Highs (EQH) e Equal Lows (EQL) fiel ao Pine canônico.
 
-        Resolve issue §12.2 do `MAPA_LUXALGO_CAMADA_1_v1.1.md` (engine
-        produzia 0 alerts EQH/EQL no golden 720 candles).
+    OBJETIVO
+        Reescreve a detecção EQH/EQL conforme o Pine LuxAlgo
+        `SMC Concepts` (gratuito), substituindo a Wave 8.1 — que portou
+        por engano o indicador `ICT Concepts` (banda dinâmica `atr/a` +
+        3+ swings). A fórmula canônica:
+
+            for each new pivot high confirmed at candle X:
+                if abs(equalHigh.currentLevel - high[size]) < 0.1 * atr(200):
+                    currentAlerts.equalHighs = True
+                equalHigh.lastLevel    = equalHigh.currentLevel
+                equalHigh.currentLevel = high[size]
+
+        i.e., compara o pivot novo APENAS contra o pivot imediatamente
+        anterior (`currentLevel`), com threshold ESTÁTICO `0.1 * atr(200)`
+        — não janela de 50 pivots nem banda dinâmica.
+
+        Pine fonte verificado em
+        `tools/pynecore-validation/luxalgo_smc_compute_only.py` linhas
+        89-90 (inputs), 124 (`atrMeasure = ta.atr(200)`), 155-195
+        (`getCurrentStructure` no modo equalHighLow=True).
 
     FONTE DE DADOS
         df: DataFrame contendo as colunas produzidas por `detect_pivots`
-            (equal_high_level/equal_low_level/idx) + OHLC (high/low/close
-            para cálculo interno de ATR se `atr` não fornecida).
+            no modo equal (length=3) — `equal_high_level`,
+            `equal_low_level`, `equal_high_idx`, `equal_low_idx` —
+            mais OHLC (high/low/close para cálculo de ATR(200) se `atr`
+            não for fornecida).
 
-            Decisão arquitetural: pool de pivots = equal-length pivots
-            (`getCurrentStructure(equal_length, true, false)`), não
-            swing-length pivots. Razão: LuxAlgo SMC TradingView
-            (visualmente verificado e ratificado) renderiza EQH/EQL
-            labels sobre os equal-length pivots; o briefing Wave 8.1
-            §4.1 cita Pine ICT Concepts cuja ZigZag interna usa lookback
-            curto (compatível com length=3 do equalHighsLowsLengthInput).
-            Usar swing-length (default 50) produziria ~5 pivots em
-            720 candles 4H — insuficiente para EQH/EQL emergir.
-
-        Pine source da fórmula: `LuxAlgo - ICT Concepts` (free), bloco
-            de criação das Buyside/Sellside Liquidity boxes.
+        ATR length=200 é HARDCODED (`EQ_ATR_LENGTH_CANONICAL`), fiel ao
+        Pine `ta.atr(200)`. Não exposto em SMCConfig.
 
     PARÂMETROS
         atr: Series opcional. Se None, calculada como
-            `atr_wilder(high, low, close, length=eq_atr_length)`. Pine
-            usa `ta.atr(10)` por default.
-        eq_atr_length: período do ATR Wilder. Pine: 10.
-        eq_margin: margin Pine, range [2, 7]. Default 4 (Pine
-            `input.float(4, minval=2, maxval=7)`). Banda = atr / a com
-            `a = 10 / margin`; margin maior → banda mais estreita.
-        eq_lookback_pivots: máximo de pivots same-direction prévios a
-            iterar por confirmação. Pine: `math.min(sz, 50)`.
-        eq_min_pivots: count mínimo de swings dentro da banda para
-            disparar alert. Pine: `count > 2` (3+). Briefing §4.2:
-            default 3.
+            `atr_wilder(high, low, close, length=200)`.
+        threshold: fator multiplicativo do ATR (Pine
+            `equalHighsLowsThresholdInput`, default 0.1, range [0, 0.5]).
+            Reutiliza `SMCConfig.pivot_equal_threshold` (idêntico).
 
     OUTPUT (colunas adicionadas/sobrescritas)
-        equal_high_alert (bool)      — True no candle de confirmação.
+        equal_high_alert (bool)      — True no candle de confirmação do
+            2o pivot (X = candle do pivot real + equal_length).
         equal_low_alert  (bool)
-        equal_high_band_high (float) — limite superior da banda no
-            momento da confirmação: midpoint + atr/a.
-        equal_high_band_low  (float) — midpoint - atr/a.
-        equal_high_pivot_count (float, NaN onde sem alert) — quantos
-            swings same-direction caíram dentro da banda (inclui o
-            atual).
-        equal_high_level_midpoint (float) — `(minMatch + maxMatch) / 2`,
-            i.e., o nível médio dos pivots da banda. Pine usa este
-            valor como centro da Buyside Liquidity box.
-        equal_high_pivot_indices (object) — lista de bar_indices dos
-            pivots que compõem o EQH (atual + prévios dentro da banda).
-            Usa swing_high_idx (bar do swing real, não da confirmação).
-        Mirror para EQL (equal_low_*).
+        equal_high_level_midpoint (float, NaN onde sem alert) — média
+            aritmética dos 2 pivots: `(prev_currentLevel + new) / 2`.
+        equal_low_level_midpoint  (float)
+        equal_high_pivot_indices (object) — lista `[bar_idx_anterior,
+            bar_idx_novo]` dos 2 pivots reais (não dos candles de
+            confirmação). Útil para rastreabilidade visual.
+        equal_low_pivot_indices  (object)
 
-    SEMÂNTICA DE DETECÇÃO (Pine verbatim)
-        Para cada candle X com swing high confirmado (`swing_high_level[X]
-        not NaN`):
-            ph    = swing_high_level[X]
-            atr_x = atr[X]
-            a     = 10 / eq_margin
-            band  = atr_x / a
+    SEMÂNTICA DE DETECÇÃO (estado persistente; equivalente ao Pine
+    `Persistent[pivot] equalHigh`/`equalLow`):
 
-            Walking back nos swing highs prévios (mais recentes primeiro),
-            até eq_lookback_pivots pivots:
-                if prev_level > ph + band: break  # acima da banda
-                if ph - band < prev_level < ph + band:
-                    count += 1
-                    atualizar min/max do match
-            count também inclui o pivot atual (ph cai trivialmente em
-            (ph-band, ph+band) com band > 0).
+        Estado:
+            eq_high_current_level, eq_high_current_idx  (NaN/-1 inicial)
+            eq_low_current_level,  eq_low_current_idx   (NaN/-1 inicial)
 
-            Se `count >= eq_min_pivots`, disparar alert em X com
-            midpoint = (min_match + max_match) / 2.
-
-        Mirror para EQL: swing lows, `break` se prev_level < pl - band.
+        Para cada candle X em ordem cronológica:
+            se equal_high_level[X] não-NaN (novo pivot high confirmado):
+                novo = equal_high_level[X]
+                se eq_high_current_level não-NaN e atr[X] não-NaN:
+                    se abs(eq_high_current_level - novo) < threshold * atr[X]:
+                        equal_high_alert[X] = True
+                        midpoint = média(eq_high_current_level, novo)
+                eq_high_current_level = novo
+                eq_high_current_idx   = equal_high_idx[X]
+            espelho para EQL.
 
     LIMITAÇÕES CONHECIDAS
-        Loop por candle em Python — não vetorizado. Para o golden 720
-        candles 4H com ~14 swing highs, ~200 operações totais —
-        negligível. Para datasets multi-milhão de candles, otimizar
-        depois (não é gargalo atual).
-        Bandas usam comparação ESTRITA (`<` e `>`, Pine), não inclusiva.
-        Pivots exatamente em `ph ± band` ficam de fora.
-        Lookback é por pivots same-direction (não por candles); diverge
-        de Pine que itera sobre o pool `aZZ` (mixed high/low). Briefing
-        §4.3 explicita "só same-direction", divergência intencional.
+        Loop por candle em Python (n iterações); só ~14 pivots equal-mode
+        em 720 candles 4H, dominado pelo overhead do `range(n)`. Para
+        datasets multi-milhão otimizar depois (não é gargalo atual).
+
+        Comparação ESTRITA `<` (Pine usa `<`, não `<=`). Pivots
+        exatamente em `threshold * atr` ficam de fora.
+
+        ATR(200) Wilder leva ~200 candles para estabilizar; janelas
+        curtas terão ATR=NaN no início, então EQH/EQL não dispara — o
+        ramp-up replica o Pine fonte (que também usa ta.atr(200)).
 
     NÃO FAZER
-        Não chamar antes de `detect_pivots` — requer `equal_high_level`
-            e `equal_low_level` populados.
-        Não consumir `equal_high_idx` para semântica de event timestamp
-            — alerts são emitidos no candle de confirmação (X), não no
-            candle do pivot (X - equal_length). bar_idx em pivot_indices
-            é o do pivot real (via equal_*_idx).
-        Não passar `eq_margin` fora de [2.0, 7.0] — validação canônica
-            vive em SMCConfig.__post_init__.
+        Não chamar antes de `detect_pivots` — requer `equal_high_level`,
+            `equal_low_level`, `equal_high_idx`, `equal_low_idx`
+            populados.
+        Não usar `swing_*_level` como pool — o Pine usa o pool
+            equal-length (`getCurrentStructure(equal_length, true,
+            false)`). O rendering visual do LuxAlgo SMC casa
+            exatamente com esses pivots.
+        Não parametrizar ATR length — Pine hardcoded `ta.atr(200)`.
     """
     if COL_EQUAL_HIGH_LEVEL not in df.columns or COL_EQUAL_LOW_LEVEL not in df.columns:
         raise ValueError(
@@ -459,9 +438,10 @@ def detect_eqh_eql(
     n = len(df)
 
     if atr is None:
-        atr = atr_wilder(df['high'], df['low'], df['close'], length=eq_atr_length)
-
-    a = 10.0 / eq_margin
+        atr = atr_wilder(
+            df['high'], df['low'], df['close'],
+            length=EQ_ATR_LENGTH_CANONICAL,
+        )
 
     eq_high_level = df[COL_EQUAL_HIGH_LEVEL].to_numpy()
     eq_low_level = df[COL_EQUAL_LOW_LEVEL].to_numpy()
@@ -470,118 +450,57 @@ def detect_eqh_eql(
     atr_vals = atr.to_numpy()
 
     eqh_alert = np.zeros(n, dtype=bool)
-    eqh_band_high = np.full(n, np.nan)
-    eqh_band_low = np.full(n, np.nan)
-    eqh_count = np.full(n, np.nan)
     eqh_midpoint = np.full(n, np.nan)
     eqh_pivots: list[list[int] | None] = [None] * n
 
     eql_alert = np.zeros(n, dtype=bool)
-    eql_band_high = np.full(n, np.nan)
-    eql_band_low = np.full(n, np.nan)
-    eql_count = np.full(n, np.nan)
     eql_midpoint = np.full(n, np.nan)
     eql_pivots: list[list[int] | None] = [None] * n
 
-    # Pools de swings same-direction confirmados (em ordem cronológica).
-    # Cada entrada: (bar_idx_real_do_pivot, level).
-    high_pool: list[tuple[int, float]] = []
-    low_pool: list[tuple[int, float]] = []
+    # Estado persistente — replica Pine `Persistent[pivot]
+    # equalHigh`/`equalLow` (linha 107-108 do fonte). NaN/-1 inicial.
+    eq_high_current_level = np.nan
+    eq_high_current_idx = -1
+    eq_low_current_level = np.nan
+    eq_low_current_idx = -1
 
     for i in range(n):
-        # --- EQH detection no candle de confirmação ---
+        # --- EQH: novo pivot high confirmado no candle i ---
         ph = eq_high_level[i]
         if not np.isnan(ph):
+            new_idx = int(eq_high_idx[i])
             atr_i = atr_vals[i]
-            if not np.isnan(atr_i) and atr_i > 0:
-                band = atr_i / a
-                upper = ph + band
-                lower = ph - band
-                count = 1  # inclui o atual
-                band_max = ph
-                band_min = ph
-                pivot_idx_current = int(eq_high_idx[i])
-                matched_pivots: list[int] = [pivot_idx_current]
-                checked = 1  # já consideramos o atual
-
-                # Walk back nos equal-length highs same-direction prévios.
-                for (bar_b, level_b) in reversed(high_pool):
-                    if checked >= eq_lookback_pivots:
-                        break
-                    checked += 1
-                    if level_b > upper:
-                        break  # Pine: out of band — parar
-                    if level_b > lower and level_b < upper:
-                        count += 1
-                        if level_b > band_max:
-                            band_max = level_b
-                        if level_b < band_min:
-                            band_min = level_b
-                        matched_pivots.append(bar_b)
-
-                if count >= eq_min_pivots:
-                    midpoint = (band_max + band_min) / 2.0
+            if not np.isnan(eq_high_current_level) and not np.isnan(atr_i):
+                if abs(eq_high_current_level - ph) < threshold * atr_i:
                     eqh_alert[i] = True
-                    eqh_band_high[i] = midpoint + band
-                    eqh_band_low[i] = midpoint - band
-                    eqh_count[i] = count
-                    eqh_midpoint[i] = midpoint
-                    eqh_pivots[i] = matched_pivots
+                    eqh_midpoint[i] = (eq_high_current_level + ph) / 2.0
+                    eqh_pivots[i] = [eq_high_current_idx, new_idx]
+            eq_high_current_level = float(ph)
+            eq_high_current_idx = new_idx
 
-            high_pool.append((int(eq_high_idx[i]), float(ph)))
-
-        # --- EQL detection (mirror) ---
+        # --- EQL: espelho ---
         pl = eq_low_level[i]
         if not np.isnan(pl):
+            new_idx = int(eq_low_idx[i])
             atr_i = atr_vals[i]
-            if not np.isnan(atr_i) and atr_i > 0:
-                band = atr_i / a
-                upper = pl + band
-                lower = pl - band
-                count = 1
-                band_max = pl
-                band_min = pl
-                pivot_idx_current = int(eq_low_idx[i])
-                matched_pivots = [pivot_idx_current]
-                checked = 1
-
-                for (bar_b, level_b) in reversed(low_pool):
-                    if checked >= eq_lookback_pivots:
-                        break
-                    checked += 1
-                    if level_b < lower:
-                        break  # mirror: out of band para baixo
-                    if level_b > lower and level_b < upper:
-                        count += 1
-                        if level_b > band_max:
-                            band_max = level_b
-                        if level_b < band_min:
-                            band_min = level_b
-                        matched_pivots.append(bar_b)
-
-                if count >= eq_min_pivots:
-                    midpoint = (band_max + band_min) / 2.0
+            if not np.isnan(eq_low_current_level) and not np.isnan(atr_i):
+                if abs(eq_low_current_level - pl) < threshold * atr_i:
                     eql_alert[i] = True
-                    eql_band_high[i] = midpoint + band
-                    eql_band_low[i] = midpoint - band
-                    eql_count[i] = count
-                    eql_midpoint[i] = midpoint
-                    eql_pivots[i] = matched_pivots
-
-            low_pool.append((int(eq_low_idx[i]), float(pl)))
+                    eql_midpoint[i] = (eq_low_current_level + pl) / 2.0
+                    eql_pivots[i] = [eq_low_current_idx, new_idx]
+            eq_low_current_level = float(pl)
+            eq_low_current_idx = new_idx
 
     result[COL_EQUAL_HIGH_ALERT] = eqh_alert
-    result[COL_EQUAL_HIGH_BAND_HIGH] = eqh_band_high
-    result[COL_EQUAL_HIGH_BAND_LOW] = eqh_band_low
-    result[COL_EQUAL_HIGH_PIVOT_COUNT] = eqh_count
     result[COL_EQUAL_HIGH_LEVEL_MIDPOINT] = eqh_midpoint
-    result[COL_EQUAL_HIGH_PIVOT_INDICES] = pd.Series(eqh_pivots, index=df.index, dtype='object')
+    result[COL_EQUAL_HIGH_PIVOT_INDICES] = pd.Series(
+        eqh_pivots, index=df.index, dtype='object',
+    )
 
     result[COL_EQUAL_LOW_ALERT] = eql_alert
-    result[COL_EQUAL_LOW_BAND_HIGH] = eql_band_high
-    result[COL_EQUAL_LOW_BAND_LOW] = eql_band_low
-    result[COL_EQUAL_LOW_PIVOT_COUNT] = eql_count
     result[COL_EQUAL_LOW_LEVEL_MIDPOINT] = eql_midpoint
-    result[COL_EQUAL_LOW_PIVOT_INDICES] = pd.Series(eql_pivots, index=df.index, dtype='object')
+    result[COL_EQUAL_LOW_PIVOT_INDICES] = pd.Series(
+        eql_pivots, index=df.index, dtype='object',
+    )
 
     return result

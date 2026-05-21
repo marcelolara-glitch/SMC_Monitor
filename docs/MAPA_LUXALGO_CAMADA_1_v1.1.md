@@ -894,60 +894,111 @@ problema, se existir, está em rendering visual rolling do LuxAlgo
 ou em interpretação de screenshot. Onda 10 (IStrategy Freqtrade)
 pode prosseguir.
 
-### 12.2. EQH/EQL — Divergência de fórmula — **RESOLVIDO (Wave 8.1)**
+### 12.2. EQH/EQL — Divergência de fórmula — **ABERTA (Wave 8.2 reescrita; ground truth não reproduzido)**
 
 **Categoria:** Divergência algorítmica em `smc_engine/pivots.py`.
 **Origem:** Spot-check Onda 9 (Apêndice A do GPT-5).
-**Status:** **Resolvido em Wave 8.1** (branch
-`claude/fix-eqh-eql-detection-19OSj`). Fórmula canônica do Pine
-LuxAlgo `ICT Concepts` (free) portada em
-`smc_engine.pivots.detect_eqh_eql`, encaixada na pipeline da
-`engine.analyze()` após `detect_pivots`.
+**Status:** **Wave 8.1 desfeita; Wave 8.2 reescreve canônica fiel
+ao SMC Concepts** (branch `claude/eqheql-canonical-rewrite-kOs1o`).
+Ground truth visual de alta confiança **NÃO reproduzido** — issue
+permanece aberta para diagnóstico read-only adicional (briefing
+Wave 8.2 §7).
 
-**Sintoma histórico:**
-- Engine produzia **0 alerts** de EQH/EQL nos 720 candles 4H.
-- LuxAlgo TradingView mostrava alguns labels EQH/EQL na chart
-  correspondente.
+**Lição aprendida (Wave 8.1 → 8.2):**
+A Wave 8.1 portou por engano a fórmula do indicador **`ICT
+Concepts`** (banda dinâmica `atr(10)/a` + 3+ swings same-direction).
+O EQH/EQL canônico vem do **`SMC Concepts`** (indicador gratuito
+distinto), cujo Pine compilado está em
+`tools/pynecore-validation/luxalgo_smc_compute_only.py` linhas
+89-90, 124, 155-195:
 
-**Causa identificada:**
-Fórmula efetiva divergia da do Pine LuxAlgo. Tabela comparativa
-(Wave 8.1 briefing §4.3):
+```python
+# Pine SMC Concepts (canônico):
+equalHighsLowsLengthInput = input.int(3, 'EQH/EQL Bars', minval=1)
+equalHighsLowsThresholdInput = input.float(0.1, minval=0, maxval=0.5)
+atrMeasure = ta.atr(200)
+# getCurrentStructure(equalHighsLowsLengthInput, True):
+if equalHighLow and abs(p_ivot.currentLevel - high[size]) < equalHighsLowsThresholdInput * atrMeasure:
+    currentAlerts.equalHighs = True
+p_ivot.lastLevel = p_ivot.currentLevel
+p_ivot.currentLevel = high[size]
+```
 
-| Aspecto | Wave 3 (anterior) | Wave 8.1 (canônica) |
+i.e., compara o pivot novo APENAS contra o pivot imediatamente
+anterior (`currentLevel`), com threshold ESTÁTICO `0.1 × atr(200)`.
+
+**SMC Concepts ≠ ICT Concepts.** Não são intercambiáveis. Tabela
+comparativa:
+
+| Aspecto | Wave 8.1 (ICT Concepts — ERRADA) | Wave 8.2 (SMC Concepts — CANÔNICA) |
 |---|---|---|
-| Threshold | fixo `0.1 × atr(200)` | dinâmico `atr(10)/a` com `a = 10/margin` |
-| Min. pivots | 2 (apenas anterior) | 3+ within band |
-| Lookback | toda história (via ffill+shift) | últimos 50 pivots same-direction |
-| Filtro direção | ambas | só same-direction (highs com highs) |
+| Pivots comparados | 3+ dentro de banda | 2 consecutivos (currentLevel vs novo) |
+| Threshold | dinâmico `atr/a` (a=10/margin) | estático `0.1 × atr(200)` |
+| Lookback | 50 pivots same-direction | apenas o pivot imediatamente anterior |
+| ATR | `atr(10)` | `atr(200)` |
 
-**Resolução implementada:**
-- Nova função `detect_eqh_eql()` em `smc_engine/pivots.py` usando
-  a fórmula canônica extraída do Pine LuxAlgo `ICT Concepts`
-  (Wave 8.1 briefing §4.1).
-- 4 parâmetros novos em `SMCConfig`: `eq_atr_length=10`,
-  `eq_margin=4.0`, `eq_lookback_pivots=50`, `eq_min_pivots=3`.
-- Pool de detecção: equal-length pivots (length=3, mesmo
-  rendering visual do LuxAlgo SMC TradingView), não swing-length
-  pivots.
-- Colunas legadas `equal_high_alert` / `equal_low_alert` mantidas
-  com nova semântica; metadados novos: `equal_*_band_high`,
-  `equal_*_band_low`, `equal_*_pivot_count`,
-  `equal_*_level_midpoint`, `equal_*_pivot_indices`.
+**Estado atual (Wave 8.2):**
+- Função `detect_eqh_eql()` reescrita fiel ao Pine SMC Concepts.
+- 4 parâmetros da Wave 8.1 removidos do `SMCConfig`
+  (`eq_atr_length`, `eq_margin`, `eq_lookback_pivots`, `eq_min_pivots`).
+  Reusa `pivot_equal_threshold=0.1` e `pivot_equal_length=3` (Wave 3).
+- ATR length=200 hardcoded em `EQ_ATR_LENGTH_CANONICAL` (fiel ao
+  Pine `ta.atr(200)`).
+- Colunas removidas: `equal_*_band_high`, `equal_*_band_low`,
+  `equal_*_pivot_count` (faziam sentido só na fórmula de banda).
+- Colunas mantidas: `equal_*_alert`, `equal_*_level_midpoint`,
+  `equal_*_pivot_indices` (par dos 2 pivots).
 
-**Resultado sobre o golden 720 candles 4H:**
-- **5 EQH** + **5 EQL** alerts detectados (vs 0 anteriores).
+**Resultado sobre o golden 720 candles 4H (Wave 8.2):**
+- **0 EQH** + **0 EQL** alerts detectados (regrediu ao estado
+  pré-Wave-8.1, mas agora por motivo conhecido e canônico).
 - Os 226 events + 34 zones ratificados em Onda 9 permanecem
-  **inalterados em quantidade e identidade**.
-- Ledger gerado em `tests/golden/wave8_1_eqheql_events.csv` para
-  ratificação visual em PR separado.
+  **inalterados em quantidade e identidade** (EQH/EQL nunca
+  contribuíram para esses 226).
+- Ledger vazio em `tests/golden/wave8_2_eqheql_events.csv`;
+  README adjacente
+  (`tests/golden/wave8_2_eqheql_events.README.md`) documenta
+  diagnóstico quantitativo.
 
-**Divergência residual documentada:**
-A versão paga do PAC pode usar pool diferente (briefing §4.1
-discute opções `aZZ` ZigZag do ICT Concepts vs equal-length da
-LuxAlgo SMC). Decisão Wave 8.1: usar equal-length pivots para
-alinhar com o rendering visual do indicador gratuito (única
-fonte ratificável). Re-investigar se PR de ratificação visual
-indicar divergência sistemática.
+**Análise do gap vs ground truth:**
+
+Dos 5 níveis de **alta confiança** do briefing Wave 8.2 §5:
+
+| Ground truth | Candle | ATR(200) NaN? | Detectado? |
+|---|---|---|---|
+| EQL ~94.4k @ 15 jan | ~84 | sim | não |
+| EQH ~89.3k @ 27-28 jan | ~160 | sim | não |
+| EQH ~79.1k @ 1-2 fev | ~190 | sim | não |
+| EQH ~68.8k @ 27 fev | ~340 | não | não (diff ~2k+ USD vs thresh ~120) |
+| EQH ~67.2k @ 3 abr | ~570 | não | não (diff 150 USD vs thresh 110) |
+
+ATR(200) só estabiliza em idx 199 (~3 fev), mascarando 3 dos 5
+níveis. Os 2 restantes (pós-warmup) não casam pela margem do
+threshold canônico (`0.1 × atr200 ≈ 100-130 USD` vs movimentos
+típicos entre pivots equal-length de 500-3000 USD na janela).
+
+**Hipóteses não confirmadas (briefing §7):**
+
+1. ATR warmup do janela 720 candles vs full history do TradingView.
+2. Threshold estático muito apertado para BTC 4H neste regime.
+3. Pool de pivots equal-length=3 com granularidade divergente do Pine.
+4. Bug latente na detecção de legs (Wave 3) — requer diagnóstico
+   read-only separado.
+5. Ground truth pode misturar SMC Concepts + ICT Concepts no chart
+   visual do ChatGPT.
+
+**Próximos passos (decisão de Marcelo, fora do escopo da 8.2):**
+
+- Re-verificação visual no TradingView confirmando que os labels
+  EQH/EQL listados no ground truth são de SMC Concepts (não ICT).
+- Comparar pool de pivots equal-length da engine vs Pine fonte
+  rodando lado-a-lado.
+- Considerar onda follow-up para investigar leg detection.
+
+**Não-bloqueante.** Engine produz histórico imutável; 226 events
+ratificados intactos. Onda 10 pode prosseguir; EQH/EQL fica como
+módulo "presente no pipeline mas sem hits na janela atual" até
+diagnóstico futuro.
 
 ### 12.3. Inconsistência `meta.scope_included` no schema canônico
 
@@ -989,7 +1040,7 @@ opcional para a Opção B fica disponível como melhoria menor.
 | Issue | Categoria | Bloqueante | Onda candidata para resolução |
 |---|---|---|---|
 | 12.1 ob_id=7 | Divergência visual isolada | Não | Pós-Onda 10 ou em janela fresca |
-| 12.2 EQH/EQL formula | Divergência algorítmica | Não | Onda 7.x ou 9.x |
+| 12.2 EQH/EQL formula | Divergência algorítmica (Wave 8.2 reescrita; ground truth não reproduzido) | Não | Diagnóstico read-only de legs/pool ou re-verificação visual |
 | 12.3 scope_included | Documental | Não | Melhoria opcional |
 
 ---

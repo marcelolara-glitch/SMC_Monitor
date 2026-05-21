@@ -137,15 +137,12 @@ def analyze(
         equal_length=config.pivot_equal_length,
         equal_threshold=config.pivot_equal_threshold,
     )
-    # Wave 8.1 — sobrescreve equal_*_alert legados com a fórmula
-    # canônica do Pine LuxAlgo `ICT Concepts` (banda dinâmica
-    # atr(10)/a + 3+ swings same-direction).
+    # Wave 8.2 — sobrescreve equal_*_alert legados com a fórmula
+    # canônica do Pine LuxAlgo `SMC Concepts` (2 pivots consecutivos
+    # vs threshold estático `0.1 * atr(200)`).
     work = detect_eqh_eql(
         work,
-        eq_atr_length=config.eq_atr_length,
-        eq_margin=config.eq_margin,
-        eq_lookback_pivots=config.eq_lookback_pivots,
-        eq_min_pivots=config.eq_min_pivots,
+        threshold=config.pivot_equal_threshold,
     )
     work = compute_trailing_extremes(work)
     work = detect_structure(
