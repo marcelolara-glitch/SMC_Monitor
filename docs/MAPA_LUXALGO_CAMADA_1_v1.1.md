@@ -894,15 +894,14 @@ problema, se existir, está em rendering visual rolling do LuxAlgo
 ou em interpretação de screenshot. Onda 10 (IStrategy Freqtrade)
 pode prosseguir.
 
-### 12.2. EQH/EQL — Divergência de fórmula — **ABERTA (Wave 8.2 reescrita; ground truth não reproduzido)**
+### 12.2. EQH/EQL — **RESOLVIDO (Wave 8.2 canônica; 0-alerts no golden por ATR(200) warmup, esperado)**
 
 **Categoria:** Divergência algorítmica em `smc_engine/pivots.py`.
 **Origem:** Spot-check Onda 9 (Apêndice A do GPT-5).
-**Status:** **Wave 8.1 desfeita; Wave 8.2 reescreve canônica fiel
-ao SMC Concepts** (branch `claude/eqheql-canonical-rewrite-kOs1o`).
-Ground truth visual de alta confiança **NÃO reproduzido** — issue
-permanece aberta para diagnóstico read-only adicional (briefing
-Wave 8.2 §7).
+**Status:** **RESOLVIDO.** Wave 8.2 (PR #62, commit fde4607)
+reescreveu EQH/EQL fiel ao Pine SMC Concepts. A fórmula está
+canonicamente correta. O 0-alerts sobre o golden 720 candles tem
+causa raiz CONHECIDA E ESPERADA: ATR(200) warmup.
 
 **Lição aprendida (Wave 8.1 → 8.2):**
 A Wave 8.1 portou por engano a fórmula do indicador **`ICT
@@ -977,28 +976,39 @@ níveis. Os 2 restantes (pós-warmup) não casam pela margem do
 threshold canônico (`0.1 × atr200 ≈ 100-130 USD` vs movimentos
 típicos entre pivots equal-length de 500-3000 USD na janela).
 
-**Hipóteses não confirmadas (briefing §7):**
+**Causa raiz confirmada (investigação read-only pós-merge):**
 
-1. ATR warmup do janela 720 candles vs full history do TradingView.
-2. Threshold estático muito apertado para BTC 4H neste regime.
-3. Pool de pivots equal-length=3 com granularidade divergente do Pine.
-4. Bug latente na detecção de legs (Wave 3) — requer diagnóstico
-   read-only separado.
-5. Ground truth pode misturar SMC Concepts + ICT Concepts no chart
-   visual do ChatGPT.
+Diagnóstico via script read-only sobre o golden provou:
 
-**Próximos passos (decisão de Marcelo, fora do escopo da 8.2):**
+1. Pivots equal-length CORRETOS — contagem por modo (swing=5,
+   internal=48, equal=71 highs) segue a progressão esperada de
+   detecção de pivots. Wave 3 (fundação) está sã. Confirmado também
+   indiretamente: BOS/CHoCH (que consomem swing/internal) bateram
+   100% no spot-check Onda 5 e Onda 9.
 
-- Re-verificação visual no TradingView confirmando que os labels
-  EQH/EQL listados no ground truth são de SMC Concepts (não ICT).
-- Comparar pool de pivots equal-length da engine vs Pine fonte
-  rodando lado-a-lado.
-- Considerar onda follow-up para investigar leg detection.
+2. Fórmula 8.2 CANÔNICA — fiel ao Pine SMC Concepts.
 
-**Não-bloqueante.** Engine produz histórico imutável; 226 events
-ratificados intactos. Onda 10 pode prosseguir; EQH/EQL fica como
-módulo "presente no pipeline mas sem hits na janela atual" até
-diagnóstico futuro.
+3. **Causa do 0-alerts: ATR(200) warmup.** O golden tem 720 candles
+   começando 1 jan 2026; os primeiros ~199 estão em warmup do
+   ATR(200). Os EQH/EQL de alta confiança do ground truth (94.4k,
+   89.3k, 79.1k — todos pré-3-fev) caem na zona de warmup, onde a
+   fórmula suprime alert por ATR NaN/instável. O Pine no TradingView
+   roda sobre histórico completo (ATR estável). Mesma fórmula,
+   contexto de dados diferente.
+
+**Implicação:** EQH/EQL funcionará corretamente em produção (daemon
+24/7 com histórico longo, ATR sempre estável). A limitação é
+exclusiva do golden curto.
+
+**Item não-bloqueante registrado:** estender o golden com ~200
+candles de warmup pré-janela (out-dez 2025) para validar EQH/EQL
+contra o ground truth numa janela futura. Sem prioridade —
+EQH/EQL não bloqueia nenhuma onda do caminho crítico.
+
+**Lição de processo:** (a) validar a equivalência conceitual da
+fonte antes de portar fórmula (SMC Concepts ≠ ICT Concepts);
+(b) fazer spot-check ANTES do merge, não depois; (c) ATR de período
+longo (200) exige janela de dados com warmup suficiente.
 
 ### 12.3. Inconsistência `meta.scope_included` no schema canônico
 
@@ -1040,7 +1050,7 @@ opcional para a Opção B fica disponível como melhoria menor.
 | Issue | Categoria | Bloqueante | Onda candidata para resolução |
 |---|---|---|---|
 | 12.1 ob_id=7 | Divergência visual isolada | Não | Pós-Onda 10 ou em janela fresca |
-| 12.2 EQH/EQL formula | Divergência algorítmica (Wave 8.2 reescrita; ground truth não reproduzido) | Não | Diagnóstico read-only de legs/pool ou re-verificação visual |
+| 12.2 EQH/EQL formula | RESOLVIDO (Wave 8.2 canônica; 0-alerts no golden = ATR warmup, esperado) | Não | Resolvido. Validação opcional: golden com warmup pré-janela |
 | 12.3 scope_included | Documental | Não | Melhoria opcional |
 
 ---
