@@ -111,7 +111,7 @@ def analyze(
     Returns:
         AnalyzeResult com:
             - df: input + 52 colunas dos 6 detectores
-            - ledger_ob: ledger de Order Blocks (11 colunas)
+            - ledger_ob: ledger de Order Blocks (12 colunas)
             - ledger_fvg: ledger de FVGs (11 colunas)
             - meta: dict com engine_version, modules_run,
               candle_count, config_used

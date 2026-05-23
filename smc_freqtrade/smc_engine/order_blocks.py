@@ -6,28 +6,46 @@ OBJETIVO
     Order Blocks em duas escalas (internal e swing) e duas direções
     (bullish e bearish).
 
+    Onda 6.2 estende o módulo com Breaker Blocks (PAC/FluxCharts): a
+    mitigação da Onda 6 já é o nascimento do breaker; a 6.2 detecta a
+    MORTE do breaker (preço sai pela extremidade oposta) e captura o
+    volume do candle da mitigação em `bb_volume`. Estado vai de
+    `'mitigated'` (breaker vivo) para `'breaker_broken'` (breaker
+    morto), preenchendo `t_invalidation`.
+
     Primeira onda do projeto cuja unidade de saída tem ciclo de vida
-    multi-candle (criação → ativo → mitigado). Wave 6 emite apenas
-    `state ∈ {'active', 'mitigated'}` (`'breaker'` é hook Onda 6.2).
+    multi-candle (criação → ativo → mitigado → breaker_broken).
+    Vocabulário de estado: `state ∈ {'active', 'mitigated',
+    'breaker_broken'}`.
 
 FONTE DE DADOS
     DataFrame com 4 colunas OHLC ('open', 'high', 'low', 'close'),
     coluna 'date' (Int64 epoch ms ou pd.Timestamp), 4 colunas
     COL_*_IDX produzidas por detect_pivots (Onda 3) e 8 booleans
-    BOS/CHoCH produzidas por detect_structure (Onda 5).
+    BOS/CHoCH produzidas por detect_structure (Onda 5). Coluna
+    `volume` é opcional: quando presente, alimenta `bb_volume` no
+    candle da mitigação; quando ausente, `bb_volume` permanece
+    `pd.NA`. Volume NÃO é pré-condição da Wave 6/6.2.
 
 LIMITAÇÕES CONHECIDAS
     Lookahead-safe por construção: consome apenas colunas já
     materializadas pelas Ondas 3 e 5 (todas lookahead-safe). Nenhum
-    `shift(-N)` interno.
+    `shift(-N)` interno. Scan de morte do breaker é forward com
+    `date > t_mitigation` estritamente posterior (espelha P11 — o
+    breaker não pode morrer no candle em que nasce).
 
     Política de mitigação `date > t_creation` estritamente posterior
     (briefing §2 P11) diverge sutilmente do Pine, que executa
     `deleteOrderBlocks` no mesmo candle do create. Decisão fechada:
     "OB não pode morrer ao nascer". Cenário praticamente irrelevante.
 
-    Volumetric OB / Breaker Blocks / OB Mitigation Average NÃO são
-    detectados — hooks reservados (Onda 6.1/6.2).
+    Divergência intencional vs PAC/FluxCharts: o PAC remove o
+    breaker morto da lista; aqui preservamos o registro com
+    `state = 'breaker_broken'` (histórico imutável). Análogo à
+    divergência FVG full-fill registrada no Mapa §7.10.
+
+    Volumetric OB / OB Mitigation Average NÃO são detectados nesta
+    onda — hooks reservados (Onda 6.1).
 
     Cap de 100 OBs do Pine (linhas 234-235) NÃO portado — bound de
     implementação Pine, não regra semântica (briefing §2 P10).
@@ -39,10 +57,14 @@ NÃO FAZER
     Não emitir efeitos colaterais sobre o DataFrame de entrada.
     Não popular EngineState (Mapa §2 v1.1).
     Não detectar Volumetric OB — Onda 6.1.
-    Não detectar Breaker Blocks — Onda 6.2.
     Não implementar mitigation='Average' — Onda 6.1.
     Não portar o cap de 100 OBs do Pine.
     Não renomear OrderBlock.bar_time → t_origin (briefing §2 P12).
+    Não emitir booleans per-candle de morte de breaker — derivável
+        do ledger via t_invalidation; per-candle "breaker vivo em X"
+        é escopo da Onda 9.4 (engine MTF).
+    Não materializar `is_breaker` — derivável: `state == 'mitigated'`
+        ⇔ breaker vivo; `state == 'breaker_broken'` ⇔ breaker morto.
 """
 from __future__ import annotations
 
@@ -213,6 +235,7 @@ def _emit_create_record(
         't_invalidation': pd.NaT,
         'state': 'active',
         'volumetric_intensity': pd.NA,
+        'bb_volume': pd.NA,
     }
 
 
@@ -297,16 +320,26 @@ def _resolve_mitigations(
     records: list[dict],
     mitigation: str,
 ) -> tuple[dict[str, pd.Series], list[dict]]:
-    """MITIGATION pass. Para cada OB, busca primeira vela
-    `date > t_creation` que satisfaz a condição de mitigação.
+    """MITIGATION + BREAKER DEATH pass. Para cada OB, busca primeira
+    vela `date > t_creation` que satisfaz a condição de mitigação;
+    se houver mitigação (= nascimento do breaker, PAC/FluxCharts),
+    continua o scan a partir do candle seguinte buscando a morte do
+    breaker pela extremidade OPOSTA da caixa.
 
     Pine linhas 200-221 +
         bearish_source = close if mitigation == 'Close' else high
         bullish_source = close if mitigation == 'Close' else low
     (Pine linhas 122-123). Política `date > t_creation` estrita
-    (briefing §2 P11) — exclui o próprio candle do CREATE.
+    (briefing §2 P11) — exclui o próprio candle do CREATE. Política
+    análoga `date > t_mitigation` estrita para a morte do breaker
+    (briefing 6.2 §2 P8) — exclui o próprio candle do nascimento.
+
+    Reescreve o mesmo registro com `t_invalidation` + `state =
+    'breaker_broken'` quando a morte é encontrada; senão `state`
+    permanece `'mitigated'` e `t_invalidation` permanece NaT
+    (breaker vivo até o fim do dataset). Captura `bb_volume` no
+    candle da mitigação se a coluna `volume` existir.
     """
-    n = len(df)
     mitigated_cols: dict[str, pd.Series] = {
         combo[6]: pd.Series(False, index=df.index, dtype=bool)
         for combo in _CREATE_PASS_ORDER
@@ -324,6 +357,9 @@ def _resolve_mitigations(
         # 'Wick' = HIGHLOW no Pine.
         bearish_source = df['high']
         bullish_source = df['low']
+
+    has_volume = 'volume' in df.columns
+    volume_series = df['volume'] if has_volume else None
 
     dates = df['date']
     out_records: list[dict] = []
@@ -343,7 +379,9 @@ def _resolve_mitigations(
 
         new_record = dict(record)
         if hits.any():
-            hit_label = df.index[hits.to_numpy().argmax()]
+            hit_arr = hits.to_numpy()
+            hit_pos = int(hit_arr.argmax())
+            hit_label = df.index[hit_pos]
             t_mit = dates.loc[hit_label]
             new_record['t_mitigation'] = t_mit
             new_record['state'] = 'mitigated'
@@ -351,22 +389,53 @@ def _resolve_mitigations(
             mit_col = mitigated_col_lookup[(scope, bias)]
             mitigated_cols[mit_col].loc[hit_label] = True
 
+            if has_volume:
+                vol_val = volume_series.loc[hit_label]
+                new_record['bb_volume'] = (
+                    pd.NA if pd.isna(vol_val) else float(vol_val)
+                )
+
+            # BREAKER DEATH scan: extremidade oposta, candle estritamente
+            # posterior à mitigação (briefing 6.2 §2 P8 / §3).
+            # OB BULLISH virou breaker bearish: morre quando fonte_para_cima
+            #   (close ou high) > bar_high.
+            # OB BEARISH virou breaker bullish: morre quando fonte_para_baixo
+            #   (close ou low) < bar_low.
+            start = hit_pos + 1
+            if start < len(df):
+                if bias == BULLISH:
+                    death_src = (
+                        df['close'] if mitigation == 'Close' else df['high']
+                    )
+                    death_hits = death_src.iloc[start:] > bar_high
+                else:
+                    death_src = (
+                        df['close'] if mitigation == 'Close' else df['low']
+                    )
+                    death_hits = death_src.iloc[start:] < bar_low
+                if death_hits.any():
+                    death_arr = death_hits.to_numpy()
+                    death_label = df.index[start + int(death_arr.argmax())]
+                    new_record['t_invalidation'] = dates.loc[death_label]
+                    new_record['state'] = 'breaker_broken'
+
         out_records.append(new_record)
 
     return mitigated_cols, out_records
 
 
 def _build_ledger(records: list[dict]) -> pd.DataFrame:
-    """Constrói DataFrame ledger com schema canônico (briefing §4.3).
+    """Constrói DataFrame ledger com schema canônico (briefing §4.3
+    + 6.2 §4).
 
-    11 colunas: ob_id, scope, bias, bar_high, bar_low, bar_time,
+    12 colunas: ob_id, scope, bias, bar_high, bar_low, bar_time,
     t_creation, t_mitigation, t_invalidation, state,
-    volumetric_intensity.
+    volumetric_intensity, bb_volume.
     """
     columns = [
         'ob_id', 'scope', 'bias', 'bar_high', 'bar_low', 'bar_time',
         't_creation', 't_mitigation', 't_invalidation', 'state',
-        'volumetric_intensity',
+        'volumetric_intensity', 'bb_volume',
     ]
     if not records:
         # Ledger vazio com schema correto.
@@ -383,6 +452,9 @@ def _build_ledger(records: list[dict]) -> pd.DataFrame:
     ledger['volumetric_intensity'] = ledger['volumetric_intensity'].astype(
         'Float64',
     )
+    # bb_volume: Float64 nullable; pd.NA quando coluna `volume`
+    # ausente no df de entrada (Wave 6.2 §2 P7).
+    ledger['bb_volume'] = ledger['bb_volume'].astype('Float64')
     return ledger
 
 
@@ -432,7 +504,9 @@ def detect_order_blocks(
     LIMITAÇÕES CONHECIDAS
         Lookahead-safe por construção: consome apenas COL_*_IDX e
             8 booleans já materializados pelas ondas 3 e 5 (todos
-            lookahead-safe). Nenhum shift(-N) interno.
+            lookahead-safe). Nenhum shift(-N) interno. O scan de
+            morte do breaker é forward com `date > t_mitigation`
+            estritamente posterior (briefing 6.2 §2 P8).
 
         Política de mitigação `date > t_creation` (estritamente
             posterior) diverge sutilmente do Pine (que executa
@@ -441,6 +515,20 @@ def detect_order_blocks(
             morrer ao nascer". Cenário praticamente irrelevante
             (close cruza pivot mas wicks raramente furam lado oposto
             da janela no mesmo candle).
+
+        Detecção de Breaker Blocks (Onda 6.2) implementada via morte
+            em `t_invalidation` + estado terminal `'breaker_broken'`,
+            sob o reenquadramento PAC: mitigação ≡ nascimento do
+            breaker (a Onda 6 já detecta o nascimento via
+            `t_mitigation` + `state='mitigated'`); a 6.2 detecta a
+            MORTE quando o preço sai pela extremidade oposta da
+            caixa. **Divergência intencional vs PAC/FluxCharts**:
+            o PAC remove o breaker morto da lista; aqui preservamos
+            o registro (histórico imutável) — análogo à divergência
+            FVG full-fill registrada no Mapa §7.10. `is_breaker`
+            não é materializado: é derivável (`state == 'mitigated'`
+            ⇔ breaker vivo; `state == 'breaker_broken'` ⇔ breaker
+            morto).
 
         Volumetric Order Blocks (LuxAlgo pago) NÃO são detectados
             nesta onda. Hook reservado: campo
@@ -456,16 +544,10 @@ def detect_order_blocks(
 
             Pré-condição Onda 6.1: DataFrame de entrada deve incluir
             coluna `volume` (padrão Freqtrade OHLCV). Não é
-            pré-condição da Wave 6 base — apenas da extensão Onda
-            6.1.
-
-        Breaker Blocks (LuxAlgo pago) NÃO são detectados nesta onda.
-            Hook reservado: campo OrderBlock.state aceita futuro
-            valor 'breaker' (Wave 6 só emite 'active' e 'mitigated').
-            Decisão arquitetural fechada no briefing da Onda 6:
-            adiada para Onda 6.2 (refatora _resolve_mitigations para
-            state-aware: 'active' → 'breaker' em vez de remoção;
-            segunda mitigação remove definitivamente).
+            pré-condição da Wave 6/6.2 base — apenas da extensão
+            Onda 6.1. Em 6.2 a coluna `volume` é opcional: alimenta
+            `bb_volume` se presente; caso contrário `bb_volume`
+            permanece `pd.NA` (briefing 6.2 §2 P7).
 
         OB Mitigation Method = Average (LuxAlgo pago) NÃO é
             implementada nesta onda. Hook reservado: parâmetro
@@ -489,10 +571,13 @@ def detect_order_blocks(
             `swing_order_blocks` / `internal_order_blocks` do
             EngineState herdado do Pine.
         Não detectar Volumetric OB — Onda 6.1.
-        Não detectar Breaker Blocks — Onda 6.2.
         Não implementar mitigation='Average' — Onda 6.1.
         Não portar o cap de 100 OBs do Pine.
         Não renomear OrderBlock.bar_time → t_origin (P12).
+        Não emitir booleans per-candle de morte de breaker — escopo
+            da Onda 9.4 (engine MTF), derivável do ledger via
+            `t_invalidation`.
+        Não materializar `is_breaker` — derivável do `state`.
     """
     if ob_filter not in ('Atr', 'Range'):
         raise ValueError(

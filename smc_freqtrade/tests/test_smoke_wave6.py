@@ -187,21 +187,34 @@ def test_smoke_wave6_lifecycle(synthetic_df):
     # Invariante 7 — scope ∈ {'internal', 'swing'}.
     assert set(ledger['scope'].unique()).issubset({'internal', 'swing'})
 
-    # Invariante 8 — state ∈ {'active', 'mitigated'} (sem 'breaker').
-    assert set(ledger['state'].unique()).issubset({'active', 'mitigated'})
+    # Invariante 8 — state ∈ {'active','mitigated','breaker_broken'}
+    # (vocabulário ampliado pela Onda 6.2).
+    assert set(ledger['state'].unique()).issubset(
+        {'active', 'mitigated', 'breaker_broken'}
+    )
 
     # Invariante 9 — state == 'active' ⇔ t_mitigation is pd.NaT.
+    # `'mitigated'` e `'breaker_broken'` ambos têm t_mitigation
+    # preenchido (6.2 §2 P2: morte preserva t_mitigation original).
     active_mask = ledger['state'] == 'active'
     assert active_mask.eq(ledger['t_mitigation'].isna()).all()
 
-    # Invariante 10 — t_invalidation sempre pd.NaT em Wave 6.
-    assert ledger['t_invalidation'].isna().all()
+    # Invariante 10 — t_invalidation preenchido sse state ==
+    # 'breaker_broken' (6.2 §2 P5).
+    breaker_broken_mask = ledger['state'] == 'breaker_broken'
+    assert breaker_broken_mask.eq(ledger['t_invalidation'].notna()).all()
 
-    # Invariante 11 — volumetric_intensity sempre None em Wave 6.
+    # Invariante 11 — volumetric_intensity sempre None (hook 6.1).
     assert ledger['volumetric_intensity'].isna().all()
 
     # Cobertura mínima da fixture: pelo menos 1 mitigated e 1 active.
-    assert (ledger['state'] == 'mitigated').sum() >= 1
+    # Mitigated agrega `'mitigated'` (breaker vivo) + `'breaker_broken'`
+    # (breaker morto) — ambos descendem da mitigação Wave 6.
+    n_mitigated_or_broken = (
+        (ledger['state'] == 'mitigated')
+        | (ledger['state'] == 'breaker_broken')
+    ).sum()
+    assert n_mitigated_or_broken >= 1
     assert (ledger['state'] == 'active').sum() >= 1
 
 

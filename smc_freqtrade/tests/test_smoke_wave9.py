@@ -61,11 +61,11 @@ def test_analyze_df_has_expected_columns(synthetic_df: pd.DataFrame) -> None:
 
 
 def test_analyze_ledgers_are_dataframes(synthetic_df: pd.DataFrame) -> None:
-    """Ledgers OB e FVG são pd.DataFrame com 11 colunas cada."""
+    """Ledgers OB (12 colunas, +bb_volume na 6.2) e FVG (11 colunas)."""
     result = analyze(synthetic_df)
     assert isinstance(result.ledger_ob, pd.DataFrame)
     assert isinstance(result.ledger_fvg, pd.DataFrame)
-    assert len(result.ledger_ob.columns) == 11
+    assert len(result.ledger_ob.columns) == 12
     assert len(result.ledger_fvg.columns) == 11
 
 
