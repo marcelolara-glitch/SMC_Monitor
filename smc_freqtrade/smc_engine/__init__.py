@@ -35,6 +35,8 @@ from .fvg import (
     COL_FVG_BEARISH_CREATED,
     COL_FVG_BULLISH_MITIGATED,
     COL_FVG_BEARISH_MITIGATED,
+    COL_FVG_BULLISH_INVERSE_BROKEN,
+    COL_FVG_BEARISH_INVERSE_BROKEN,
 )
 from .liquidity_sweep import (
     detect_liquidity_sweeps,
@@ -206,6 +208,8 @@ __all__ = [
     "COL_FVG_BEARISH_CREATED",
     "COL_FVG_BULLISH_MITIGATED",
     "COL_FVG_BEARISH_MITIGATED",
+    "COL_FVG_BULLISH_INVERSE_BROKEN",
+    "COL_FVG_BEARISH_INVERSE_BROKEN",
     # Onda 8 — Liquidity Sweep (LuxAlgo gratuito, separado do SMC)
     "detect_liquidity_sweeps",
     "COL_SWEEP_BULLISH_WICK",
