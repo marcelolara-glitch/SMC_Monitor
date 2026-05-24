@@ -457,19 +457,28 @@ def test_smoke_wave7_invariants_universal(synthetic_df_bullish):
     # 2 — bias ∈ {±1}.
     assert set(ledger['bias'].unique()).issubset({BULLISH, BEARISH})
 
-    # 3 — state ∈ {'active', 'mitigated'}.
-    assert set(ledger['state'].unique()).issubset({'active', 'mitigated'})
+    # 3 — state ∈ {'active', 'mitigated', 'inverse_broken'}.
+    assert set(ledger['state'].unique()).issubset(
+        {'active', 'mitigated', 'inverse_broken'},
+    )
 
     # 4 — state='active' ⇔ t_mitigation is pd.NaT.
     active_mask = ledger['state'] == 'active'
     mit_nat_mask = ledger['t_mitigation'].isna()
     assert active_mask.eq(mit_nat_mask).all()
 
-    # 5 — t_invalidation sempre pd.NaT em Wave 7.
-    assert ledger['t_invalidation'].isna().all()
+    # 5 — t_invalidation setado somente para inverse_broken.
+    inv_broken_mask = ledger['state'] == 'inverse_broken'
+    inv_nat_mask = ledger['t_invalidation'].isna()
+    assert inv_broken_mask.eq(~inv_nat_mask).all()
 
-    # 6, 7 — hooks Onda 7.1 / 7.2 sempre False.
-    assert (ledger['is_inverse'] == False).all()  # noqa: E712
+    # 6 — is_inverse True para mitigated e inverse_broken (Wave 7.1).
+    mitigated_or_broken = ledger['state'].isin(
+        {'mitigated', 'inverse_broken'},
+    )
+    assert (ledger['is_inverse'] == mitigated_or_broken).all()
+
+    # 7 — hook Onda 7.2 sempre False.
     assert (ledger['is_double'] == False).all()  # noqa: E712
 
     # 8 — t_creation - bar_time = 2 candles. Deriva o passo do

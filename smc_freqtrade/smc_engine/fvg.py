@@ -6,10 +6,13 @@ OBJETIVO
     direções (bullish e bearish) num padrão de 3 candles, filtrando por
     volatilidade cumulativa fiel ao Pine (`auto_threshold`).
 
-    Wave 7 emite apenas `state ∈ {'active', 'mitigated'}` (sem hook
-    `'breaker'` ainda). Os campos `is_inverse` / `is_double` são hooks
-    para Ondas 7.1 e 7.2 (Inverse FVG / Double FVG / BPR), sempre False
-    nesta onda.
+    Wave 7 emite `state ∈ {'active', 'mitigated'}` e detecta mitigação.
+    Wave 7.1 estende com Inverse FVG: um FVG mitigado passa a atuar na
+    direção oposta (zona de polaridade invertida) e pode ser invalidado,
+    emitindo `state = 'inverse_broken'` + `t_invalidation` e 2 booleans
+    per-candle (`fvg_bullish_inverse_broken`, `fvg_bearish_inverse_broken`).
+    O campo `is_double` é hook para Onda 7.2 (Double FVG / BPR), sempre
+    False nesta onda.
 
 FONTE DE DADOS
     DataFrame com 4 colunas OHLC ('open', 'high', 'low', 'close') e
@@ -48,9 +51,24 @@ LIMITAÇÕES CONHECIDAS
         Pine linhas 307 e 319), então `t_mitigation > t_creation`
         estrita por construção.
 
-    Volumetric / Inverse FVG / Double FVG / BPR (LuxAlgo pago) NÃO
-        são detectados. Hooks reservados em FairValueGap.is_inverse
-        (Onda 7.1) e is_double (Onda 7.2), sempre False em Wave 7.
+    Inverse FVG (Wave 7.1): predicado de invalidação da zona invertida
+        usa penetração wick-estrita simétrica (idioma FVG), não
+        close/body. Divergência intencional vs breaker block da Onda
+        6.2 (`order_blocks.py`), que usa close ou high/low conforme
+        parâmetro `mitigation`. Forma do lifecycle/estado espelha a
+        6.2; base do predicado fica no idioma do FVG.
+
+    "IFVG" no projeto = Inverse FVG (zona mitigada que inverte
+        polaridade, paralela ao breaker da 6.2). NÃO confundir com
+        "Implied Fair Value Gap" do indicador `ICT Concepts [LuxAlgo]`
+        (formação de gap implícito por displacement, `low < high[2]`)
+        — conceito distinto, avaliado e descartado do roadmap por ser
+        ferramenta de breadth, sem ganho para os setups de alta
+        convicção do Monitor.
+
+    Volumetric / Double FVG / BPR (LuxAlgo pago) NÃO são detectados.
+        Hook reservado em FairValueGap.is_double (Onda 7.2), sempre
+        False nesta onda.
 
     MTF (`fairValueGapsTimeframeInput` do Pine, linha 92) NÃO é
         consumido — assinatura é single-TF. Hook reservado para
@@ -75,7 +93,11 @@ NÃO FAZER
     Não adicionar param `mitigation` em Wave 7 — Onda 6.1 / 7.x cobrirão
         os 4 modos do LuxAlgo pago.
     Não renomear `top`, `bottom`, `bias` no UDT — fiel ao Pine 46-50.
-    Não computar `t_invalidation` em Wave 7 — sempre pd.NaT.
+    Não repurposiar `'mitigated'` — pós-7.1, `state == 'mitigated'` é
+        exatamente o inverse FVG vivo.
+    Não criar boolean per-candle para a inversão — o momento da inversão
+        já está capturado pelos booleans `*_mitigated` existentes.
+    Não computar `is_double` — hook da Onda 7.2.
     Não inferir `bar_time = t_creation` por analogia com Wave 6 P12 —
         em FVG são distintos por construção (D5; bar_time = t_creation
         - 2 candles).
@@ -91,7 +113,7 @@ from .types import BEARISH, BULLISH
 
 
 # ============================================================
-# Nomes canônicos das 4 colunas booleans produzidas por
+# Nomes canônicos das 6 colunas booleans produzidas por
 # detect_fair_value_gaps. Consumidores referenciam estas constantes —
 # não inline-ar as strings (briefing §4.2).
 # ============================================================
@@ -99,6 +121,8 @@ COL_FVG_BULLISH_CREATED: str = "fvg_bullish_created"
 COL_FVG_BEARISH_CREATED: str = "fvg_bearish_created"
 COL_FVG_BULLISH_MITIGATED: str = "fvg_bullish_mitigated"
 COL_FVG_BEARISH_MITIGATED: str = "fvg_bearish_mitigated"
+COL_FVG_BULLISH_INVERSE_BROKEN: str = "fvg_bullish_inverse_broken"
+COL_FVG_BEARISH_INVERSE_BROKEN: str = "fvg_bearish_inverse_broken"
 
 
 def _compute_threshold(
@@ -267,6 +291,66 @@ def _resolve_mitigations(
     return bullish_mit, bearish_mit, out_records
 
 
+def _resolve_inverse_invalidations(
+    df: pd.DataFrame,
+    records: list[dict],
+) -> tuple[pd.Series, pd.Series, list[dict]]:
+    """INVERSE INVALIDATION pass (Wave 7.1). Para cada FVG mitigado
+    (= inverse FVG vivo), busca primeira vela `date > t_mitigation`
+    que penetra a borda OPOSTA à da mitigação, wick estrito.
+
+    Predicados (simétricos à mitigação, bias oposto):
+        bullish original (mitigado por low < bottom): invalida quando
+            high[W] > top
+        bearish original (mitigado por high > top): invalida quando
+            low[W] < bottom
+
+    D1: todo mitigado recebe is_inverse = True.
+    D4: invalidação por penetração da borda oposta, wick estrito.
+    D5: busca estritamente posterior a t_mitigation.
+    D6: is_inverse True para mitigated e inverse_broken.
+    """
+    dates = df['date']
+    low = df['low']
+    high = df['high']
+
+    bullish_inv_broken = pd.Series(False, index=df.index, dtype=bool)
+    bearish_inv_broken = pd.Series(False, index=df.index, dtype=bool)
+
+    out_records: list[dict] = []
+    for record in records:
+        new_record = dict(record)
+
+        if new_record['state'] != 'mitigated':
+            out_records.append(new_record)
+            continue
+
+        new_record['is_inverse'] = True
+        bias = new_record['bias']
+        t_mitigation = new_record['t_mitigation']
+        top = new_record['top']
+        bottom = new_record['bottom']
+
+        after_mit = dates > t_mitigation
+        if bias == BULLISH:
+            hits = after_mit & (high > top)
+        else:
+            hits = after_mit & (low < bottom)
+
+        if hits.any():
+            hit_pos = int(hits.to_numpy().argmax())
+            new_record['t_invalidation'] = dates.iloc[hit_pos]
+            new_record['state'] = 'inverse_broken'
+            if bias == BULLISH:
+                bullish_inv_broken.iloc[hit_pos] = True
+            else:
+                bearish_inv_broken.iloc[hit_pos] = True
+
+        out_records.append(new_record)
+
+    return bullish_inv_broken, bearish_inv_broken, out_records
+
+
 def _build_ledger(records: list[dict]) -> pd.DataFrame:
     """Constrói DataFrame ledger com schema canônico (briefing §12.4):
     11 colunas em ordem fixa, fvg_id 1-indexed por ordem de criação.
@@ -297,7 +381,8 @@ def detect_fair_value_gaps(
     auto_threshold: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Detecta Fair Value Gaps bullish e bearish via padrão de 3 candles, com
-    mitigação fiel ao Pine compute-only.
+    mitigação fiel ao Pine compute-only e invalidação de zona invertida
+    (Inverse FVG, Wave 7.1).
 
     OBJETIVO
         Portagem fiel de `drawFairValueGaps` (Pine linhas 283-297) e
@@ -305,8 +390,8 @@ def detect_fair_value_gaps(
         compute-only em `tools/pynecore-validation/luxalgo_smc_compute_only.py`.
         Emite ledger DataFrame com lifecycle de 4 timestamps (`bar_time`,
         `t_creation`, `t_mitigation`, `t_invalidation`) e `state ∈ {'active',
-        'mitigated'}`, mais 4 colunas booleans per-candle agregadas
-        (BULLISH/BEARISH × CREATED/MITIGATED).
+        'mitigated', 'inverse_broken'}`, mais 6 colunas booleans per-candle
+        agregadas (BULLISH/BEARISH × CREATED/MITIGATED/INVERSE_BROKEN).
 
     FONTE DE DADOS
         df: DataFrame OHLC com coluna `date` (datetime64[ns, UTC] ou int64 ns)
@@ -336,10 +421,11 @@ def detect_fair_value_gaps(
             cumulativo `cum(|barDeltaPercent|)/bar_index*2` (Pine
             linha 287). Edge case `bar_index=0` clamped para evitar
             divisão por zero.
-        Inverse FVG → hook Onda 7.1 (campo `is_inverse`, sempre False
-            em Wave 7).
+        Inverse FVG (Wave 7.1): predicado de invalidação wick-estrito,
+            penetração da borda oposta à da mitigação. `is_inverse`
+            populado para todo FVG mitigado.
         Double FVG / Balanced Price Range → hook Onda 7.2 (campo
-            `is_double`, sempre False em Wave 7).
+            `is_double`, sempre False em Wave 7/7.1).
         MTF (`fairValueGapsTimeframeInput`) → hook Onda 7.3 (parâmetro
             `df_fvg_tf` reservado, Mapa §6 v1.1 prescrição inicial).
         Volatility threshold multiplicativo do pago → hook Onda 7.x
@@ -355,7 +441,10 @@ def detect_fair_value_gaps(
         Não adicionar param `mitigation` em Wave 7 — Onda 6.1 / 7.x cobrirão.
         Não renomear campos do UDT (`top`, `bottom`, `bias`) — fiel ao Pine
             linhas 46-50 e à Wave 1.
-        Não computar `t_invalidation` em Wave 7 — sempre `pd.NaT`.
+        Não repurposiar `'mitigated'` — pós-7.1, `state == 'mitigated'` é
+            exatamente o inverse FVG vivo.
+        Não criar boolean per-candle para a inversão.
+        Não computar `is_double` — hook Onda 7.2.
         Não inferir `bar_time = t_creation` por analogia com Wave 6 P12 —
             em FVG são distintos por construção (D5).
         Não usar lookahead — toda detecção é causal sobre o DataFrame
@@ -371,11 +460,16 @@ def detect_fair_value_gaps(
         df, threshold=threshold,
     )
     bullish_mit, bearish_mit, records = _resolve_mitigations(df, records)
+    bullish_inv, bearish_inv, records = _resolve_inverse_invalidations(
+        df, records,
+    )
 
     df_per_candle[COL_FVG_BULLISH_CREATED] = bullish_created.astype(bool)
     df_per_candle[COL_FVG_BEARISH_CREATED] = bearish_created.astype(bool)
     df_per_candle[COL_FVG_BULLISH_MITIGATED] = bullish_mit.astype(bool)
     df_per_candle[COL_FVG_BEARISH_MITIGATED] = bearish_mit.astype(bool)
+    df_per_candle[COL_FVG_BULLISH_INVERSE_BROKEN] = bullish_inv.astype(bool)
+    df_per_candle[COL_FVG_BEARISH_INVERSE_BROKEN] = bearish_inv.astype(bool)
 
     ledger = _build_ledger(records)
     return df_per_candle, ledger
