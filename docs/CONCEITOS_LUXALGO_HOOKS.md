@@ -584,6 +584,24 @@ Wave 9.5c — Persistência + edge cases
 Wave 10  — SMCStrategy.py (Freqtrade IStrategy)
 ```
 
+### 12.1 Nota para Wave 9.5 — filtro de OBs/Breakers mitigados
+
+Ao consumir "todos os OBs/breakers mitigados" na máquina de estados,
+filtrar por `ledger_ob['t_mitigation'].notna()` — **nunca** por
+`state == 'mitigated'`.
+
+Pós-Wave 6.2, `state == 'mitigated'` retorna apenas os breakers
+**vivos** (1 no golden 4h); os 20 mortos têm `state ==
+'breaker_broken'`. Ambos descendem da mesma mitigação da Onda 6 e
+ambos têm `t_mitigation` preenchido — `state` discrimina o ciclo de
+vida pós-mitigação (vivo vs. morto pelo lado oposto), não o fato de
+ter sido mitigado.
+
+Generaliza para o IFVG da Wave 7.1, que adotará o mesmo padrão
+`mitigated → inverse_broken`: o consumidor da máquina de estados
+deve filtrar FVGs mitigados pelo carimbo `t_mitigation`, não pelo
+campo `state`.
+
 ---
 
 ## 13. Catálogo de assinaturas — 11 entradas

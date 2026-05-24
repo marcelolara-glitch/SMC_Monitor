@@ -226,3 +226,7 @@ user_data/plot/
 
 # Vestígio do legado (raiz) — substituído por smc_freqtrade/user_data/
 /user_data/
+
+# Golden dataset — artefatos parquet gerados pelo pipeline da Wave 6.2
+# (JSONs ratificados continuam versionados; .parquet é build artifact)
+smc_freqtrade/tests/golden/golden/*.parquet

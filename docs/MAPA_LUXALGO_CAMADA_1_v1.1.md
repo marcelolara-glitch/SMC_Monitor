@@ -755,6 +755,7 @@ plano de validação empírica.
 | # | Divergência | Pine literal | Portagem | Onda | Validação |
 |---|---|---|---|---|---|
 | 1 | Bearish FVG mitigation semantics | First-touch (predicate `high > high[t]`, pois Pine armazena `top = high[t]`) | Full-fill simétrico (predicate `high > low[t-2]`, com convenção normalizada `top > bottom` para ambos os lados) | Onda 7 | 5 fvg_ids candidatos (8, 11, 15, 69, 70) do golden 4h 2026-01 a 2026-04 reservados para validação visual no TradingView (LuxAlgo gratuito); spot-check PR #49 reportou 9/9 match de estado nos 9 FVGs ratificados, mas V4/V5 não discriminam entre as duas semânticas |
+| 2 | Breaker Block — ciclo de vida do registro morto | FluxCharts/PAC remove o breaker da lista ativa quando ele é invalidado pelo lado oposto (`bullishOrderBlocksList.remove(i)`); o registro deixa de existir | Preserva o registro no ledger com `state = 'breaker_broken'` e `t_invalidation` definido; nenhum registro é apagado, estado terminal é explícito | Onda 6.2 | Histórico imutável consultável pós-execução via ledger; mesma filosofia da Onda 6 (mitigação preserva `t_mitigation`) e do ledger de FVG da Onda 7. Golden 4h pós-Wave 6.2: 21 breakers no ledger (1 vivo `state == 'mitigated'` + 20 mortos `state == 'breaker_broken'`); LuxAlgo gratuito mostraria apenas o vivo |
 
 **Quando uma divergência desta categoria é admissível**:
 
