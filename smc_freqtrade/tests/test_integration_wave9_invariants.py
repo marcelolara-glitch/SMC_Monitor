@@ -40,13 +40,14 @@ def test_invariant_a_df_has_added_detector_columns(synthetic_df: pd.DataFrame) -
     assert len(result.df.columns) >= 55
 
 
-def test_invariant_a_ledgers_have_11_columns(synthetic_df: pd.DataFrame) -> None:
-    """Ledgers OB e FVG tem exatamente 11 colunas conforme schema canonico."""
+def test_invariant_a_ledgers_have_canonical_columns(synthetic_df: pd.DataFrame) -> None:
+    """Ledgers OB (12 colunas, +bb_volume na 6.2) e FVG (11 colunas)
+    conforme schema canonico."""
     result = analyze(synthetic_df)
     expected_ob_cols = {
         'ob_id', 'scope', 'bias', 'bar_high', 'bar_low', 'bar_time',
         't_creation', 't_mitigation', 't_invalidation', 'state',
-        'volumetric_intensity',
+        'volumetric_intensity', 'bb_volume',
     }
     expected_fvg_cols = {
         'fvg_id', 'bias', 'top', 'bottom', 'bar_time',
@@ -76,11 +77,17 @@ def test_invariant_b_ob_scope_is_valid(synthetic_df: pd.DataFrame) -> None:
 
 
 def test_invariant_b_ob_state_is_valid(synthetic_df: pd.DataFrame) -> None:
-    """ledger_ob.state contem valores conhecidos."""
+    """ledger_ob.state contem valores conhecidos.
+
+    Onda 6.2 adiciona `'breaker_broken'` (breaker morto pela
+    extremidade oposta).
+    """
     result = analyze(synthetic_df)
     if len(result.ledger_ob) > 0:
         states = set(result.ledger_ob['state'].dropna())
-        assert states.issubset({'active', 'mitigated'}), f"states inesperados: {states}"
+        assert states.issubset(
+            {'active', 'mitigated', 'breaker_broken'}
+        ), f"states inesperados: {states}"
 
 
 def test_invariant_b_fvg_bias_is_int(synthetic_df: pd.DataFrame) -> None:
