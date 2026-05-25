@@ -66,17 +66,26 @@ LIMITAÇÕES CONHECIDAS
         ferramenta de breadth, sem ganho para os setups de alta
         convicção do Monitor.
 
-    Volumetric / Double FVG / BPR (LuxAlgo pago) NÃO são detectados.
-        Hook reservado em FairValueGap.is_double (Onda 7.2), sempre
-        False nesta onda.
+    Volumetric FVG (LuxAlgo pago) NÃO é detectado. Double FVG / BPR
+        detectado via `compose_balanced_price_ranges` (Onda 7.2);
+        `is_double` populado para FVGs-membros de um BPR.
 
     MTF (`fairValueGapsTimeframeInput` do Pine, linha 92) NÃO é
         consumido — assinatura é single-TF. Hook reservado para
         Onda 7.3 (parâmetro `df_fvg_tf`).
 
-    Volatility threshold multiplicativo do pago (Avaliação §2.5) NÃO
-        é aplicado — hook reservado para parâmetro
-        `volatility_threshold`.
+    Volatility threshold multiplicativo (Wave 7.x): opt-in via
+        `volatility_threshold` kwarg em `detect_fair_value_gaps`. Fator
+        aplicado sobre o threshold cumulativo: `threshold_eff =
+        (volatility_threshold or 1.0) * threshold`. Default `None` →
+        fator 1.0 → idêntico ao 7.1.
+
+    Balanced Price Range (Wave 7.2): composto a partir do ledger de
+        FVGs via `compose_balanced_price_ranges`. Referência de overlap
+        portada do indicador `ICT Concepts [LuxAlgo]` (free, CC
+        BY-NC-SA), bloco "Balance Price Range". Sem lifecycle (sem
+        state, sem t_invalidation, sem break tracking) — formação
+        apenas. Hook futuro aditivo para Wave 9.5.
 
     Threshold edge case `bar_index=0`: clamp para 1 (evita divisão
         por zero). Pine `bar_index` é 0 na primeira vela mas a
@@ -97,7 +106,6 @@ NÃO FAZER
         exatamente o inverse FVG vivo.
     Não criar boolean per-candle para a inversão — o momento da inversão
         já está capturado pelos booleans `*_mitigated` existentes.
-    Não computar `is_double` — hook da Onda 7.2.
     Não inferir `bar_time = t_creation` por analogia com Wave 6 P12 —
         em FVG são distintos por construção (D5; bar_time = t_creation
         - 2 candles).
@@ -168,6 +176,7 @@ def _emit_create_events(
     df: pd.DataFrame,
     *,
     threshold: np.ndarray,
+    volatility_factor: float = 1.0,
 ) -> tuple[pd.Series, pd.Series, list[dict]]:
     """CREATE pass vetorizado. Para cada candle t >= 2 verifica
     condições bullish e bearish (Pine linhas 288-289), respeitando
@@ -192,17 +201,17 @@ def _emit_create_events(
     last2_high = np.concatenate(([np.nan, np.nan], high_arr[:-2]))
     last2_low = np.concatenate(([np.nan, np.nan], low_arr[:-2]))
 
-    # Comparações com NaN retornam False naturalmente — máscaras são
-    # cleanly bool sem precisar de filtros para t<2.
+    effective_threshold = threshold * volatility_factor
+
     bullish_mask = (
         (low_arr > last2_high)
         & (last_close > last2_high)
-        & (delta > threshold)
+        & (delta > effective_threshold)
     )
     bearish_mask = (
         (high_arr < last2_low)
         & (last_close < last2_low)
-        & (-delta > threshold)
+        & (-delta > effective_threshold)
     )
 
     bullish_created = pd.Series(bullish_mask, index=df.index, dtype=bool)
@@ -379,6 +388,7 @@ def detect_fair_value_gaps(
     df: pd.DataFrame,
     *,
     auto_threshold: bool = True,
+    volatility_threshold: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Detecta Fair Value Gaps bullish e bearish via padrão de 3 candles, com
     mitigação fiel ao Pine compute-only e invalidação de zona invertida
@@ -424,12 +434,14 @@ def detect_fair_value_gaps(
         Inverse FVG (Wave 7.1): predicado de invalidação wick-estrito,
             penetração da borda oposta à da mitigação. `is_inverse`
             populado para todo FVG mitigado.
-        Double FVG / Balanced Price Range → hook Onda 7.2 (campo
-            `is_double`, sempre False em Wave 7/7.1).
+        Double FVG / Balanced Price Range → `compose_balanced_price_ranges`
+            (Onda 7.2). `is_double` populado para FVGs-membros de BPR.
         MTF (`fairValueGapsTimeframeInput`) → hook Onda 7.3 (parâmetro
             `df_fvg_tf` reservado, Mapa §6 v1.1 prescrição inicial).
-        Volatility threshold multiplicativo do pago → hook Onda 7.x
-            (parâmetro `volatility_threshold` reservado).
+        Volatility threshold (Onda 7.x): `volatility_threshold` multiplica
+            o threshold cumulativo. `None` (default) → fator 1.0; `> 1.0`
+            → mais estrito. Com `auto_threshold=False` (threshold=0) o
+            filtro é no-op (0 × fator = 0).
         Divergência intencional do Pine: NÃO replicamos
             `lookahead=barmerge.lookahead_on` (Mapa §6 conflito B).
             Confiar em merge_informative_pair prévio do Freqtrade quando
@@ -444,7 +456,6 @@ def detect_fair_value_gaps(
         Não repurposiar `'mitigated'` — pós-7.1, `state == 'mitigated'` é
             exatamente o inverse FVG vivo.
         Não criar boolean per-candle para a inversão.
-        Não computar `is_double` — hook Onda 7.2.
         Não inferir `bar_time = t_creation` por analogia com Wave 6 P12 —
             em FVG são distintos por construção (D5).
         Não usar lookahead — toda detecção é causal sobre o DataFrame
@@ -456,8 +467,10 @@ def detect_fair_value_gaps(
         df['open'], df['close'], auto_threshold=auto_threshold,
     )
 
+    vol_factor = volatility_threshold if volatility_threshold is not None else 1.0
+
     bullish_created, bearish_created, records = _emit_create_events(
-        df, threshold=threshold,
+        df, threshold=threshold, volatility_factor=vol_factor,
     )
     bullish_mit, bearish_mit, records = _resolve_mitigations(df, records)
     bullish_inv, bearish_inv, records = _resolve_inverse_invalidations(
@@ -473,3 +486,153 @@ def detect_fair_value_gaps(
 
     ledger = _build_ledger(records)
     return df_per_candle, ledger
+
+
+def compose_balanced_price_ranges(
+    ledger_fvg: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compõe Balanced Price Ranges (BPR) a partir do ledger de FVGs.
+
+    OBJETIVO
+        BPR é a zona de sobreposição entre um FVG bullish e um FVG
+        bearish (equilíbrio). Algoritmo de overlap portado do indicador
+        `ICT Concepts [LuxAlgo]` (free, CC BY-NC-SA), bloco "Balance
+        Price Range (overlap of 2 latest FVG bull/bear)".
+
+    FONTE DE DADOS
+        ledger_fvg produzido por `detect_fair_value_gaps`. Formação é
+        puramente derivada do ledger (zona, membros, timestamps) — não
+        recebe OHLC.
+
+    LIMITAÇÕES CONHECIDAS
+        Sem lifecycle: sem `state`, sem `t_invalidation`, sem break
+        tracking. BPR é só formação neste PR. Consumidor (setup
+        machine, Wave 9.5) ainda não existe; lifecycle é hook futuro
+        aditivo (§1.2).
+
+        BPR portado do `ICT Concepts`, não do SMC. O ICT constrói BPR
+        sobre FVGs displacement-based (`body > meanBody`); nós compomos
+        sobre FVGs SMC-portados (`auto_threshold` cumulativo). Portamos
+        o algoritmo de overlap, não os inputs — os BPRs-membros
+        divergem dos do ICT.
+
+        Pareamento event-driven ("FVG oposto ativo mais recente na
+        criação") vs "último par a cada barra" do ICT —
+        funcionalmente alinhados.
+
+    NÃO FAZER
+        Não adicionar lifecycle/state ao BPR neste PR.
+        Não emitir booleans per-candle de BPR.
+
+    Args:
+        ledger_fvg: ledger de FVGs (11 colunas, de detect_fair_value_gaps).
+
+    Returns:
+        (ledger_bpr, ledger_fvg_marcado):
+            ledger_bpr: DataFrame com 7 colunas
+                [bpr_id, bias, top, bottom, t_creation,
+                 fvg_id_bull, fvg_id_bear].
+                bias: BULLISH (BPR_UP) ou BEARISH (BPR_DN).
+            ledger_fvg_marcado: cópia do ledger_fvg com is_double=True
+                para FVGs que são membros de algum BPR.
+    """
+    bpr_columns = [
+        'bpr_id', 'bias', 'top', 'bottom', 't_creation',
+        'fvg_id_bull', 'fvg_id_bear',
+    ]
+    ledger_out = ledger_fvg.copy()
+
+    if len(ledger_fvg) == 0:
+        empty_bpr = pd.DataFrame({
+            'bpr_id': pd.Series(dtype='int64'),
+            'bias': pd.Series(dtype='int64'),
+            'top': pd.Series(dtype='float64'),
+            'bottom': pd.Series(dtype='float64'),
+            't_creation': pd.Series(dtype=ledger_fvg['t_creation'].dtype
+                                    if 't_creation' in ledger_fvg.columns
+                                    else 'object'),
+            'fvg_id_bull': pd.Series(dtype='int64'),
+            'fvg_id_bear': pd.Series(dtype='int64'),
+        })
+        return empty_bpr, ledger_out
+
+    sorted_fvg = ledger_fvg.sort_values('t_creation').reset_index(drop=True)
+
+    bpr_records: list[dict] = []
+    member_ids: set[int] = set()
+
+    for i in range(len(sorted_fvg)):
+        f = sorted_fvg.iloc[i]
+        f_bias = f['bias']
+        f_t = f['t_creation']
+
+        candidate = None
+        for j in range(i - 1, -1, -1):
+            g = sorted_fvg.iloc[j]
+            if g['bias'] == f_bias:
+                continue
+            if g['t_creation'] >= f_t:
+                continue
+            g_mit = g['t_mitigation']
+            if not pd.isna(g_mit) and g_mit <= f_t:
+                continue
+            candidate = g
+            break
+
+        if candidate is None:
+            continue
+
+        if f_bias == BULLISH:
+            bull, bear = f, candidate
+        else:
+            bull, bear = candidate, f
+
+        bull_top = bull['top']
+        bull_bottom = bull['bottom']
+        bear_top = bear['top']
+        bear_bottom = bear['bottom']
+
+        if bull_bottom < bear_top and bear_bottom < bull_bottom:
+            bpr_records.append({
+                'bias': BULLISH,
+                'top': float(bear_top),
+                'bottom': float(bull_bottom),
+                't_creation': f_t,
+                'fvg_id_bull': int(bull['fvg_id']),
+                'fvg_id_bear': int(bear['fvg_id']),
+            })
+            member_ids.add(int(bull['fvg_id']))
+            member_ids.add(int(bear['fvg_id']))
+        elif bear_bottom < bull_top and bull_bottom < bear_bottom:
+            bpr_records.append({
+                'bias': BEARISH,
+                'top': float(bull_top),
+                'bottom': float(bear_bottom),
+                't_creation': f_t,
+                'fvg_id_bull': int(bull['fvg_id']),
+                'fvg_id_bear': int(bear['fvg_id']),
+            })
+            member_ids.add(int(bull['fvg_id']))
+            member_ids.add(int(bear['fvg_id']))
+
+    if not bpr_records:
+        empty_bpr = pd.DataFrame({c: pd.Series(dtype='int64' if c != 'top' and c != 'bottom' and c != 't_creation'
+                                                else ('float64' if c in ('top', 'bottom')
+                                                      else ledger_fvg['t_creation'].dtype))
+                                  for c in bpr_columns})
+        return empty_bpr, ledger_out
+
+    for idx, rec in enumerate(bpr_records):
+        rec['bpr_id'] = idx + 1
+
+    ledger_bpr = pd.DataFrame(bpr_records, columns=bpr_columns)
+    ledger_bpr['bpr_id'] = ledger_bpr['bpr_id'].astype('int64')
+    ledger_bpr['bias'] = ledger_bpr['bias'].astype('int64')
+    ledger_bpr['top'] = ledger_bpr['top'].astype('float64')
+    ledger_bpr['bottom'] = ledger_bpr['bottom'].astype('float64')
+    ledger_bpr['fvg_id_bull'] = ledger_bpr['fvg_id_bull'].astype('int64')
+    ledger_bpr['fvg_id_bear'] = ledger_bpr['fvg_id_bear'].astype('int64')
+
+    ledger_out.loc[ledger_out['fvg_id'].isin(member_ids), 'is_double'] = True
+
+    return ledger_bpr, ledger_out

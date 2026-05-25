@@ -50,8 +50,9 @@ class SMCConfig:
     ob_filter: Literal['Atr', 'Range'] = 'Atr'
     ob_mitigation: Literal['Close', 'Wick'] = 'Wick'
     ob_atr_length: int = 200
-    # Onda 7 — FVG (1 param)
+    # Onda 7 — FVG (2 params)
     fvg_auto_threshold: bool = True
+    fvg_volatility_threshold: float | None = None
     # Onda 8 — Liquidity Sweep (4 params)
     sweep_pivot_sources: tuple[str, ...] = ('equal', 'internal')
     sweep_max_extension_bars: int = 300

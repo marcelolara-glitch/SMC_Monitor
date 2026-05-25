@@ -39,7 +39,11 @@ class AnalyzeResult:
         ledger_ob: ledger de Order Blocks (12 colunas, ver
             order_blocks._build_ledger). 1 row por OB.
         ledger_fvg: ledger de Fair Value Gaps (11 colunas, ver
-            fvg._build_ledger). 1 row por FVG.
+            fvg._build_ledger). 1 row por FVG. is_double populado
+            pela Onda 7.2 (BPR).
+        ledger_bpr: ledger de Balanced Price Ranges (7 colunas, ver
+            fvg.compose_balanced_price_ranges). 1 row por BPR.
+            Onda 7.2.
         meta: dict com metadados de execução:
             - engine_version: str (de smc_engine.__version__)
             - modules_run: list[str] (nomes das funções chamadas)
@@ -49,4 +53,5 @@ class AnalyzeResult:
     df: pd.DataFrame
     ledger_ob: pd.DataFrame
     ledger_fvg: pd.DataFrame
+    ledger_bpr: pd.DataFrame = field(default_factory=pd.DataFrame)
     meta: dict[str, Any] = field(default_factory=dict)

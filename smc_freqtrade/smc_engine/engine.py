@@ -35,7 +35,7 @@ from typing import Any
 import pandas as pd
 
 from .config import SMCConfig
-from .fvg import detect_fair_value_gaps
+from .fvg import compose_balanced_price_ranges, detect_fair_value_gaps
 from .liquidity_sweep import detect_liquidity_sweeps
 from .order_blocks import detect_order_blocks
 from .pivots import detect_eqh_eql, detect_pivots
@@ -112,7 +112,10 @@ def analyze(
         AnalyzeResult com:
             - df: input + 52 colunas dos 6 detectores
             - ledger_ob: ledger de Order Blocks (12 colunas)
-            - ledger_fvg: ledger de FVGs (11 colunas)
+            - ledger_fvg: ledger de FVGs (11 colunas, is_double
+              populado pela composição BPR da Onda 7.2)
+            - ledger_bpr: ledger de Balanced Price Ranges (7 colunas,
+              Onda 7.2)
             - meta: dict com engine_version, modules_run,
               candle_count, config_used
 
@@ -158,7 +161,9 @@ def analyze(
     work, ledger_fvg = detect_fair_value_gaps(
         work,
         auto_threshold=config.fvg_auto_threshold,
+        volatility_threshold=config.fvg_volatility_threshold,
     )
+    ledger_bpr, ledger_fvg = compose_balanced_price_ranges(ledger_fvg)
     work = detect_liquidity_sweeps(
         work,
         pivot_sources=config.sweep_pivot_sources,
@@ -177,6 +182,7 @@ def analyze(
             'detect_structure',
             'detect_order_blocks',
             'detect_fair_value_gaps',
+            'compose_balanced_price_ranges',
             'detect_liquidity_sweeps',
         ],
         'candle_count': len(work),
@@ -186,5 +192,6 @@ def analyze(
         df=work,
         ledger_ob=ledger_ob,
         ledger_fvg=ledger_fvg,
+        ledger_bpr=ledger_bpr,
         meta=meta,
     )

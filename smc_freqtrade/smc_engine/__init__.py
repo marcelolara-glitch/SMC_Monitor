@@ -30,6 +30,7 @@ _VERSION_PATH = _Path(__file__).resolve().parent.parent / "VERSION"
 __version__ = _VERSION_PATH.read_text(encoding="utf-8").strip()
 
 from .fvg import (
+    compose_balanced_price_ranges,
     detect_fair_value_gaps,
     COL_FVG_BULLISH_CREATED,
     COL_FVG_BEARISH_CREATED,
@@ -204,6 +205,8 @@ __all__ = [
     "COL_OB_SWING_BULLISH_MITIGATED",
     # Onda 7 — Fair Value Gaps com mitigação
     "detect_fair_value_gaps",
+    # Onda 7.2 — Balanced Price Range (BPR)
+    "compose_balanced_price_ranges",
     "COL_FVG_BULLISH_CREATED",
     "COL_FVG_BEARISH_CREATED",
     "COL_FVG_BULLISH_MITIGATED",
