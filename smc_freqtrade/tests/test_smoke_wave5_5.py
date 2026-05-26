@@ -1,10 +1,11 @@
 """Smoke test da Onda 5.5 — CHoCH+ (Supported CHoCH) escopos swing e internal.
 
 OBJETIVO
-    Cobertura mínima conforme briefing §5:
-      Caso A: CHoCH+ bullish swing (lower high no segmento bearish prévio)
-      Caso B: CHoCH simples swing sem upgrade (sem lower high)
-      Caso C: CHoCH+ bearish swing (higher low no segmento bullish prévio)
+    Cobertura mínima conforme briefing §5 (orientação corrigida pelo
+    briefing-fix após ratificação visual contra PAC pago):
+      Caso A: CHoCH+ bullish swing (higher low antes do break)
+      Caso B: CHoCH simples swing sem upgrade (sem higher low)
+      Caso C: CHoCH+ bearish swing (lower high antes do break)
       Caso D: CHoCH+ internal (internal pivots, internal_length=5)
     + invariantes §4 sobre golden dataset (byte-identical, subset,
     disjunção BOS, contagem sã) para ambos os escopos.
@@ -41,22 +42,23 @@ GOLDEN_CSV = Path(__file__).parent / 'golden' / 'data' / 'btc_usdt_swap_4h_windo
 
 
 def _build_case_a():
-    """Caso A: CHoCH+ bullish.
+    """Caso A: CHoCH+ bullish (orientação correta).
 
-    Tendência bearish com um lower high (swing high < anterior),
-    seguida de close cruzando acima do swing high → CHoCH+ bullish.
+    Tendência bearish com um higher low (swing low > anterior) —
+    fundo subindo = exaustão da baixa — seguida de close cruzando
+    acima do swing high → CHoCH+ bullish.
     """
     n = 200
     rng = np.random.RandomState(100)
 
     close = np.full(n, 100.0)
     close[0:20] = np.linspace(120, 115, 20)
-    close[20:60] = np.linspace(115, 105, 40)
-    close[60:80] = np.linspace(105, 110, 20)
-    close[80:120] = np.linspace(110, 95, 40)
-    close[120:140] = np.linspace(95, 107, 20)
-    close[140:160] = np.linspace(107, 90, 20)
-    close[160:200] = np.linspace(90, 115, 40)
+    close[20:60] = np.linspace(115, 95, 40)
+    close[60:80] = np.linspace(95, 108, 20)
+    close[80:110] = np.linspace(108, 98, 30)
+    close[110:130] = np.linspace(98, 105, 20)
+    close[130:160] = np.linspace(105, 92, 30)
+    close[160:200] = np.linspace(92, 115, 40)
 
     noise = rng.normal(0, 0.3, n)
     close = close + noise
@@ -77,20 +79,20 @@ def _build_case_a():
 def _build_case_b():
     """Caso B: CHoCH bullish simples SEM upgrade para +.
 
-    Tendência bearish com swing highs sempre fazendo higher highs
-    (sem lower high) → CHoCH bullish sem choch_plus.
+    Tendência bearish com swing lows sempre fazendo lower lows
+    (sem higher low) → CHoCH bullish sem choch_plus.
     """
     n = 200
     rng = np.random.RandomState(200)
 
     close = np.full(n, 100.0)
-    close[0:30] = np.linspace(130, 120, 30)
-    close[30:60] = np.linspace(120, 110, 30)
-    close[60:80] = np.linspace(110, 125, 20)
-    close[80:120] = np.linspace(125, 100, 40)
-    close[120:140] = np.linspace(100, 128, 20)
-    close[140:160] = np.linspace(128, 95, 20)
-    close[160:200] = np.linspace(95, 135, 40)
+    close[0:30] = np.linspace(130, 110, 30)
+    close[30:60] = np.linspace(110, 100, 30)
+    close[60:80] = np.linspace(100, 115, 20)
+    close[80:110] = np.linspace(115, 90, 30)
+    close[110:130] = np.linspace(90, 108, 20)
+    close[130:160] = np.linspace(108, 80, 30)
+    close[160:200] = np.linspace(80, 120, 40)
 
     noise = rng.normal(0, 0.3, n)
     close = close + noise
@@ -109,22 +111,23 @@ def _build_case_b():
 
 
 def _build_case_c():
-    """Caso C: CHoCH+ bearish.
+    """Caso C: CHoCH+ bearish (orientação correta).
 
-    Tendência bullish com um higher low (swing low > anterior),
-    seguida de close cruzando abaixo do swing low → CHoCH+ bearish.
+    Tendência bullish com um lower high (swing high < anterior) —
+    topo caindo = exaustão da alta — seguida de close cruzando
+    abaixo do swing low → CHoCH+ bearish.
     """
     n = 200
     rng = np.random.RandomState(300)
 
     close = np.full(n, 100.0)
-    close[0:20] = np.linspace(80, 85, 20)
-    close[20:60] = np.linspace(85, 105, 40)
-    close[60:80] = np.linspace(105, 95, 20)
-    close[80:120] = np.linspace(95, 115, 40)
-    close[120:140] = np.linspace(115, 100, 20)
-    close[140:160] = np.linspace(100, 120, 20)
-    close[160:200] = np.linspace(120, 85, 40)
+    close[0:20] = np.linspace(80, 90, 20)
+    close[20:60] = np.linspace(90, 110, 40)
+    close[60:80] = np.linspace(110, 100, 20)
+    close[80:110] = np.linspace(100, 107, 30)
+    close[110:130] = np.linspace(107, 102, 20)
+    close[130:160] = np.linspace(102, 112, 30)
+    close[160:200] = np.linspace(112, 85, 40)
 
     noise = rng.normal(0, 0.3, n)
     close = close + noise
@@ -193,7 +196,7 @@ class TestCHoCHPlusSynthetic:
     """Smoke tests com fixtures sintéticas de pivot forçado."""
 
     def test_case_a_choch_plus_bullish(self):
-        """Lower high no segmento bearish → CHoCH+ bullish."""
+        """Higher low antes do break → CHoCH+ bullish."""
         df = _build_case_a()
         out = _run_pipeline(df)
 
@@ -210,7 +213,7 @@ class TestCHoCHPlusSynthetic:
             assert choch_plus_bull.dtype == bool
 
     def test_case_b_choch_without_plus(self):
-        """Sem lower high no segmento bearish → CHoCH simples, não +."""
+        """Sem higher low antes do break → CHoCH simples, não +."""
         df = _build_case_b()
         out = _run_pipeline(df)
 
@@ -223,7 +226,7 @@ class TestCHoCHPlusSynthetic:
         assert choch_plus_bull.sum() <= choch_bull.sum()
 
     def test_case_c_choch_plus_bearish(self):
-        """Higher low no segmento bullish → CHoCH+ bearish."""
+        """Lower high antes do break → CHoCH+ bearish."""
         df = _build_case_c()
         out = _run_pipeline(df)
 
@@ -357,7 +360,7 @@ class TestCHoCHPlusGoldenInvariants:
         ).any()
 
     def test_count_sane(self, golden_out):
-        """Invariante #4: 0 <= #CHoCH+ <= #CHoCH (ambos escopos)."""
+        """Invariante #4: 0 <= #CHoCH+ <= #CHoCH + exact counts from §3."""
         choch_s_bull = golden_out['choch_swing_bullish'].sum()
         choch_s_bear = golden_out['choch_swing_bearish'].sum()
         plus_s_bull = golden_out[COL_CHOCH_PLUS_SWING_BULLISH].sum()
@@ -372,6 +375,11 @@ class TestCHoCHPlusGoldenInvariants:
         assert 0 <= plus_s_bear <= choch_s_bear
         assert 0 <= plus_i_bull <= choch_i_bull
         assert 0 <= plus_i_bear <= choch_i_bear
+
+        assert plus_s_bull + plus_s_bear == 1, f"swing total expected 1, got {plus_s_bull + plus_s_bear}"
+        assert plus_i_bull == 2, f"internal bull expected 2, got {plus_i_bull}"
+        assert plus_i_bear == 3, f"internal bear expected 3, got {plus_i_bear}"
+        assert plus_i_bull + plus_i_bear == 5, f"internal total expected 5, got {plus_i_bull + plus_i_bear}"
 
         print(f"\n[CHoCH+ Golden Report]")
         print(f"  CHoCH swing bullish: {choch_s_bull}, CHoCH+ swing bullish: {plus_s_bull}")

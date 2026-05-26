@@ -11,9 +11,12 @@ OBJETIVO
     via cumsum/ffill com sinal, classifica BOS/CHoCH posteriormente
     via bias_pre_event = bias_running.shift(1). Sem loop por candle.
 
-    CHoCH+ (Onda 5.5): variante "supported" do CHoCH, portada da
-    spec conceitual do Doc PAC §4.1. Exige pré-condição estrutural
-    na tendência anterior (failed HH/LL) antes do break formal.
+    CHoCH+ (Onda 5.5): variante "supported" do CHoCH, validada
+    visualmente contra LuxAlgo PAC pago. CHoCH+ bullish exige que
+    o último swing low antes do break seja um higher low (exaustão
+    da baixa); CHoCH+ bearish exige que o último swing high antes
+    do break seja um lower high (exaustão da alta). Janela B1:
+    apenas o último pivot oposto imediatamente antes do break.
     Escopos swing e internal; 4 colunas aditivas, saída Onda 5
     inalterada.
 
@@ -32,12 +35,10 @@ LIMITAÇÕES CONHECIDAS
     nenhum evento internal dispara. Equivalente a `na != value = na`
     (falsy) do Pine.
 
-    Discrepância de orientação entre Doc PAC §4.1 (fonte da
-    implementação swing original) e HOOKS §1: Doc PAC mapeia CHoCH+
-    bullish ← lower high (failed HH) no segmento bearish prévio;
-    HOOKS §1 mapeia CHoCH+ bullish ← higher low (HL). Internal usa
-    mesma orientação que swing (Doc PAC §4.1) para consistência
-    interna. Divergência registrada para ratificação visual.
+    Orientação CHoCH+ corrigida na Onda 5.5-fix após ratificação
+    visual contra PAC pago: CHoCH+ bullish ← higher low (fundo
+    subindo); CHoCH+ bearish ← lower high (topo caindo). A prosa
+    do Doc PAC §4.1 estava invertida — a verdade visual prevalece.
 
 NÃO FAZER
     Não usar shift(-N) em ponto algum.
@@ -172,11 +173,14 @@ def detect_structure(
         internal (length=5) e swing (length=swings_length=50).
 
         CHoCH+ (Onda 5.5): detecta a variante "supported" do CHoCH nos
-        escopos swing e internal, portada da spec conceitual do Doc PAC
-        §4.1. CHoCH+ bullish exige ≥1 lower high (failed HH) no
-        segmento bearish prévio; CHoCH+ bearish exige ≥1 higher low
-        (failed LL) no segmento bullish prévio. Saída: 4 colunas
-        aditivas (choch_plus_swing_bullish, choch_plus_swing_bearish,
+        escopos swing e internal, validada visualmente contra PAC pago.
+        CHoCH+ bullish exige que o último swing low antes do break
+        seja um higher low (fundo subindo = exaustão da baixa);
+        CHoCH+ bearish exige que o último swing high antes do break
+        seja um lower high (topo caindo = exaustão da alta). Janela
+        B1: apenas o último pivot oposto imediatamente antes do break
+        (não o segmento inteiro). Saída: 4 colunas aditivas
+        (choch_plus_swing_bullish, choch_plus_swing_bearish,
         choch_plus_internal_bullish, choch_plus_internal_bearish),
         cada uma subconjunto estrito do CHoCH correspondente.
 
@@ -200,10 +204,9 @@ def detect_structure(
             materializados pela Onda 3 (que são lookahead-safe). Nenhum
             shift(-N) interno.
 
-        Discrepância de orientação entre Doc PAC §4.1 e HOOKS §1
-            (ver docstring do módulo). Ambos escopos usam orientação
-            Doc PAC §4.1 para consistência interna. Pendente
-            ratificação visual.
+        Orientação CHoCH+ validada visualmente contra PAC pago
+            (ver docstring do módulo). Doc PAC §4.1 inverte a prosa;
+            a implementação segue a verdade visual.
 
         Ordem de declaração no Pine (linha 313: displayStructure(True)
             antes de linha 314: displayStructure()) é irrelevante na
@@ -293,77 +296,41 @@ def detect_structure(
     internal_choch_bearish = internal_bearish_raw & internal_bias_pre.eq(BULLISH).fillna(False).astype(bool)
     internal_bos_bearish = internal_bearish_raw & ~internal_choch_bearish
 
-    # ==== CHoCH+ (Onda 5.5) — Supported CHoCH, escopo swing ====
-    # Detecta failed swing events: lower_high e higher_low nos candles
-    # de confirmação dos swing pivots. Acumula por segmento de trend e
-    # marca CHoCH+ na barra do flip.
+    # ==== CHoCH+ (Onda 5.5-fix) — Supported CHoCH, escopo swing ====
+    # Orientação correta (validada visualmente contra PAC pago):
+    #   bullish ← higher low (fundo subindo = exaustão da baixa)
+    #   bearish ← lower high (topo caindo = exaustão da alta)
+    # Janela B1: apenas o ÚLTIMO pivot oposto antes do break.
 
-    swing_high_level = df[COL_SWING_HIGH_LEVEL]
-    swing_low_level = df[COL_SWING_LOW_LEVEL]
+    s_hi = df[COL_SWING_HIGH_LEVEL]
+    s_lo = df[COL_SWING_LOW_LEVEL]
+    s_prev_hi = s_hi.ffill().shift(1)
+    s_prev_lo = s_lo.ffill().shift(1)
 
-    # Nível do swing high/low anterior (último confirmado antes deste).
-    prev_swing_high = swing_high_level.ffill().shift(1)
-    prev_swing_low = swing_low_level.ffill().shift(1)
+    s_higher_low = s_lo.notna() & (s_lo > s_prev_lo)
+    s_lower_high = s_hi.notna() & (s_hi < s_prev_hi)
 
-    # Failed swing events no candle de confirmação do pivot:
-    # lower_high_event: swing high atual < swing high anterior
-    # higher_low_event: swing low atual > swing low anterior
-    is_swing_high_conf = swing_high_level.notna()
-    is_swing_low_conf = swing_low_level.notna()
-    lower_high_event = is_swing_high_conf & (swing_high_level < prev_swing_high)
-    higher_low_event = is_swing_low_conf & (swing_low_level > prev_swing_low)
+    s_last_low_is_hl = s_higher_low.where(s_lo.notna()).ffill().fillna(False).astype(bool)
+    s_last_high_is_lh = s_lower_high.where(s_hi.notna()).ffill().fillna(False).astype(bool)
 
-    # Segmentar por swing_trend_bias: running-OR de failed events
-    # dentro de cada segmento de trend. Segmento muda quando bias muda.
-    bias_segment_id = swing_bias.fillna(0).diff().ne(0).cumsum()
+    choch_plus_bullish = swing_choch_bullish & s_last_low_is_hl.shift(1).fillna(False).astype(bool)
+    choch_plus_bearish = swing_choch_bearish & s_last_high_is_lh.shift(1).fillna(False).astype(bool)
 
-    # Acumular lower_high_event em segmentos bearish (para CHoCH+ bullish)
-    lower_high_cum = lower_high_event.astype(int).groupby(bias_segment_id).cumsum()
-    failed_high_in_segment = lower_high_cum > 0
+    # ==== CHoCH+ (Onda 5.5-fix) — Supported CHoCH, escopo internal ====
 
-    # Acumular higher_low_event em segmentos bullish (para CHoCH+ bearish)
-    higher_low_cum = higher_low_event.astype(int).groupby(bias_segment_id).cumsum()
-    failed_low_in_segment = higher_low_cum > 0
+    i_hi = df[COL_INTERNAL_HIGH_LEVEL]
+    i_lo = df[COL_INTERNAL_LOW_LEVEL]
+    i_prev_hi = i_hi.ffill().shift(1)
+    i_prev_lo = i_lo.ffill().shift(1)
 
-    # CHoCH+ bullish: o segmento bearish que está TERMINANDO acumulou
-    # ≥1 lower_high. O CHoCH bullish marca o FIM do segmento bearish,
-    # portanto usamos o valor de failed_high_in_segment no candle
-    # imediatamente anterior (shift(1)) — que pertence ao segmento prévio.
-    failed_high_at_flip = failed_high_in_segment.shift(1).fillna(False).astype(bool)
-    choch_plus_bullish = swing_choch_bullish & failed_high_at_flip
+    i_higher_low = i_lo.notna() & (i_lo > i_prev_lo)
+    i_lower_high = i_hi.notna() & (i_hi < i_prev_hi)
 
-    # CHoCH+ bearish: o segmento bullish que está TERMINANDO acumulou
-    # ≥1 higher_low.
-    failed_low_at_flip = failed_low_in_segment.shift(1).fillna(False).astype(bool)
-    choch_plus_bearish = swing_choch_bearish & failed_low_at_flip
+    i_last_low_is_hl = i_higher_low.where(i_lo.notna()).ffill().fillna(False).astype(bool)
+    i_last_high_is_lh = i_lower_high.where(i_hi.notna()).ffill().fillna(False).astype(bool)
 
-    # ==== CHoCH+ (Onda 5.5) — Supported CHoCH, escopo internal ====
-    # Espelho mecânico do bloco swing acima, usando pivots e bias internal.
-
-    int_high_level = df[COL_INTERNAL_HIGH_LEVEL]
-    int_low_level = df[COL_INTERNAL_LOW_LEVEL]
-
-    prev_int_high = int_high_level.ffill().shift(1)
-    prev_int_low = int_low_level.ffill().shift(1)
-
-    is_int_high_conf = int_high_level.notna()
-    is_int_low_conf = int_low_level.notna()
-    int_lower_high_event = is_int_high_conf & (int_high_level < prev_int_high)
-    int_higher_low_event = is_int_low_conf & (int_low_level > prev_int_low)
-
-    int_bias_segment_id = internal_bias.fillna(0).diff().ne(0).cumsum()
-
-    int_lower_high_cum = int_lower_high_event.astype(int).groupby(int_bias_segment_id).cumsum()
-    int_failed_high_in_segment = int_lower_high_cum > 0
-
-    int_higher_low_cum = int_higher_low_event.astype(int).groupby(int_bias_segment_id).cumsum()
-    int_failed_low_in_segment = int_higher_low_cum > 0
-
-    int_failed_high_at_flip = int_failed_high_in_segment.shift(1).fillna(False).astype(bool)
-    choch_plus_internal_bullish = internal_choch_bullish & int_failed_high_at_flip
-
-    int_failed_low_at_flip = int_failed_low_in_segment.shift(1).fillna(False).astype(bool)
-    choch_plus_internal_bearish = internal_choch_bearish & int_failed_low_at_flip
+    choch_plus_internal_bullish = internal_choch_bullish & i_last_low_is_hl.shift(1).fillna(False).astype(bool)
+    choch_plus_internal_bearish = internal_choch_bearish & i_last_high_is_lh.shift(1).fillna(False).astype(bool)
 
     result[COL_BOS_INTERNAL_BULLISH] = internal_bos_bullish.astype(bool)
     result[COL_BOS_INTERNAL_BEARISH] = internal_bos_bearish.astype(bool)
