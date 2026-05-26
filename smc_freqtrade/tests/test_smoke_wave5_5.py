@@ -1,16 +1,16 @@
-"""Smoke test da Onda 5.5 — CHoCH+ (Supported CHoCH) escopo swing.
+"""Smoke test da Onda 5.5 — CHoCH+ (Supported CHoCH) escopos swing e internal.
 
 OBJETIVO
     Cobertura mínima conforme briefing §5:
-      Caso A: CHoCH+ bullish (lower high no segmento bearish prévio)
-      Caso B: CHoCH simples sem upgrade (sem lower high)
-      Caso C: CHoCH+ bearish (higher low no segmento bullish prévio)
+      Caso A: CHoCH+ bullish swing (lower high no segmento bearish prévio)
+      Caso B: CHoCH simples swing sem upgrade (sem lower high)
+      Caso C: CHoCH+ bearish swing (higher low no segmento bullish prévio)
+      Caso D: CHoCH+ internal (internal pivots, internal_length=5)
     + invariantes §4 sobre golden dataset (byte-identical, subset,
-    disjunção BOS, contagem sã).
+    disjunção BOS, contagem sã) para ambos os escopos.
 
 FONTE DE DADOS
-    DataFrames sintéticos mínimos com pivots swing forçados via
-    COL_SWING_HIGH_LEVEL / COL_SWING_LOW_LEVEL + close crosses.
+    DataFrames sintéticos mínimos com pivots forçados via landmarks.
     Golden: tests/golden/data/btc_usdt_swap_4h_window.csv (720 candles).
 
 NÃO FAZER
@@ -32,6 +32,8 @@ from smc_engine import (
     COL_SWING_LOW_LEVEL,
     COL_CHOCH_PLUS_SWING_BULLISH,
     COL_CHOCH_PLUS_SWING_BEARISH,
+    COL_CHOCH_PLUS_INTERNAL_BULLISH,
+    COL_CHOCH_PLUS_INTERNAL_BEARISH,
 )
 
 
@@ -140,6 +142,46 @@ def _build_case_c():
     })
 
 
+def _build_case_d_internal():
+    """Caso D: CHoCH+ internal — pivots internal (length=5) com failed swings.
+
+    Série com oscilações rápidas para produzir internal pivots em
+    abundância e gerar CHoCH+ internal.
+    """
+    n = 300
+    rng = np.random.RandomState(400)
+
+    close = np.full(n, 100.0)
+    close[0:15] = np.linspace(100, 110, 15)
+    close[15:30] = np.linspace(110, 95, 15)
+    close[30:45] = np.linspace(95, 108, 15)
+    close[45:60] = np.linspace(108, 90, 15)
+    close[60:75] = np.linspace(90, 105, 15)
+    close[75:90] = np.linspace(105, 85, 15)
+    close[90:120] = np.linspace(85, 115, 30)
+    close[120:150] = np.linspace(115, 90, 30)
+    close[150:180] = np.linspace(90, 100, 30)
+    close[180:210] = np.linspace(100, 80, 30)
+    close[210:240] = np.linspace(80, 105, 30)
+    close[240:270] = np.linspace(105, 88, 30)
+    close[270:300] = np.linspace(88, 112, 30)
+
+    noise = rng.normal(0, 0.4, n)
+    close = close + noise
+    opens = close + rng.normal(0, 0.2, n)
+    highs = np.maximum(close, opens) + np.abs(rng.normal(0.4, 0.2, n))
+    lows = np.minimum(close, opens) - np.abs(rng.normal(0.4, 0.2, n))
+
+    dates = pd.date_range('2026-01-01', periods=n, freq='4h').astype('int64') // 10**6
+    return pd.DataFrame({
+        'date': dates,
+        'open': opens,
+        'high': highs,
+        'low': lows,
+        'close': close,
+    })
+
+
 def _run_pipeline(df):
     """Executa pipeline pivot → trailing → structure."""
     work = detect_pivots(df, swings_length=50, internal_length=5, equal_length=3)
@@ -194,6 +236,30 @@ class TestCHoCHPlusSynthetic:
         if choch_bear.any():
             assert choch_plus_bear.dtype == bool
 
+    def test_case_d_choch_plus_internal(self):
+        """Internal pivots com failed swings → CHoCH+ internal dispara."""
+        df = _build_case_d_internal()
+        out = _run_pipeline(df)
+
+        choch_int_bull = out['choch_internal_bullish']
+        choch_int_bear = out['choch_internal_bearish']
+        plus_int_bull = out[COL_CHOCH_PLUS_INTERNAL_BULLISH]
+        plus_int_bear = out[COL_CHOCH_PLUS_INTERNAL_BEARISH]
+
+        # Subset invariant internal
+        assert (plus_int_bull & ~choch_int_bull).sum() == 0
+        assert (plus_int_bear & ~choch_int_bear).sum() == 0
+
+        # Disjunction with BOS internal
+        assert not (plus_int_bull & out['bos_internal_bullish']).any()
+        assert not (plus_int_bull & out['bos_internal_bearish']).any()
+        assert not (plus_int_bear & out['bos_internal_bullish']).any()
+        assert not (plus_int_bear & out['bos_internal_bearish']).any()
+
+        # Columns are boolean
+        assert plus_int_bull.dtype == bool
+        assert plus_int_bear.dtype == bool
+
 
 class TestCHoCHPlusGoldenInvariants:
     """Invariantes §4 sobre golden dataset (720 candles BTC-USDT 4H)."""
@@ -230,8 +296,8 @@ class TestCHoCHPlusGoldenInvariants:
                 obj=f"golden_out[{col}]",
             )
 
-    def test_subset_invariant(self, golden_out):
-        """Invariante #2: choch_plus ⊆ choch (mesmo escopo/direção)."""
+    def test_subset_invariant_swing(self, golden_out):
+        """Invariante #2a: choch_plus_swing ⊆ choch_swing."""
         assert not (
             golden_out[COL_CHOCH_PLUS_SWING_BULLISH]
             & ~golden_out['choch_swing_bullish']
@@ -241,8 +307,19 @@ class TestCHoCHPlusGoldenInvariants:
             & ~golden_out['choch_swing_bearish']
         ).any()
 
-    def test_disjunction_bos(self, golden_out):
-        """Invariante #3: nenhuma barra CHoCH+ coincide com BOS."""
+    def test_subset_invariant_internal(self, golden_out):
+        """Invariante #2b: choch_plus_internal ⊆ choch_internal."""
+        assert not (
+            golden_out[COL_CHOCH_PLUS_INTERNAL_BULLISH]
+            & ~golden_out['choch_internal_bullish']
+        ).any()
+        assert not (
+            golden_out[COL_CHOCH_PLUS_INTERNAL_BEARISH]
+            & ~golden_out['choch_internal_bearish']
+        ).any()
+
+    def test_disjunction_bos_swing(self, golden_out):
+        """Invariante #3a: nenhuma barra CHoCH+ swing coincide com BOS swing."""
         assert not (
             golden_out[COL_CHOCH_PLUS_SWING_BULLISH]
             & golden_out['bos_swing_bullish']
@@ -258,22 +335,67 @@ class TestCHoCHPlusGoldenInvariants:
         assert not (
             golden_out[COL_CHOCH_PLUS_SWING_BEARISH]
             & golden_out['bos_swing_bearish']
+        ).any()
+
+    def test_disjunction_bos_internal(self, golden_out):
+        """Invariante #3b: nenhuma barra CHoCH+ internal coincide com BOS internal."""
+        assert not (
+            golden_out[COL_CHOCH_PLUS_INTERNAL_BULLISH]
+            & golden_out['bos_internal_bullish']
+        ).any()
+        assert not (
+            golden_out[COL_CHOCH_PLUS_INTERNAL_BULLISH]
+            & golden_out['bos_internal_bearish']
+        ).any()
+        assert not (
+            golden_out[COL_CHOCH_PLUS_INTERNAL_BEARISH]
+            & golden_out['bos_internal_bullish']
+        ).any()
+        assert not (
+            golden_out[COL_CHOCH_PLUS_INTERNAL_BEARISH]
+            & golden_out['bos_internal_bearish']
         ).any()
 
     def test_count_sane(self, golden_out):
-        """Invariante #4: 0 <= #CHoCH+ <= #CHoCH swing."""
-        choch_bull = golden_out['choch_swing_bullish'].sum()
-        choch_bear = golden_out['choch_swing_bearish'].sum()
-        plus_bull = golden_out[COL_CHOCH_PLUS_SWING_BULLISH].sum()
-        plus_bear = golden_out[COL_CHOCH_PLUS_SWING_BEARISH].sum()
+        """Invariante #4: 0 <= #CHoCH+ <= #CHoCH (ambos escopos)."""
+        choch_s_bull = golden_out['choch_swing_bullish'].sum()
+        choch_s_bear = golden_out['choch_swing_bearish'].sum()
+        plus_s_bull = golden_out[COL_CHOCH_PLUS_SWING_BULLISH].sum()
+        plus_s_bear = golden_out[COL_CHOCH_PLUS_SWING_BEARISH].sum()
 
-        assert 0 <= plus_bull <= choch_bull
-        assert 0 <= plus_bear <= choch_bear
+        choch_i_bull = golden_out['choch_internal_bullish'].sum()
+        choch_i_bear = golden_out['choch_internal_bearish'].sum()
+        plus_i_bull = golden_out[COL_CHOCH_PLUS_INTERNAL_BULLISH].sum()
+        plus_i_bear = golden_out[COL_CHOCH_PLUS_INTERNAL_BEARISH].sum()
 
-        # Print counts for PR body reporting
+        assert 0 <= plus_s_bull <= choch_s_bull
+        assert 0 <= plus_s_bear <= choch_s_bear
+        assert 0 <= plus_i_bull <= choch_i_bull
+        assert 0 <= plus_i_bear <= choch_i_bear
+
         print(f"\n[CHoCH+ Golden Report]")
-        print(f"  CHoCH swing bullish: {choch_bull}, CHoCH+ swing bullish: {plus_bull}")
-        print(f"  CHoCH swing bearish: {choch_bear}, CHoCH+ swing bearish: {plus_bear}")
+        print(f"  CHoCH swing bullish: {choch_s_bull}, CHoCH+ swing bullish: {plus_s_bull}")
+        print(f"  CHoCH swing bearish: {choch_s_bear}, CHoCH+ swing bearish: {plus_s_bear}")
+        print(f"  CHoCH internal bullish: {choch_i_bull}, CHoCH+ internal bullish: {plus_i_bull}")
+        print(f"  CHoCH internal bearish: {choch_i_bear}, CHoCH+ internal bearish: {plus_i_bear}")
+        print(f"  Total CHoCH+ internal: {plus_i_bull + plus_i_bear}")
+
+    def test_swing_choch_plus_unchanged(self, golden_out):
+        """Invariante: swing CHoCH+ columns unchanged after internal addition."""
+        df = pd.read_csv(GOLDEN_CSV)
+        df = df.rename(columns={'timestamp_utc': 'date'})
+        df['date'] = pd.to_datetime(df['date'], utc=True)
+        baseline = _run_pipeline(df)
+        pd.testing.assert_series_equal(
+            golden_out[COL_CHOCH_PLUS_SWING_BULLISH],
+            baseline[COL_CHOCH_PLUS_SWING_BULLISH],
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            golden_out[COL_CHOCH_PLUS_SWING_BEARISH],
+            baseline[COL_CHOCH_PLUS_SWING_BEARISH],
+            check_names=False,
+        )
 
     def test_no_lookahead(self, golden_out):
         """Invariante #5: no shift(-N) — deterministic/reproducible."""
@@ -283,9 +405,12 @@ class TestCHoCHPlusGoldenInvariants:
 
         out1 = _run_pipeline(df)
         out2 = _run_pipeline(df)
+        choch_plus_cols = [
+            COL_CHOCH_PLUS_SWING_BULLISH, COL_CHOCH_PLUS_SWING_BEARISH,
+            COL_CHOCH_PLUS_INTERNAL_BULLISH, COL_CHOCH_PLUS_INTERNAL_BEARISH,
+        ]
         pd.testing.assert_frame_equal(
-            out1[[COL_CHOCH_PLUS_SWING_BULLISH, COL_CHOCH_PLUS_SWING_BEARISH]],
-            out2[[COL_CHOCH_PLUS_SWING_BULLISH, COL_CHOCH_PLUS_SWING_BEARISH]],
+            out1[choch_plus_cols], out2[choch_plus_cols],
         )
 
 

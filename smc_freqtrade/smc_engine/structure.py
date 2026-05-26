@@ -14,7 +14,8 @@ OBJETIVO
     CHoCH+ (Onda 5.5): variante "supported" do CHoCH, portada da
     spec conceitual do Doc PAC §4.1. Exige pré-condição estrutural
     na tendência anterior (failed HH/LL) antes do break formal.
-    Escopo swing apenas; 2 colunas aditivas, saída Onda 5 inalterada.
+    Escopos swing e internal; 4 colunas aditivas, saída Onda 5
+    inalterada.
 
 FONTE DE DADOS
     DataFrame com 'close', 'open', 'high', 'low' + as 8 colunas
@@ -31,8 +32,12 @@ LIMITAÇÕES CONHECIDAS
     nenhum evento internal dispara. Equivalente a `na != value = na`
     (falsy) do Pine.
 
-    CHoCH+ escopo internal não é detectado — hook documentado para
-    extensão futura. Escopo swing apenas nesta implementação.
+    Discrepância de orientação entre Doc PAC §4.1 (fonte da
+    implementação swing original) e HOOKS §1: Doc PAC mapeia CHoCH+
+    bullish ← lower high (failed HH) no segmento bearish prévio;
+    HOOKS §1 mapeia CHoCH+ bullish ← higher low (HL). Internal usa
+    mesma orientação que swing (Doc PAC §4.1) para consistência
+    interna. Divergência registrada para ratificação visual.
 
 NÃO FAZER
     Não usar shift(-N) em ponto algum.
@@ -40,7 +45,7 @@ NÃO FAZER
         (operar sobre cópia).
     Não popular EngineState — Mapa §2 v1.1.
     Não consumir trailing.* (Onda 4) — irrelevante para BOS/CHoCH.
-    Não inline-ar nomes de coluna — usar as 12 constantes COL_*.
+    Não inline-ar nomes de coluna — usar as 14 constantes COL_*.
 """
 from __future__ import annotations
 
@@ -60,7 +65,7 @@ from .types import BEARISH, BULLISH
 
 
 # ============================================================
-# Nomes canônicos das 12 colunas produzidas por detect_structure.
+# Nomes canônicos das 14 colunas produzidas por detect_structure.
 # Consumidores (Onda 6+) referenciam estas constantes — não
 # inline-ar as strings.
 # ============================================================
@@ -76,6 +81,8 @@ COL_INTERNAL_TREND_BIAS = 'internal_trend_bias'
 COL_SWING_TREND_BIAS = 'swing_trend_bias'
 COL_CHOCH_PLUS_SWING_BULLISH = 'choch_plus_swing_bullish'
 COL_CHOCH_PLUS_SWING_BEARISH = 'choch_plus_swing_bearish'
+COL_CHOCH_PLUS_INTERNAL_BULLISH = 'choch_plus_internal_bullish'
+COL_CHOCH_PLUS_INTERNAL_BEARISH = 'choch_plus_internal_bearish'
 
 
 # ============================================================
@@ -164,13 +171,14 @@ def detect_structure(
         detect_pivots() (Onda 3), em duas escalas independentes:
         internal (length=5) e swing (length=swings_length=50).
 
-        CHoCH+ (Onda 5.5): detecta a variante "supported" do CHoCH no
-        escopo swing, portada da spec conceitual do Doc PAC §4.1.
-        CHoCH+ bullish exige ≥1 lower high (failed HH) no segmento
-        bearish prévio; CHoCH+ bearish exige ≥1 higher low (failed LL)
-        no segmento bullish prévio. Saída: 2 colunas aditivas
-        (choch_plus_swing_bullish, choch_plus_swing_bearish), subconjunto
-        estrito dos CHoCH swing correspondentes.
+        CHoCH+ (Onda 5.5): detecta a variante "supported" do CHoCH nos
+        escopos swing e internal, portada da spec conceitual do Doc PAC
+        §4.1. CHoCH+ bullish exige ≥1 lower high (failed HH) no
+        segmento bearish prévio; CHoCH+ bearish exige ≥1 higher low
+        (failed LL) no segmento bullish prévio. Saída: 4 colunas
+        aditivas (choch_plus_swing_bullish, choch_plus_swing_bearish,
+        choch_plus_internal_bullish, choch_plus_internal_bearish),
+        cada uma subconjunto estrito do CHoCH correspondente.
 
     FONTE DE DADOS
         df: DataFrame com no mínimo 'close' + as 8 colunas COL_*_LEVEL e
@@ -192,8 +200,10 @@ def detect_structure(
             materializados pela Onda 3 (que são lookahead-safe). Nenhum
             shift(-N) interno.
 
-        CHoCH+ escopo internal não é detectado nesta implementação —
-            hook documentado para extensão futura.
+        Discrepância de orientação entre Doc PAC §4.1 e HOOKS §1
+            (ver docstring do módulo). Ambos escopos usam orientação
+            Doc PAC §4.1 para consistência interna. Pendente
+            ratificação visual.
 
         Ordem de declaração no Pine (linha 313: displayStructure(True)
             antes de linha 314: displayStructure()) é irrelevante na
@@ -209,7 +219,7 @@ def detect_structure(
             storeOrdeBlock dentro de displayStructure (linhas 257, 271),
             a Onda 6 lê os 8 booleans da Onda 5 + os COL_*_IDX da Onda 3
             para localizar o pivot do break.
-        Não inline-ar nomes de coluna — usar as 12 constantes COL_*
+        Não inline-ar nomes de coluna — usar as 14 constantes COL_*
             definidas no topo do módulo.
         Não popular EngineState (Mapa §2 v1.1).
     """
@@ -327,6 +337,34 @@ def detect_structure(
     failed_low_at_flip = failed_low_in_segment.shift(1).fillna(False).astype(bool)
     choch_plus_bearish = swing_choch_bearish & failed_low_at_flip
 
+    # ==== CHoCH+ (Onda 5.5) — Supported CHoCH, escopo internal ====
+    # Espelho mecânico do bloco swing acima, usando pivots e bias internal.
+
+    int_high_level = df[COL_INTERNAL_HIGH_LEVEL]
+    int_low_level = df[COL_INTERNAL_LOW_LEVEL]
+
+    prev_int_high = int_high_level.ffill().shift(1)
+    prev_int_low = int_low_level.ffill().shift(1)
+
+    is_int_high_conf = int_high_level.notna()
+    is_int_low_conf = int_low_level.notna()
+    int_lower_high_event = is_int_high_conf & (int_high_level < prev_int_high)
+    int_higher_low_event = is_int_low_conf & (int_low_level > prev_int_low)
+
+    int_bias_segment_id = internal_bias.fillna(0).diff().ne(0).cumsum()
+
+    int_lower_high_cum = int_lower_high_event.astype(int).groupby(int_bias_segment_id).cumsum()
+    int_failed_high_in_segment = int_lower_high_cum > 0
+
+    int_higher_low_cum = int_higher_low_event.astype(int).groupby(int_bias_segment_id).cumsum()
+    int_failed_low_in_segment = int_higher_low_cum > 0
+
+    int_failed_high_at_flip = int_failed_high_in_segment.shift(1).fillna(False).astype(bool)
+    choch_plus_internal_bullish = internal_choch_bullish & int_failed_high_at_flip
+
+    int_failed_low_at_flip = int_failed_low_in_segment.shift(1).fillna(False).astype(bool)
+    choch_plus_internal_bearish = internal_choch_bearish & int_failed_low_at_flip
+
     result[COL_BOS_INTERNAL_BULLISH] = internal_bos_bullish.astype(bool)
     result[COL_BOS_INTERNAL_BEARISH] = internal_bos_bearish.astype(bool)
     result[COL_BOS_SWING_BULLISH] = swing_bos_bullish.astype(bool)
@@ -339,5 +377,7 @@ def detect_structure(
     result[COL_SWING_TREND_BIAS] = swing_bias
     result[COL_CHOCH_PLUS_SWING_BULLISH] = choch_plus_bullish.astype(bool)
     result[COL_CHOCH_PLUS_SWING_BEARISH] = choch_plus_bearish.astype(bool)
+    result[COL_CHOCH_PLUS_INTERNAL_BULLISH] = choch_plus_internal_bullish.astype(bool)
+    result[COL_CHOCH_PLUS_INTERNAL_BEARISH] = choch_plus_internal_bearish.astype(bool)
 
     return result
