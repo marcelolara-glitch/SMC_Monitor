@@ -11,6 +11,11 @@ OBJETIVO
     via cumsum/ffill com sinal, classifica BOS/CHoCH posteriormente
     via bias_pre_event = bias_running.shift(1). Sem loop por candle.
 
+    CHoCH+ (Onda 5.5): variante "supported" do CHoCH, portada da
+    spec conceitual do Doc PAC §4.1. Exige pré-condição estrutural
+    na tendência anterior (failed HH/LL) antes do break formal.
+    Escopo swing apenas; 2 colunas aditivas, saída Onda 5 inalterada.
+
 FONTE DE DADOS
     DataFrame com 'close', 'open', 'high', 'low' + as 8 colunas
     COL_*_LEVEL e COL_*_IDX produzidas por detect_pivots() para os
@@ -26,17 +31,16 @@ LIMITAÇÕES CONHECIDAS
     nenhum evento internal dispara. Equivalente a `na != value = na`
     (falsy) do Pine.
 
-    CHoCH+ (variante "supported") NÃO é detectado nesta onda — Onda
-    5.5 (hook documentado em detect_structure).
+    CHoCH+ escopo internal não é detectado — hook documentado para
+    extensão futura. Escopo swing apenas nesta implementação.
 
 NÃO FAZER
     Não usar shift(-N) em ponto algum.
     Não emitir efeitos colaterais sobre o DataFrame de entrada
         (operar sobre cópia).
-    Não detectar CHoCH+ — Onda 5.5.
     Não popular EngineState — Mapa §2 v1.1.
     Não consumir trailing.* (Onda 4) — irrelevante para BOS/CHoCH.
-    Não inline-ar nomes de coluna — usar as 10 constantes COL_*.
+    Não inline-ar nomes de coluna — usar as 12 constantes COL_*.
 """
 from __future__ import annotations
 
@@ -56,7 +60,7 @@ from .types import BEARISH, BULLISH
 
 
 # ============================================================
-# Nomes canônicos das 10 colunas produzidas por detect_structure.
+# Nomes canônicos das 12 colunas produzidas por detect_structure.
 # Consumidores (Onda 6+) referenciam estas constantes — não
 # inline-ar as strings.
 # ============================================================
@@ -70,6 +74,8 @@ COL_CHOCH_SWING_BULLISH = 'choch_swing_bullish'
 COL_CHOCH_SWING_BEARISH = 'choch_swing_bearish'
 COL_INTERNAL_TREND_BIAS = 'internal_trend_bias'
 COL_SWING_TREND_BIAS = 'swing_trend_bias'
+COL_CHOCH_PLUS_SWING_BULLISH = 'choch_plus_swing_bullish'
+COL_CHOCH_PLUS_SWING_BEARISH = 'choch_plus_swing_bearish'
 
 
 # ============================================================
@@ -158,6 +164,14 @@ def detect_structure(
         detect_pivots() (Onda 3), em duas escalas independentes:
         internal (length=5) e swing (length=swings_length=50).
 
+        CHoCH+ (Onda 5.5): detecta a variante "supported" do CHoCH no
+        escopo swing, portada da spec conceitual do Doc PAC §4.1.
+        CHoCH+ bullish exige ≥1 lower high (failed HH) no segmento
+        bearish prévio; CHoCH+ bearish exige ≥1 higher low (failed LL)
+        no segmento bullish prévio. Saída: 2 colunas aditivas
+        (choch_plus_swing_bullish, choch_plus_swing_bearish), subconjunto
+        estrito dos CHoCH swing correspondentes.
+
     FONTE DE DADOS
         df: DataFrame com no mínimo 'close' + as 8 colunas COL_*_LEVEL e
             COL_*_IDX produzidas por detect_pivots() para os escopos
@@ -178,15 +192,8 @@ def detect_structure(
             materializados pela Onda 3 (que são lookahead-safe). Nenhum
             shift(-N) interno.
 
-        CHoCH+ (variante "supported" do CHoCH com pré-condição estrutural
-            de failed HH/LL na tendência prévia) NÃO é detectado nesta
-            onda. Decisão arquitetural fechada no briefing da Onda 5:
-            feature do LuxAlgo Price Action Concepts pago, adiada para
-            Onda 5.5 com hook explícito. Ver
-            docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md §4.1
-            (spec conceitual) e §6.2 (classificação como Categoria B —
-            extensão sem mudança arquitetural; adiciona regra dentro de
-            detect_structure + estado failed_swing_observed por trend).
+        CHoCH+ escopo internal não é detectado nesta implementação —
+            hook documentado para extensão futura.
 
         Ordem de declaração no Pine (linha 313: displayStructure(True)
             antes de linha 314: displayStructure()) é irrelevante na
@@ -202,10 +209,9 @@ def detect_structure(
             storeOrdeBlock dentro de displayStructure (linhas 257, 271),
             a Onda 6 lê os 8 booleans da Onda 5 + os COL_*_IDX da Onda 3
             para localizar o pivot do break.
-        Não inline-ar nomes de coluna — usar as 10 constantes COL_*
+        Não inline-ar nomes de coluna — usar as 12 constantes COL_*
             definidas no topo do módulo.
         Não popular EngineState (Mapa §2 v1.1).
-        Não detectar CHoCH+ — Onda 5.5.
     """
     result = df.copy()
 
@@ -277,6 +283,50 @@ def detect_structure(
     internal_choch_bearish = internal_bearish_raw & internal_bias_pre.eq(BULLISH).fillna(False).astype(bool)
     internal_bos_bearish = internal_bearish_raw & ~internal_choch_bearish
 
+    # ==== CHoCH+ (Onda 5.5) — Supported CHoCH, escopo swing ====
+    # Detecta failed swing events: lower_high e higher_low nos candles
+    # de confirmação dos swing pivots. Acumula por segmento de trend e
+    # marca CHoCH+ na barra do flip.
+
+    swing_high_level = df[COL_SWING_HIGH_LEVEL]
+    swing_low_level = df[COL_SWING_LOW_LEVEL]
+
+    # Nível do swing high/low anterior (último confirmado antes deste).
+    prev_swing_high = swing_high_level.ffill().shift(1)
+    prev_swing_low = swing_low_level.ffill().shift(1)
+
+    # Failed swing events no candle de confirmação do pivot:
+    # lower_high_event: swing high atual < swing high anterior
+    # higher_low_event: swing low atual > swing low anterior
+    is_swing_high_conf = swing_high_level.notna()
+    is_swing_low_conf = swing_low_level.notna()
+    lower_high_event = is_swing_high_conf & (swing_high_level < prev_swing_high)
+    higher_low_event = is_swing_low_conf & (swing_low_level > prev_swing_low)
+
+    # Segmentar por swing_trend_bias: running-OR de failed events
+    # dentro de cada segmento de trend. Segmento muda quando bias muda.
+    bias_segment_id = swing_bias.fillna(0).diff().ne(0).cumsum()
+
+    # Acumular lower_high_event em segmentos bearish (para CHoCH+ bullish)
+    lower_high_cum = lower_high_event.astype(int).groupby(bias_segment_id).cumsum()
+    failed_high_in_segment = lower_high_cum > 0
+
+    # Acumular higher_low_event em segmentos bullish (para CHoCH+ bearish)
+    higher_low_cum = higher_low_event.astype(int).groupby(bias_segment_id).cumsum()
+    failed_low_in_segment = higher_low_cum > 0
+
+    # CHoCH+ bullish: o segmento bearish que está TERMINANDO acumulou
+    # ≥1 lower_high. O CHoCH bullish marca o FIM do segmento bearish,
+    # portanto usamos o valor de failed_high_in_segment no candle
+    # imediatamente anterior (shift(1)) — que pertence ao segmento prévio.
+    failed_high_at_flip = failed_high_in_segment.shift(1).fillna(False).astype(bool)
+    choch_plus_bullish = swing_choch_bullish & failed_high_at_flip
+
+    # CHoCH+ bearish: o segmento bullish que está TERMINANDO acumulou
+    # ≥1 higher_low.
+    failed_low_at_flip = failed_low_in_segment.shift(1).fillna(False).astype(bool)
+    choch_plus_bearish = swing_choch_bearish & failed_low_at_flip
+
     result[COL_BOS_INTERNAL_BULLISH] = internal_bos_bullish.astype(bool)
     result[COL_BOS_INTERNAL_BEARISH] = internal_bos_bearish.astype(bool)
     result[COL_BOS_SWING_BULLISH] = swing_bos_bullish.astype(bool)
@@ -287,5 +337,7 @@ def detect_structure(
     result[COL_CHOCH_SWING_BEARISH] = swing_choch_bearish.astype(bool)
     result[COL_INTERNAL_TREND_BIAS] = internal_bias
     result[COL_SWING_TREND_BIAS] = swing_bias
+    result[COL_CHOCH_PLUS_SWING_BULLISH] = choch_plus_bullish.astype(bool)
+    result[COL_CHOCH_PLUS_SWING_BEARISH] = choch_plus_bearish.astype(bool)
 
     return result
