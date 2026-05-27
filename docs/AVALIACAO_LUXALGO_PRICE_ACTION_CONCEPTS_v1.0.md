@@ -46,7 +46,7 @@ Inventário consolidado a partir da documentação oficial (`docs.luxalgo.com/do
 ### 2.1 Market Structure (página `/market-structures`)
 
 - **BOS (Break of Structure)** e **CHoCH (Change of Character)**: idêntico em conceito ao gratuito.
-- **CHoCH+ (Supported CHoCH)**: variante do CHoCH com pré-condição estrutural. Para um CHoCH+ bullish, o break do swing low é precedido por um failed higher high (lower high) na tendência bullish anterior. Para CHoCH+ bearish, precedido por failed lower low (higher low). É descrito como sinal de reversão "mais confirmado" que o CHoCH leading.
+- **CHoCH+ (Supported CHoCH)**: variante do CHoCH com pré-condição estrutural. Para um CHoCH+ bullish, o break do swing high é precedido por um **higher low** (fundo mais alto = exaustão da tendência de baixa anterior). Para CHoCH+ bearish, precedido por um **lower high** (topo mais baixo = exaustão da alta anterior). É descrito como sinal de reversão "mais confirmado" que o CHoCH leading.
 - **Internal vs Swing Structure**: idem gratuito, mas com **lookback configurável**. Internal: range 5-49. Swing: range 50-100. No gratuito, internal é hardcoded em 5 e swing default 50 com floor de 10.
 - **Candle Coloring**: bars coloridas conforme o estado da estrutura interna. 4 tons: dark bullish (CHoCH bullish ativo), regular bullish (BOS bullish ativo), dark bearish (CHoCH bearish ativo), regular bearish (BOS bearish ativo). Tem opção monochrome.
 - **Swing High/Low markers (HH/HL/LH/LL)**: rotulação visual dos swing points classificados pela relação com o anterior. Documentação afirma explicitamente que "swing points são exibidos retrospectivamente e não devem ser usados para aplicações em tempo real" — confirma o que o mapa Camada 1 já trata como lookahead inerente da detecção one-sided.
@@ -176,7 +176,13 @@ Aprofundamento dos itens que merecem discussão técnica.
 
 ### 4.1 CHoCH+ (item 6 da tabela) — Categoria B
 
-**O que é.** Variante "supported" do CHoCH. Em vez de detectar apenas o crossover do close vs swing pivot (como o gratuito faz em `displayStructure`), o pago exige uma pré-condição estrutural: durante a tendência anterior, deve ter ocorrido um **failed higher high** (ou seja, um lower high) antes do CHoCH bullish; ou um **failed lower low** (higher low) antes do CHoCH bearish.
+**O que é.** Variante "supported" do CHoCH. Em vez de detectar apenas o crossover do close vs swing pivot (como o gratuito faz em `displayStructure`), o pago exige uma pré-condição estrutural: durante a tendência anterior, deve ter ocorrido um **higher low** (fundo subindo) antes do CHoCH bullish; ou um **lower high** (topo caindo) antes do CHoCH bearish.
+
+> **Correção (Wave 5.5):** a redação original deste parágrafo invertia a
+> orientação ("failed higher high antes do CHoCH bullish"). A orientação acima
+> foi corrigida após ratificação visual contra o PAC pago. O resumo do
+> `CONCEITOS_LUXALGO_HOOKS.md` §1 (bullish⇐HL, bearish⇐LH) já estava correto e
+> é a referência canônica de orientação.
 
 **Por que isso importa para o framework SMC.** O CHoCH "leading" puro é mais frequente mas mais ruidoso — pode ocorrer em retração técnica que não significa reversão real. O CHoCH+ é um **filtro de qualidade**: já houve sinal de fraqueza antes do break formal, então a probabilidade de reversão é maior. Isso converge com o princípio "narrativa sequencial vs checklist" do `SMC_PRINCIPIOS_E_LEGADO.md` §2.1.
 

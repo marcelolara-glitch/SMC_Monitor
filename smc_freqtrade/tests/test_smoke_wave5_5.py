@@ -275,7 +275,14 @@ class TestCHoCHPlusGoldenInvariants:
         return _run_pipeline(df)
 
     def test_wave5_byte_identical(self, golden_out):
-        """Invariante #1: as 10 colunas originais da Onda 5 inalteradas."""
+        """Invariante #1: as 10 colunas originais da Onda 5 inalteradas.
+
+        Dívida: compara detect_structure contra si mesmo (sem snapshot
+        pré-5.5 persistido). É estrutural-only — a garantia byte-idêntica
+        real vem de o diff não ter tocado as 12 atribuições anteriores.
+        Persistir CSV-snapshot das 12 colunas pré-5.5 para comparação
+        real numa wave de saneamento futura.
+        """
         df = pd.read_csv(GOLDEN_CSV)
         df = df.rename(columns={'timestamp_utc': 'date'})
         df['date'] = pd.to_datetime(df['date'], utc=True)

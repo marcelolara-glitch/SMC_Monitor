@@ -207,3 +207,24 @@ A revisão corrige a interpretação temporal dos marcadores BOS/CHoCH do LuxAlg
 A posição do texto `BOS` / `CHoCH` é apenas uma referência visual, posicionada aproximadamente no meio da linha. O evento detectável ocorre na extremidade direita da linha, quando o candle fecha rompendo o nível do swing point original.
 **Conclusão:** a engine Python está consistente com o LuxAlgo SMC nos eventos swing analisados.
 **Status final:** `ENGINE VALIDADA — DIVERGÊNCIAS TEMPORAIS ANTERIORES ERAM ESPERADAS POR LEITURA DO LABEL, NÃO DO CLOSE-CROSS`.
+
+---
+
+## 10. Backlog de auditorias visuais pendentes (registrado, não-bloqueante)
+
+1. **FVG base (Onda 7):** 5 fvg_ids discriminadores (8, 11, 15, 69, 70) vs.
+   TradingView (LuxAlgo gratuito) — confirma bearish full-fill vs. first-touch
+   (§7.10 #1 do Mapa Camada 1).
+2. **BPR (Onda 7.2):** spot-check de **formação** das 2 BPRs do golden contra
+   `ICT Concepts [LuxAlgo]` (`i_BPR=true`). Divergência de membros é esperada
+   (§7.10 #3 do Mapa); conferir geometria das coincidentes, não a contagem.
+
+---
+
+## 11. Nota de poder estatístico — CHoCH+ swing no golden 4h
+
+O poder discriminante do **CHoCH+ swing** no golden 4h é **n=1** (único swing
+CHoCH na janela, que virou "+"; nenhum contra-exemplo swing). Validação
+substantiva do escopo swing depende do smoke sintético (Caso A/C do
+`test_smoke_wave5_5.py`) + leitura de código, não do golden. O escopo
+**internal** tem n=5 (4 ratificados + 1 divergência #699), validação adequada.

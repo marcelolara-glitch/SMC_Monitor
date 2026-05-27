@@ -310,8 +310,8 @@ def detect_structure(
     s_higher_low = s_lo.notna() & (s_lo > s_prev_lo)
     s_lower_high = s_hi.notna() & (s_hi < s_prev_hi)
 
-    s_last_low_is_hl = s_higher_low.where(s_lo.notna()).ffill().fillna(False).astype(bool)
-    s_last_high_is_lh = s_lower_high.where(s_hi.notna()).ffill().fillna(False).astype(bool)
+    s_last_low_is_hl = s_higher_low.where(s_lo.notna()).ffill().infer_objects().fillna(False).astype(bool)
+    s_last_high_is_lh = s_lower_high.where(s_hi.notna()).ffill().infer_objects().fillna(False).astype(bool)
 
     choch_plus_bullish = swing_choch_bullish & s_last_low_is_hl.shift(1).fillna(False).astype(bool)
     choch_plus_bearish = swing_choch_bearish & s_last_high_is_lh.shift(1).fillna(False).astype(bool)
@@ -326,8 +326,8 @@ def detect_structure(
     i_higher_low = i_lo.notna() & (i_lo > i_prev_lo)
     i_lower_high = i_hi.notna() & (i_hi < i_prev_hi)
 
-    i_last_low_is_hl = i_higher_low.where(i_lo.notna()).ffill().fillna(False).astype(bool)
-    i_last_high_is_lh = i_lower_high.where(i_hi.notna()).ffill().fillna(False).astype(bool)
+    i_last_low_is_hl = i_higher_low.where(i_lo.notna()).ffill().infer_objects().fillna(False).astype(bool)
+    i_last_high_is_lh = i_lower_high.where(i_hi.notna()).ffill().infer_objects().fillna(False).astype(bool)
 
     choch_plus_internal_bullish = internal_choch_bullish & i_last_low_is_hl.shift(1).fillna(False).astype(bool)
     choch_plus_internal_bearish = internal_choch_bearish & i_last_high_is_lh.shift(1).fillna(False).astype(bool)
