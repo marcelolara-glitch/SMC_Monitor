@@ -735,7 +735,7 @@ correta**. Marcelo decide caso-a-caso se a divergência justifica
 investigação adicional ao `SMC_PRINCIPIOS_E_LEGADO.md` (PR de doc
 dedicado, NÃO bloqueia ondas em curso).
 
-### 7.10 Divergências intencionais da portagem vs LuxAlgo gratuito
+### 7.10 Divergências intencionais da portagem vs LuxAlgo (gratuito ou pago, conforme a feature)
 
 Categoria distinta de §7.8 (features do pago não implementadas) e
 §7.9 (dogma SMC vs LuxAlgo gratuito): divergências entre a
@@ -758,6 +758,7 @@ plano de validação empírica.
 | 2 | Breaker Block — ciclo de vida do registro morto | FluxCharts/PAC remove o breaker da lista ativa quando ele é invalidado pelo lado oposto (`bullishOrderBlocksList.remove(i)`); o registro deixa de existir | Preserva o registro no ledger com `state = 'breaker_broken'` e `t_invalidation` definido; nenhum registro é apagado, estado terminal é explícito | Onda 6.2 | Histórico imutável consultável pós-execução via ledger; mesma filosofia da Onda 6 (mitigação preserva `t_mitigation`) e do ledger de FVG da Onda 7. Golden 4h pós-Wave 6.2: 21 breakers no ledger (1 vivo `state == 'mitigated'` + 20 mortos `state == 'breaker_broken'`); LuxAlgo gratuito mostraria apenas o vivo |
 | 3 | BPR — input FVGs divergem do ICT Concepts | `ICT Concepts [LuxAlgo]` constrói BPR sobre FVGs displacement-based (`body > meanBody`) | Compomos sobre FVGs SMC-portados (`auto_threshold` cumulativo do LuxAlgo SMC). Portamos o algoritmo de overlap (condições §3.1), não os inputs — os BPRs-membros divergem dos do ICT | Onda 7.2 | Golden 4h: 2 BPRs (1 UP, 1 DN), 4 FVGs com `is_double=True`. Spot-check visual contra ICT Concepts (`i_BPR=true`) requer considerar a divergência de membros |
 | 4 | BPR — pareamento event-driven vs per-bar | `ICT Concepts` atualiza "último par" a cada barra | Pareamento event-driven: na criação de cada FVG, busca o oposto ativo mais recente. Funcionalmente alinhados para o caso "último par"; divergência só materializaria se múltiplos pares fossem relevantes (hook futuro) | Onda 7.2 | Equivalência funcional validada no golden 4h (mesmos 2 BPRs que o "último par" produziria). Nota Wave 9.5: BPR break/lifecycle é hook futuro aditivo |
+| 5 | CHoCH+ — janela B1 usa último pivot confirmado | PAC reavalia a pré-condição contra o contexto de preço no instante do break (incremental) | Janela B1: o último pivot oposto **confirmado** antes do break (via `ffill().shift(1)` do evento HL/LH). Em transições rápidas, um pivot recente ainda não confirmado pode não estar refletido, mantendo um estado anterior | Onda 5.5 | Referência = PAC **pago**. 4/5 eventos internal do golden 4h ratificados na vírgula; 1 divergência (#699, 2026-04-27 12:00): pivot âncora confirmado 16 candles antes, durante alta com higher highs não-confirmados → portagem marca CHoCH+ bearish que o PAC não desenha. Não é lookahead (pivot já confirmado); é diferença de expiração da janela. Benigna para uso como filtro de qualidade opcional |
 
 **Quando uma divergência desta categoria é admissível**:
 
