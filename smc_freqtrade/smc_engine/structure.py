@@ -11,6 +11,15 @@ OBJETIVO
     via cumsum/ffill com sinal, classifica BOS/CHoCH posteriormente
     via bias_pre_event = bias_running.shift(1). Sem loop por candle.
 
+    CHoCH+ (Onda 5.5): variante "supported" do CHoCH, validada
+    visualmente contra LuxAlgo PAC pago. CHoCH+ bullish exige que
+    o último swing low antes do break seja um higher low (exaustão
+    da baixa); CHoCH+ bearish exige que o último swing high antes
+    do break seja um lower high (exaustão da alta). Janela B1:
+    apenas o último pivot oposto imediatamente antes do break.
+    Escopos swing e internal; 4 colunas aditivas, saída Onda 5
+    inalterada.
+
 FONTE DE DADOS
     DataFrame com 'close', 'open', 'high', 'low' + as 8 colunas
     COL_*_LEVEL e COL_*_IDX produzidas por detect_pivots() para os
@@ -26,17 +35,18 @@ LIMITAÇÕES CONHECIDAS
     nenhum evento internal dispara. Equivalente a `na != value = na`
     (falsy) do Pine.
 
-    CHoCH+ (variante "supported") NÃO é detectado nesta onda — Onda
-    5.5 (hook documentado em detect_structure).
+    Orientação CHoCH+ corrigida na Onda 5.5-fix após ratificação
+    visual contra PAC pago: CHoCH+ bullish ← higher low (fundo
+    subindo); CHoCH+ bearish ← lower high (topo caindo). A prosa
+    do Doc PAC §4.1 estava invertida — a verdade visual prevalece.
 
 NÃO FAZER
     Não usar shift(-N) em ponto algum.
     Não emitir efeitos colaterais sobre o DataFrame de entrada
         (operar sobre cópia).
-    Não detectar CHoCH+ — Onda 5.5.
     Não popular EngineState — Mapa §2 v1.1.
     Não consumir trailing.* (Onda 4) — irrelevante para BOS/CHoCH.
-    Não inline-ar nomes de coluna — usar as 10 constantes COL_*.
+    Não inline-ar nomes de coluna — usar as 14 constantes COL_*.
 """
 from __future__ import annotations
 
@@ -56,7 +66,7 @@ from .types import BEARISH, BULLISH
 
 
 # ============================================================
-# Nomes canônicos das 10 colunas produzidas por detect_structure.
+# Nomes canônicos das 14 colunas produzidas por detect_structure.
 # Consumidores (Onda 6+) referenciam estas constantes — não
 # inline-ar as strings.
 # ============================================================
@@ -70,6 +80,10 @@ COL_CHOCH_SWING_BULLISH = 'choch_swing_bullish'
 COL_CHOCH_SWING_BEARISH = 'choch_swing_bearish'
 COL_INTERNAL_TREND_BIAS = 'internal_trend_bias'
 COL_SWING_TREND_BIAS = 'swing_trend_bias'
+COL_CHOCH_PLUS_SWING_BULLISH = 'choch_plus_swing_bullish'
+COL_CHOCH_PLUS_SWING_BEARISH = 'choch_plus_swing_bearish'
+COL_CHOCH_PLUS_INTERNAL_BULLISH = 'choch_plus_internal_bullish'
+COL_CHOCH_PLUS_INTERNAL_BEARISH = 'choch_plus_internal_bearish'
 
 
 # ============================================================
@@ -158,6 +172,18 @@ def detect_structure(
         detect_pivots() (Onda 3), em duas escalas independentes:
         internal (length=5) e swing (length=swings_length=50).
 
+        CHoCH+ (Onda 5.5): detecta a variante "supported" do CHoCH nos
+        escopos swing e internal, validada visualmente contra PAC pago.
+        CHoCH+ bullish exige que o último swing low antes do break
+        seja um higher low (fundo subindo = exaustão da baixa);
+        CHoCH+ bearish exige que o último swing high antes do break
+        seja um lower high (topo caindo = exaustão da alta). Janela
+        B1: apenas o último pivot oposto imediatamente antes do break
+        (não o segmento inteiro). Saída: 4 colunas aditivas
+        (choch_plus_swing_bullish, choch_plus_swing_bearish,
+        choch_plus_internal_bullish, choch_plus_internal_bearish),
+        cada uma subconjunto estrito do CHoCH correspondente.
+
     FONTE DE DADOS
         df: DataFrame com no mínimo 'close' + as 8 colunas COL_*_LEVEL e
             COL_*_IDX produzidas por detect_pivots() para os escopos
@@ -178,15 +204,9 @@ def detect_structure(
             materializados pela Onda 3 (que são lookahead-safe). Nenhum
             shift(-N) interno.
 
-        CHoCH+ (variante "supported" do CHoCH com pré-condição estrutural
-            de failed HH/LL na tendência prévia) NÃO é detectado nesta
-            onda. Decisão arquitetural fechada no briefing da Onda 5:
-            feature do LuxAlgo Price Action Concepts pago, adiada para
-            Onda 5.5 com hook explícito. Ver
-            docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md §4.1
-            (spec conceitual) e §6.2 (classificação como Categoria B —
-            extensão sem mudança arquitetural; adiciona regra dentro de
-            detect_structure + estado failed_swing_observed por trend).
+        Orientação CHoCH+ validada visualmente contra PAC pago
+            (ver docstring do módulo). Doc PAC §4.1 inverte a prosa;
+            a implementação segue a verdade visual.
 
         Ordem de declaração no Pine (linha 313: displayStructure(True)
             antes de linha 314: displayStructure()) é irrelevante na
@@ -202,10 +222,9 @@ def detect_structure(
             storeOrdeBlock dentro de displayStructure (linhas 257, 271),
             a Onda 6 lê os 8 booleans da Onda 5 + os COL_*_IDX da Onda 3
             para localizar o pivot do break.
-        Não inline-ar nomes de coluna — usar as 10 constantes COL_*
+        Não inline-ar nomes de coluna — usar as 14 constantes COL_*
             definidas no topo do módulo.
         Não popular EngineState (Mapa §2 v1.1).
-        Não detectar CHoCH+ — Onda 5.5.
     """
     result = df.copy()
 
@@ -277,6 +296,42 @@ def detect_structure(
     internal_choch_bearish = internal_bearish_raw & internal_bias_pre.eq(BULLISH).fillna(False).astype(bool)
     internal_bos_bearish = internal_bearish_raw & ~internal_choch_bearish
 
+    # ==== CHoCH+ (Onda 5.5-fix) — Supported CHoCH, escopo swing ====
+    # Orientação correta (validada visualmente contra PAC pago):
+    #   bullish ← higher low (fundo subindo = exaustão da baixa)
+    #   bearish ← lower high (topo caindo = exaustão da alta)
+    # Janela B1: apenas o ÚLTIMO pivot oposto antes do break.
+
+    s_hi = df[COL_SWING_HIGH_LEVEL]
+    s_lo = df[COL_SWING_LOW_LEVEL]
+    s_prev_hi = s_hi.ffill().shift(1)
+    s_prev_lo = s_lo.ffill().shift(1)
+
+    s_higher_low = s_lo.notna() & (s_lo > s_prev_lo)
+    s_lower_high = s_hi.notna() & (s_hi < s_prev_hi)
+
+    s_last_low_is_hl = s_higher_low.where(s_lo.notna()).ffill().fillna(False).astype(bool)
+    s_last_high_is_lh = s_lower_high.where(s_hi.notna()).ffill().fillna(False).astype(bool)
+
+    choch_plus_bullish = swing_choch_bullish & s_last_low_is_hl.shift(1).fillna(False).astype(bool)
+    choch_plus_bearish = swing_choch_bearish & s_last_high_is_lh.shift(1).fillna(False).astype(bool)
+
+    # ==== CHoCH+ (Onda 5.5-fix) — Supported CHoCH, escopo internal ====
+
+    i_hi = df[COL_INTERNAL_HIGH_LEVEL]
+    i_lo = df[COL_INTERNAL_LOW_LEVEL]
+    i_prev_hi = i_hi.ffill().shift(1)
+    i_prev_lo = i_lo.ffill().shift(1)
+
+    i_higher_low = i_lo.notna() & (i_lo > i_prev_lo)
+    i_lower_high = i_hi.notna() & (i_hi < i_prev_hi)
+
+    i_last_low_is_hl = i_higher_low.where(i_lo.notna()).ffill().fillna(False).astype(bool)
+    i_last_high_is_lh = i_lower_high.where(i_hi.notna()).ffill().fillna(False).astype(bool)
+
+    choch_plus_internal_bullish = internal_choch_bullish & i_last_low_is_hl.shift(1).fillna(False).astype(bool)
+    choch_plus_internal_bearish = internal_choch_bearish & i_last_high_is_lh.shift(1).fillna(False).astype(bool)
+
     result[COL_BOS_INTERNAL_BULLISH] = internal_bos_bullish.astype(bool)
     result[COL_BOS_INTERNAL_BEARISH] = internal_bos_bearish.astype(bool)
     result[COL_BOS_SWING_BULLISH] = swing_bos_bullish.astype(bool)
@@ -287,5 +342,9 @@ def detect_structure(
     result[COL_CHOCH_SWING_BEARISH] = swing_choch_bearish.astype(bool)
     result[COL_INTERNAL_TREND_BIAS] = internal_bias
     result[COL_SWING_TREND_BIAS] = swing_bias
+    result[COL_CHOCH_PLUS_SWING_BULLISH] = choch_plus_bullish.astype(bool)
+    result[COL_CHOCH_PLUS_SWING_BEARISH] = choch_plus_bearish.astype(bool)
+    result[COL_CHOCH_PLUS_INTERNAL_BULLISH] = choch_plus_internal_bullish.astype(bool)
+    result[COL_CHOCH_PLUS_INTERNAL_BEARISH] = choch_plus_internal_bearish.astype(bool)
 
     return result
