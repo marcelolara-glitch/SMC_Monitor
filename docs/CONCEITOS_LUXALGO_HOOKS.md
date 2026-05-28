@@ -480,7 +480,8 @@ roadmap futuro pós-Onda 10.
 
 **Status:** **Não na PAC paid.** Hook reservado para futuro
 refinamento de qualidade de OB. Pode mascarar OBs legítimos em
-regimes de alta volatilidade (cripto pós-evento macro).
+regimes de alta volatilidade (cripto pós-evento macro). Still
+reserved as of Wave 6.1.
 
 ### 10.2 OB Combination (FluxCharts)
 
@@ -492,7 +493,8 @@ função `combineOBsFunc()`
 
 **Status:** **Não na PAC paid.** Hook reservado. Útil se quisermos
 consolidar ledger de OBs muito populoso, mas conceitualmente
-contestável (cada OB tem origem temporal própria).
+contestável (cada OB tem origem temporal própria). Still reserved
+as of Wave 6.1.
 
 ### 10.3 Fibonacci over MSS (DTFX)
 

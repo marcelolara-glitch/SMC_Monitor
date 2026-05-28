@@ -44,8 +44,15 @@ LIMITAÇÕES CONHECIDAS
     `state = 'breaker_broken'` (histórico imutável). Análogo à
     divergência FVG full-fill registrada no Mapa §7.10.
 
-    Volumetric OB / OB Mitigation Average NÃO são detectados nesta
-    onda — hooks reservados (Onda 6.1).
+    Onda 6.1 estende com Volumetric OB (4 campos volumétricos:
+    `volume_bullish`, `volume_bearish`, `volume_total`, `volume_pct`)
+    e eixo ortogonal `ob_mitigation_level` (`'Absolute'`/`'Middle'`).
+    Fórmulas volumétricas derivadas do Pine FluxCharts "Volumized
+    Order Blocks" (MPL 2.0); mitigação Middle derivada do LuxAlgo
+    PAC pago. `volume_pct` é fórmula derivada da definição PAC
+    verbatim, sem código de referência PAC paid disponível;
+    denominador computado no instante de criação sobre OBs ativos
+    naquele instante (lookahead-safe).
 
     Cap de 100 OBs do Pine (linhas 234-235) NÃO portado — bound de
     implementação Pine, não regra semântica (briefing §2 P10).
@@ -56,8 +63,6 @@ NÃO FAZER
     Não estender smc_engine/trailing.py — parsed_* ficam locais.
     Não emitir efeitos colaterais sobre o DataFrame de entrada.
     Não popular EngineState (Mapa §2 v1.1).
-    Não detectar Volumetric OB — Onda 6.1.
-    Não implementar mitigation='Average' — Onda 6.1.
     Não portar o cap de 100 OBs do Pine.
     Não renomear OrderBlock.bar_time → t_origin (briefing §2 P12).
     Não emitir booleans per-candle de morte de breaker — derivável
@@ -65,6 +70,8 @@ NÃO FAZER
         é escopo da Onda 9.4 (engine MTF).
     Não materializar `is_breaker` — derivável: `state == 'mitigated'`
         ⇔ breaker vivo; `state == 'breaker_broken'` ⇔ breaker morto.
+    Não implementar OB ATR size filter (FluxCharts) — §10 HOOKS.
+    Não implementar OB Combination (FluxCharts) — §10 HOOKS.
 """
 from __future__ import annotations
 
@@ -224,6 +231,35 @@ def _emit_create_record(
     bar_time = df['date'].loc[extreme_label]
     t_creation = df['date'].iloc[break_pos]
 
+    # Volumetric fields (Wave 6.1 — FluxCharts formula §2.3/§2.4).
+    has_volume = 'volume' in df.columns
+    volume_bullish = pd.NA
+    volume_bearish = pd.NA
+    volume_total = pd.NA
+
+    if has_volume:
+        extreme_pos = df.index.get_loc(extreme_label)
+        t_pos = extreme_pos + 2
+        if t_pos <= break_pos and t_pos < len(df):
+            vol_base = df['volume'].iloc[extreme_pos]
+            vol_plus_1 = df['volume'].iloc[extreme_pos + 1]
+            vol_plus_2 = df['volume'].iloc[extreme_pos + 2]
+            if (
+                pd.notna(vol_base)
+                and pd.notna(vol_plus_1)
+                and pd.notna(vol_plus_2)
+            ):
+                vol_base = float(vol_base)
+                vol_plus_1 = float(vol_plus_1)
+                vol_plus_2 = float(vol_plus_2)
+                if bias == BULLISH:
+                    volume_bearish = vol_base
+                    volume_bullish = vol_plus_1 + vol_plus_2
+                else:
+                    volume_bullish = vol_base
+                    volume_bearish = vol_plus_1 + vol_plus_2
+                volume_total = volume_bullish + volume_bearish
+
     return {
         'scope': scope,
         'bias': bias,
@@ -234,7 +270,10 @@ def _emit_create_record(
         't_mitigation': pd.NaT,
         't_invalidation': pd.NaT,
         'state': 'active',
-        'volumetric_intensity': pd.NA,
+        'volume_bullish': volume_bullish,
+        'volume_bearish': volume_bearish,
+        'volume_total': volume_total,
+        'volume_pct': pd.NA,
         'bb_volume': pd.NA,
     }
 
@@ -319,6 +358,7 @@ def _resolve_mitigations(
     df: pd.DataFrame,
     records: list[dict],
     mitigation: str,
+    ob_mitigation_level: str = 'Absolute',
 ) -> tuple[dict[str, pd.Series], list[dict]]:
     """MITIGATION + BREAKER DEATH pass. Para cada OB, busca primeira
     vela `date > t_creation` que satisfaz a condição de mitigação;
@@ -372,10 +412,17 @@ def _resolve_mitigations(
 
         # Filtro `date > t_creation` (estritamente posterior, P11).
         after_create = dates > t_creation
-        if bias == BEARISH:
-            hits = after_create & (bearish_source > bar_high)
+        if ob_mitigation_level == 'Middle':
+            mid = (bar_high + bar_low) / 2
+            if bias == BEARISH:
+                hits = after_create & (bearish_source > mid)
+            else:
+                hits = after_create & (bullish_source < mid)
         else:
-            hits = after_create & (bullish_source < bar_low)
+            if bias == BEARISH:
+                hits = after_create & (bearish_source > bar_high)
+            else:
+                hits = after_create & (bullish_source < bar_low)
 
         new_record = dict(record)
         if hits.any():
@@ -424,21 +471,49 @@ def _resolve_mitigations(
     return mitigated_cols, out_records
 
 
-def _build_ledger(records: list[dict]) -> pd.DataFrame:
-    """Constrói DataFrame ledger com schema canônico (briefing §4.3
-    + 6.2 §4).
+def _compute_volume_pct(records: list[dict]) -> None:
+    """Computa volume_pct in-place, no instante de criação de cada OB.
 
-    12 colunas: ob_id, scope, bias, bar_high, bar_low, bar_time,
+    Para cada OB X com volume_total definido, volume_pct_X =
+    volume_total_X / sum(volume_total_Y for Y ativo em T_X), onde
+    "Y ativo em T_X" = t_creation_Y <= T_X AND (t_mitigation_Y is NaT
+    OR t_mitigation_Y > T_X). Lookahead-safe por construção.
+    """
+    for x in records:
+        if pd.isna(x.get('volume_total')):
+            x['volume_pct'] = pd.NA
+            continue
+        t_x = x['t_creation']
+        denom = 0.0
+        for y in records:
+            if pd.isna(y.get('volume_total')):
+                continue
+            if y['t_creation'] > t_x:
+                continue
+            t_mit_y = y.get('t_mitigation')
+            if pd.notna(t_mit_y) and t_mit_y <= t_x:
+                continue
+            denom += float(y['volume_total'])
+        x['volume_pct'] = (
+            float(x['volume_total']) / denom if denom > 0 else pd.NA
+        )
+
+
+def _build_ledger(records: list[dict]) -> pd.DataFrame:
+    """Constrói DataFrame ledger com schema canônico (15 colunas).
+
+    ob_id, scope, bias, bar_high, bar_low, bar_time,
     t_creation, t_mitigation, t_invalidation, state,
-    volumetric_intensity, bb_volume.
+    volume_bullish, volume_bearish, volume_total, volume_pct,
+    bb_volume.
     """
     columns = [
         'ob_id', 'scope', 'bias', 'bar_high', 'bar_low', 'bar_time',
         't_creation', 't_mitigation', 't_invalidation', 'state',
-        'volumetric_intensity', 'bb_volume',
+        'volume_bullish', 'volume_bearish', 'volume_total', 'volume_pct',
+        'bb_volume',
     ]
     if not records:
-        # Ledger vazio com schema correto.
         return pd.DataFrame({c: pd.Series(dtype='object') for c in columns})
 
     ledger = pd.DataFrame(records, columns=columns)
@@ -448,12 +523,10 @@ def _build_ledger(records: list[dict]) -> pd.DataFrame:
     ledger['bar_high'] = ledger['bar_high'].astype('float64')
     ledger['bar_low'] = ledger['bar_low'].astype('float64')
     ledger['state'] = ledger['state'].astype('string')
-    # volumetric_intensity: Wave 6 sempre pd.NA — dtype float64 nullable.
-    ledger['volumetric_intensity'] = ledger['volumetric_intensity'].astype(
-        'Float64',
-    )
-    # bb_volume: Float64 nullable; pd.NA quando coluna `volume`
-    # ausente no df de entrada (Wave 6.2 §2 P7).
+    ledger['volume_bullish'] = ledger['volume_bullish'].astype('Float64')
+    ledger['volume_bearish'] = ledger['volume_bearish'].astype('Float64')
+    ledger['volume_total'] = ledger['volume_total'].astype('Float64')
+    ledger['volume_pct'] = ledger['volume_pct'].astype('Float64')
     ledger['bb_volume'] = ledger['bb_volume'].astype('Float64')
     return ledger
 
@@ -463,121 +536,28 @@ def detect_order_blocks(
     *,
     ob_filter: Literal['Atr', 'Range'] = 'Atr',
     mitigation: Literal['Close', 'Wick'] = 'Wick',
+    ob_mitigation_level: Literal['Absolute', 'Middle'] = 'Absolute',
     atr_length: int = 200,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    OBJETIVO
-        Portagem vetorizada de storeOrdeBlock() + deleteOrderBlocks()
-        do LuxAlgo SMC (Pine linhas 200-236), integrada via re-leitura
-        das 8 booleans BOS/CHoCH da Onda 5. Detecta criação e
-        mitigação de Order Blocks em duas escalas (internal e swing)
-        e duas direções (bullish e bearish), produzindo (a) um
-        DataFrame com 8 eventos booleans por candle e (b) um ledger
-        com uma linha por OB de ciclo de vida completo.
+    """Detecta Order Blocks com mitigação, breaker death, volumetria e
+    mitigation level (Absolute/Middle).
 
-    FONTE DE DADOS
-        df: DataFrame com no mínimo:
-            - 4 colunas OHLC: open, high, low, close (float64).
-            - Coluna `date` (Int64 epoch ms ou pd.Timestamp) —
-              timestamp canônico usado para preencher bar_time,
-              t_creation e t_mitigation no ledger.
-            - 4 colunas COL_*_IDX produzidas por detect_pivots()
-              (Onda 3) para os escopos swing e internal.
-            - 8 booleans BOS/CHoCH produzidas por detect_structure()
-              (Onda 5).
-        ob_filter: replica orderBlockFilterInput do Pine (linha 87).
-            'Atr' usa ta.atr(atr_length); 'Range' usa
-            ta.cum(ta.tr) / bar_index. Determina volatilityMeasure
-            para detecção de high-volatility bars na inversão de
-            parsedHigh/parsedLow.
-        mitigation: replica orderBlockMitigationInput do Pine
-            (linha 88). 'Wick' (default, = HIGHLOW no Pine) usa
-            high/low como fonte de mitigação; 'Close' usa close.
-            Aceita apenas 'Close' e 'Wick' em Wave 6 — valor 'Average'
-            (midpoint da caixa, `(bar_high + bar_low) / 2`) é hook
-            reservado para Onda 6.1 (LuxAlgo Price Action Concepts
-            pago).
-        atr_length: replica o length de ta.atr() no Pine (linha 124,
-            hardcoded em 200). Exposto como parâmetro para facilitar
-            testes sintéticos com horizonte curto.
+    Produz (a) DataFrame com 8 eventos booleans por candle e (b) ledger
+    com 15 colunas por OB de ciclo de vida completo.
 
-    LIMITAÇÕES CONHECIDAS
-        Lookahead-safe por construção: consome apenas COL_*_IDX e
-            8 booleans já materializados pelas ondas 3 e 5 (todos
-            lookahead-safe). Nenhum shift(-N) interno. O scan de
-            morte do breaker é forward com `date > t_mitigation`
-            estritamente posterior (briefing 6.2 §2 P8).
-
-        Política de mitigação `date > t_creation` (estritamente
-            posterior) diverge sutilmente do Pine (que executa
-            deleteOrderBlocks no MESMO candle do create). Decisão
-            fechada no briefing da Onda 6 §2 P11 — "OB não pode
-            morrer ao nascer". Cenário praticamente irrelevante
-            (close cruza pivot mas wicks raramente furam lado oposto
-            da janela no mesmo candle).
-
-        Detecção de Breaker Blocks (Onda 6.2) implementada via morte
-            em `t_invalidation` + estado terminal `'breaker_broken'`,
-            sob o reenquadramento PAC: mitigação ≡ nascimento do
-            breaker (a Onda 6 já detecta o nascimento via
-            `t_mitigation` + `state='mitigated'`); a 6.2 detecta a
-            MORTE quando o preço sai pela extremidade oposta da
-            caixa. **Divergência intencional vs PAC/FluxCharts**:
-            o PAC remove o breaker morto da lista; aqui preservamos
-            o registro (histórico imutável) — análogo à divergência
-            FVG full-fill registrada no Mapa §7.10. `is_breaker`
-            não é materializado: é derivável (`state == 'mitigated'`
-            ⇔ breaker vivo; `state == 'breaker_broken'` ⇔ breaker
-            morto).
-
-        Volumetric Order Blocks (LuxAlgo pago) NÃO são detectados
-            nesta onda. Hook reservado: campo
-            OrderBlock.volumetric_intensity default None. Decisão
-            arquitetural fechada no briefing da Onda 6: feature do
-            LuxAlgo Price Action Concepts pago, adiada para
-            Onda 6.1 com hook explícito. Ver
-            docs/AVALIACAO_LUXALGO_PRICE_ACTION_CONCEPTS_v1.0.md
-            §4.2 (spec conceitual) e §6.2 (classificação Categoria B
-            — extensão sem mudança arquitetural; preenche
-            volumetric_intensity durante o CREATE pass somando
-            volume da janela [pivot_idx, break_idx)).
-
-            Pré-condição Onda 6.1: DataFrame de entrada deve incluir
-            coluna `volume` (padrão Freqtrade OHLCV). Não é
-            pré-condição da Wave 6/6.2 base — apenas da extensão
-            Onda 6.1. Em 6.2 a coluna `volume` é opcional: alimenta
-            `bb_volume` se presente; caso contrário `bb_volume`
-            permanece `pd.NA` (briefing 6.2 §2 P7).
-
-        OB Mitigation Method = Average (LuxAlgo pago) NÃO é
-            implementada nesta onda. Hook reservado: parâmetro
-            mitigation aceita futuro valor 'Average'. Adiada para
-            Onda 6.1.
-
-        Cap de 100 OBs do Pine (linhas 234-235) NÃO é portado —
-            bound de implementação Pine, não regra semântica.
-
-    NÃO FAZER
-        Não usar shift(-N) em ponto algum.
-        Não recomputar BOS/CHoCH — consumir as 8 booleans da Onda 5.
-        Não estender smc_engine/trailing.py (Onda 4) — parsed_*
-            ficam locais ao módulo order_blocks.py.
-        Não emitir efeitos colaterais sobre o DataFrame de entrada
-            (operar sobre df.copy()).
-        Não inline-ar nomes de coluna — usar as constantes COL_OB_*
-            definidas no topo do módulo.
-        Não popular EngineState (Mapa §2 v1.1) — a portagem é
-            vetorizada sobre DataFrame; o ledger substitui os slots
-            `swing_order_blocks` / `internal_order_blocks` do
-            EngineState herdado do Pine.
-        Não detectar Volumetric OB — Onda 6.1.
-        Não implementar mitigation='Average' — Onda 6.1.
-        Não portar o cap de 100 OBs do Pine.
-        Não renomear OrderBlock.bar_time → t_origin (P12).
-        Não emitir booleans per-candle de morte de breaker — escopo
-            da Onda 9.4 (engine MTF), derivável do ledger via
-            `t_invalidation`.
-        Não materializar `is_breaker` — derivável do `state`.
+    Args:
+        df: DataFrame OHLCV com colunas obrigatórias (OHLC + date) +
+            COL_*_IDX (Onda 3) + 8 booleans BOS/CHoCH (Onda 5).
+            Coluna `volume` é opcional: quando presente, alimenta os
+            4 campos volumétricos e `bb_volume`.
+        ob_filter: 'Atr' ou 'Range' (Pine linha 87).
+        mitigation: 'Close' ou 'Wick' — fonte de mitigação.
+        ob_mitigation_level: 'Absolute' (default, byte-idêntico à
+            6.2) usa bar_low/bar_high como threshold; 'Middle' usa
+            midpoint da caixa `(bar_high + bar_low) / 2`. Afeta
+            apenas a mitigação inicial; morte do breaker usa sempre
+            bar_high/bar_low.
+        atr_length: length de ta.atr() no Pine (default 200).
     """
     if ob_filter not in ('Atr', 'Range'):
         raise ValueError(
@@ -585,8 +565,12 @@ def detect_order_blocks(
         )
     if mitigation not in ('Close', 'Wick'):
         raise ValueError(
-            f"mitigation must be 'Close' or 'Wick' in Wave 6, got "
-            f"{mitigation!r}. 'Average' é hook Onda 6.1.",
+            f"mitigation must be 'Close' or 'Wick', got {mitigation!r}",
+        )
+    if ob_mitigation_level not in ('Absolute', 'Middle'):
+        raise ValueError(
+            f"ob_mitigation_level must be 'Absolute' or 'Middle', "
+            f"got {ob_mitigation_level!r}",
         )
 
     df_per_candle = df.copy()
@@ -599,7 +583,9 @@ def detect_order_blocks(
     )
     mitigated_cols, records = _resolve_mitigations(
         df, records=records, mitigation=mitigation,
+        ob_mitigation_level=ob_mitigation_level,
     )
+    _compute_volume_pct(records)
 
     for col, series in create_cols.items():
         df_per_candle[col] = series.astype(bool)

@@ -47,7 +47,8 @@ def test_invariant_a_ledgers_have_canonical_columns(synthetic_df: pd.DataFrame) 
     expected_ob_cols = {
         'ob_id', 'scope', 'bias', 'bar_high', 'bar_low', 'bar_time',
         't_creation', 't_mitigation', 't_invalidation', 'state',
-        'volumetric_intensity', 'bb_volume',
+        'volume_bullish', 'volume_bearish', 'volume_total', 'volume_pct',
+        'bb_volume',
     }
     expected_fvg_cols = {
         'fvg_id', 'bias', 'top', 'bottom', 'bar_time',

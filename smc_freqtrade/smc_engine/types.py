@@ -151,40 +151,15 @@ class OrderBlock:
 
     OBJETIVO
         UDT canônico de Order Block produzido por
-        `smc_engine.order_blocks.detect_order_blocks` (Onda 6). Os 4
-        campos originais (`bar_high`, `bar_low`, `bar_time`, `bias`)
-        mapeiam 1:1 o UDT Pine. Os 6 campos novos
+        `smc_engine.order_blocks.detect_order_blocks` (Onda 6+).
+        Os 4 campos originais (`bar_high`, `bar_low`, `bar_time`,
+        `bias`) mapeiam 1:1 o UDT Pine. Os 5 campos adicionais
         (`t_creation`, `t_mitigation`, `t_invalidation`, `scope`,
-        `state`, `volumetric_intensity`) suportam o ciclo de vida
-        multi-candle do OB em pandas, sem equivalente direto no Pine
-        (que mantém o ciclo via remoção de array global).
-
-    FONTE DE DADOS
-        Pine fonte:
-            @udt
-            class orderBlock:
-                barHigh: float = na(float)
-                barLow: float = na(float)
-                barTime: int = na(int)
-                bias: int = na(int)
-
-        Convenção temporal: `bar_time` ≡ t_origin = timestamp da vela
-        parsed-extreme dentro da janela `[pivot_idx, break_idx)`.
-        Briefing Onda 6 §2 P12 — interface preservation, NÃO renomear.
-
-    LIMITAÇÕES CONHECIDAS
-        Wave 6 emite apenas `state ∈ {'active', 'mitigated'}`. Valor
-            `'breaker'` é hook reservado para Onda 6.2 (Breaker
-            Blocks).
-        Wave 6 NÃO computa `volumetric_intensity` — sempre None. Hook
-            para Onda 6.1 (Volumetric OB), que preencherá com fração
-            `buy_volume / total_volume` da janela.
-        Wave 6 NÃO computa `t_invalidation` — sempre None. Hook para
-            semântica futura de invalidação pós-mitigação (Onda 6.2).
+        `state`) suportam o ciclo de vida multi-candle do OB em
+        pandas.
 
     NÃO FAZER
         Não renomear `bar_time` → `t_origin` (briefing Onda 6 §2 P12).
-        Não preencher os 3 campos reservados em Wave 6.
         Não adicionar métodos comportamentais (is_mitigated, etc.) —
             ciclo de vida é responsabilidade do módulo `order_blocks`.
     """
@@ -197,7 +172,6 @@ class OrderBlock:
     t_invalidation: Optional[int] = None
     scope: str = 'swing'
     state: str = 'active'
-    volumetric_intensity: Optional[float] = None
 
 
 @dataclass
