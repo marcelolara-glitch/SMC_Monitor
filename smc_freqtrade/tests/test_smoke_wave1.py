@@ -118,30 +118,25 @@ def test_alerts_field_order_matches_pine() -> None:
 # ----- UDT OrderBlock -----
 
 def test_order_block_field_count_matches_pine() -> None:
-    """Pine `orderBlock` UDT tem 4 campos (linhas 46-50); Onda 6
-    estende com 6 campos (`t_creation`, `t_mitigation`,
-    `t_invalidation`, `scope`, `state`, `volumetric_intensity`)
-    conforme briefing Onda 6 §2 P3. Os 4 originais permanecem
+    """Pine `orderBlock` UDT tem 4 campos (linhas 46-50); Onda 6+
+    estende com 5 campos (`t_creation`, `t_mitigation`,
+    `t_invalidation`, `scope`, `state`). Os 4 originais permanecem
     presentes e nomeados verbatim do Pine."""
     fields = OrderBlock.__dataclass_fields__
-    assert len(fields) == 10
+    assert len(fields) == 9
     for pine_field in ('bar_high', 'bar_low', 'bar_time', 'bias'):
         assert pine_field in fields
 
 
 def test_order_block_default_is_all_none() -> None:
     ob = OrderBlock()
-    # 4 campos originais (Pine UDT) — todos defaultam para None.
     assert ob.bar_high is None
     assert ob.bar_low is None
     assert ob.bar_time is None
     assert ob.bias is None
-    # 3 campos reservados (hooks Onda 6.1/6.2) — todos None em Wave 6.
     assert ob.t_creation is None
     assert ob.t_mitigation is None
     assert ob.t_invalidation is None
-    assert ob.volumetric_intensity is None
-    # Defaults canônicos para state e scope.
     assert ob.scope == 'swing'
     assert ob.state == 'active'
 

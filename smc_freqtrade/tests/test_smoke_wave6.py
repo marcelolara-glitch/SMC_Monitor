@@ -204,8 +204,11 @@ def test_smoke_wave6_lifecycle(synthetic_df):
     breaker_broken_mask = ledger['state'] == 'breaker_broken'
     assert breaker_broken_mask.eq(ledger['t_invalidation'].notna()).all()
 
-    # Invariante 11 — volumetric_intensity sempre None (hook 6.1).
-    assert ledger['volumetric_intensity'].isna().all()
+    # Invariante 11 — volumetric fields present (Wave 6.1).
+    assert 'volume_bullish' in ledger.columns
+    assert 'volume_bearish' in ledger.columns
+    assert 'volume_total' in ledger.columns
+    assert 'volume_pct' in ledger.columns
 
     # Cobertura mínima da fixture: pelo menos 1 mitigated e 1 active.
     # Mitigated agrega `'mitigated'` (breaker vivo) + `'breaker_broken'`

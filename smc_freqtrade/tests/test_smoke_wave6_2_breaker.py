@@ -224,7 +224,8 @@ def test_wave6_2_ledger_schema():
     expected_cols = [
         'ob_id', 'scope', 'bias', 'bar_high', 'bar_low', 'bar_time',
         't_creation', 't_mitigation', 't_invalidation', 'state',
-        'volumetric_intensity', 'bb_volume',
+        'volume_bullish', 'volume_bearish', 'volume_total', 'volume_pct',
+        'bb_volume',
     ]
     assert list(ledger.columns) == expected_cols
-    assert len(ledger.columns) == 12
+    assert len(ledger.columns) == 15

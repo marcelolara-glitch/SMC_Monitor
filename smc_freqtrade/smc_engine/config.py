@@ -22,8 +22,7 @@ LIMITAÇÕES CONHECIDAS
 
 NÃO FAZER
     Não adicionar campos para hooks futuros (is_inverse, is_double,
-    volumetric_intensity, sweep_atr_threshold etc.) — esses ficam
-    nas sub-ondas reservadas.
+    sweep_atr_threshold etc.) — esses ficam nas sub-ondas reservadas.
 """
 from __future__ import annotations
 
@@ -46,9 +45,10 @@ class SMCConfig:
     pivot_equal_threshold: float = 0.1
     # Onda 5 — Structure (1 param)
     structure_internal_filter_confluence: bool = False
-    # Onda 6 — Order Blocks (3 params)
+    # Onda 6 — Order Blocks (4 params)
     ob_filter: Literal['Atr', 'Range'] = 'Atr'
     ob_mitigation: Literal['Close', 'Wick'] = 'Wick'
+    ob_mitigation_level: Literal['Absolute', 'Middle'] = 'Absolute'
     ob_atr_length: int = 200
     # Onda 7 — FVG (2 params)
     fvg_auto_threshold: bool = True
@@ -80,6 +80,11 @@ class SMCConfig:
             raise ValueError(
                 f"pivot_equal_threshold deve ser > 0, "
                 f"recebeu {self.pivot_equal_threshold}"
+            )
+        if self.ob_mitigation_level not in ('Absolute', 'Middle'):
+            raise ValueError(
+                f"ob_mitigation_level deve ser 'Absolute' ou 'Middle', "
+                f"recebeu {self.ob_mitigation_level!r}"
             )
         if self.ob_atr_length < 1:
             raise ValueError(

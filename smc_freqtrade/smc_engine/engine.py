@@ -111,7 +111,7 @@ def analyze(
     Returns:
         AnalyzeResult com:
             - df: input + 52 colunas dos 6 detectores
-            - ledger_ob: ledger de Order Blocks (12 colunas)
+            - ledger_ob: ledger de Order Blocks (15 colunas)
             - ledger_fvg: ledger de FVGs (11 colunas, is_double
               populado pela composição BPR da Onda 7.2)
             - ledger_bpr: ledger de Balanced Price Ranges (7 colunas,
@@ -156,6 +156,7 @@ def analyze(
         work,
         ob_filter=config.ob_filter,
         mitigation=config.ob_mitigation,
+        ob_mitigation_level=config.ob_mitigation_level,
         atr_length=config.ob_atr_length,
     )
     work, ledger_fvg = detect_fair_value_gaps(
