@@ -158,6 +158,21 @@ class OrderBlock:
         `state`) suportam o ciclo de vida multi-candle do OB em
         pandas.
 
+    FONTE DE DADOS
+        Mapeia o `orderBlock` UDT Pine (linhas 46-50 do indicador
+        LuxAlgo SMC gratuito), com 5 campos adicionais para ciclo de
+        vida pandas.
+
+        Divergência intencional vs ledger: o ledger de OB
+        (`smc_engine.order_blocks._build_ledger`, 15 colunas)
+        acrescenta `ob_id` (chave primária tabular) e 5 colunas de
+        instrumentação de volume (`volume_bullish`, `volume_bearish`,
+        `volume_total`, `volume_pct`, `bb_volume`) introduzidas pela
+        Wave 6.1 (Volumetric OB). Essas 6 colunas extras são
+        representação analítica do estado do OB ao longo do tempo,
+        não estado conceitual Pine-compatible. UDT permanece com 9
+        campos para preservar paridade Pine.
+
     NÃO FAZER
         Não renomear `bar_time` → `t_origin` (briefing Onda 6 §2 P12).
         Não adicionar métodos comportamentais (is_mitigated, etc.) —

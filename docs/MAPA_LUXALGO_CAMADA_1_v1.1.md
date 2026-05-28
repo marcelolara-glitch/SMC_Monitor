@@ -237,6 +237,20 @@ Conflitos que **não são bugs do LuxAlgo** mas **gaps em relação ao framework
 
 **Restrição estrutural relevante:** o `timeframe` da `IStrategy` deve ser o **menor** dos três (15m). 1H e 4H entram como informative. Não há outra opção (verificação Freqtrade §2.2).
 
+**Tooling de validação (Wave 9.4):** o helper
+`smc_freqtrade/tools/mtf_align.py::align_informative` reimplementa o
+algoritmo de `merge_informative_pair` em código próprio, citando
+`freqtrade/strategy/strategy_helper.py:6-116` (Freqtrade GPL-3.0)
+como fonte do algoritmo. Mora em `tools/` (não em `smc_engine/`)
+para comunicar que é tooling de teste, não código de produção.
+
+**Divergência breaker preservado-vs-removido:** consumidores do
+ledger de OB que filtrem por `state == 'mitigated'` recebem apenas
+breakers **vivos** (cujo lado oposto não foi atravessado). Breakers
+mortos têm `state == 'breaker_broken'` (Wave 6.2). Para filtrar
+"todos os OBs mitigados, vivos ou mortos", usar `t_mitigation.notna()`
+(documentado em `docs/CONCEITOS_LUXALGO_HOOKS.md §12.1`).
+
 ### 5.2 Conflito B — `lookahead=barmerge.lookahead_on` no FVG
 
 **Status v1.1: FECHADO.**

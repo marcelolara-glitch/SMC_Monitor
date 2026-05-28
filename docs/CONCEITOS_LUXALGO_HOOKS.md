@@ -451,18 +451,26 @@ Detalhe operacional do briefing técnico em documento separado
 
 ---
 
-## 9. Engine MTF (Wave 9.4)
+## 9. Engine MTF (Wave 9.4 — ratificada)
 
-### Escopo
+### Decisão arquitetural
 
-`analyze_multi_tf(df_4h, df_1h, df_15m) → dict[tf, AnalyzeResult]`
+A engine SMC **não coordena multi-timeframe**. Decisão cravada em:
 
-Engine roda em N timeframes e retorna dicionário sincronizado.
+- `docs/VERIFICACAO_FREQTRADE.md §2.3, §2.4`
+- `docs/MAPA_LUXALGO_CAMADA_1_v1.1.md §5.1`
 
-### Fora do escopo deste documento
+Em produção (Wave 10 / `SMCStrategy`), o Freqtrade chama `analyze()`
+3 vezes via `@informative('4h')` + `@informative('1h')` +
+`populate_indicators` (15m). O `merge_informative_pair` upstream faz
+o merge sem lookahead bias.
 
-Wave 9.4 é puramente arquitetural — não envolve hooks conceituais
-LuxAlgo. Briefing técnico em documento separado quando chegar a vez.
+### Tooling de validação (sandbox)
+
+Para validação fora do Freqtrade, a Wave 9.4 entregou
+`smc_freqtrade/tools/mtf_align.py::align_informative`, que replica o
+algoritmo de `merge_informative_pair` em código próprio. **Não usar
+em produção** — é exclusivamente helper de teste.
 
 ---
 

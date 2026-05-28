@@ -46,7 +46,23 @@ import pandas as pd
 OKX_HISTORY_CANDLES_URL = "https://www.okx.com/api/v5/market/history-candles"
 OKX_PAGE_LIMIT = 100
 COURTESY_PAUSE_SECONDS = 0.2
-BAR_4H_SECONDS = 14400
+
+# Mapping de timeframes OKX -> segundos por candle. Cobre os bars usados
+# pelos goldens (4H principal + MTF 1H / 15m). Estender quando o projeto
+# precisar de outros TFs.
+TIMEFRAME_SECONDS: dict[str, int] = {
+    "1m": 60,
+    "3m": 180,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1H": 3600,
+    "2H": 7200,
+    "4H": 14400,
+    "6H": 21600,
+    "12H": 43200,
+    "1D": 86400,
+}
 
 
 def _parse_iso_utc(value: str) -> datetime:
@@ -148,7 +164,7 @@ def _rows_to_dataframe(rows: Iterable[list]) -> pd.DataFrame:
 
 
 def _validate_continuity(
-    df: pd.DataFrame, expected_bar_seconds: int = BAR_4H_SECONDS
+    df: pd.DataFrame, expected_bar_seconds: int
 ) -> list[str]:
     errors: list[str] = []
     if df.empty:
@@ -180,13 +196,17 @@ def fetch_window(
 ) -> pd.DataFrame:
     if start_utc >= end_utc:
         raise ValueError("start_utc deve ser estritamente menor que end_utc.")
+    if timeframe not in TIMEFRAME_SECONDS:
+        raise ValueError(
+            f"Timeframe {timeframe!r} nao suportado. "
+            f"Validos: {sorted(TIMEFRAME_SECONDS)}."
+        )
     rows = _paginate(_to_ms(start_utc), _to_ms(end_utc), instrument, timeframe)
     df = _rows_to_dataframe(rows)
-    expected_bar_seconds = BAR_4H_SECONDS if timeframe == "4H" else None
-    if expected_bar_seconds is not None:
-        gaps = _validate_continuity(df, expected_bar_seconds)
-        if gaps:
-            raise RuntimeError("Janela de OHLCV invalida: " + "; ".join(gaps))
+    expected_bar_seconds = TIMEFRAME_SECONDS[timeframe]
+    gaps = _validate_continuity(df, expected_bar_seconds)
+    if gaps:
+        raise RuntimeError("Janela de OHLCV invalida: " + "; ".join(gaps))
     return df
 
 
