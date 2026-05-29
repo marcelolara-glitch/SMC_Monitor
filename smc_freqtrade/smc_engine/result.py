@@ -55,3 +55,8 @@ class AnalyzeResult:
     ledger_fvg: pd.DataFrame
     ledger_bpr: pd.DataFrame = field(default_factory=pd.DataFrame)
     meta: dict[str, Any] = field(default_factory=dict)
+    # Onda 9.5a — campo antecipado para a máquina de estados de setup.
+    # Aditivo/opcional: `analyze()` não o popula (contrato primário é
+    # df-only via compute_setup_state); default None para não quebrar
+    # callers existentes (D3).
+    df_setup_state: pd.DataFrame | None = None
