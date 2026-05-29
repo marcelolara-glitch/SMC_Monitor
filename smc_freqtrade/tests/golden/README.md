@@ -139,3 +139,21 @@ tests/golden/
     ├── golden_validator.py                   # valida JSON contra schema + CSV
     └── ohlcv_fetcher.py                      # gera CSV via OKX REST
 ```
+
+## 8. Datasets adicionais para validação MTF
+
+A partir da Wave 9.4, dois CSVs OHLCV adicionais foram capturados na
+mesma janela do golden 4H, para validação MTF (alinhamento entre
+timeframes via `tools/mtf_align.py`):
+
+| Arquivo | TF | Candles | SHA-256 |
+|---|---|---|---|
+| `data/btc_usdt_swap_4h_window.csv`  | 4H  |   720 | `1a3f746cfe6095ad544c46c66e1500306627ea5224cdc3708ef994af2b3ef3fa` |
+| `data/btc_usdt_swap_1h_window.csv`  | 1H  | 2 880 | `c6fced57db43061e2a4aa7b1adf0523dfafea7490577d3b381a66be85b2237a3` |
+| `data/btc_usdt_swap_15m_window.csv` | 15m |11 520 | `889ba7ac69ba5acb8e2b67b3eb355e348533ee606671c6882c51dd8944c45e28` |
+
+Janela: `2026-01-01T00:00:00Z → 2026-05-01T00:00:00Z` (exclusive).
+BTC-USDT-SWAP, OKX. Capturados via
+`tests/golden/tools/ohlcv_fetcher.py`. Não há JSON estruturado
+correspondente — esses CSVs servem apenas como input bruto OHLCV para
+validação de funções de alinhamento MTF.

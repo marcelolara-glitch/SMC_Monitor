@@ -285,22 +285,27 @@ def test_t9_middle_threshold_more_permissive(synthetic_df):
     )
 
 
-def test_t10_breaker_death_unaffected_by_middle():
-    """C12: breaker death always uses bar_high/bar_low, not midpoint.
+def _build_breaker_death_df(n: int = 130, seed: int = 99) -> pd.DataFrame:
+    """Cenário sintético estendido que dispara breaker death.
 
-    Constructs a scenario where price reaches midpoint but not extreme.
-    With Middle, OB mitigates (becomes breaker) but breaker should NOT
-    die unless price exceeds bar_high/bar_low.
+    Fases:
+        00-10  : queda 100 → 95
+        10-20  : alta 95 → 110 (BOS)
+        20-30  : continuação 110 → 115 (forma OB bullish)
+        30-50  : queda 115 → 105 (atravessa midpoint do OB)
+        50-70  : hover 105 → 108 (próximo do midpoint)
+        70-100 : drift 108 → 106 (Middle mitiga; Absolute não)
+        100-130: rally 106 → 120 (preço supera bar_high → breaker death)
     """
-    n = 100
-    rng = np.random.RandomState(99)
-    base = np.linspace(100.0, 100.0, n)
-    base[0:10] = np.linspace(100.0, 95.0, 10)   # down
-    base[10:20] = np.linspace(95.0, 110.0, 10)   # up (BOS)
-    base[20:30] = np.linspace(110.0, 115.0, 10)   # continued up
-    base[30:50] = np.linspace(115.0, 105.0, 20)   # drop to midpoint
-    base[50:70] = np.linspace(105.0, 108.0, 20)   # hover near midpoint
-    base[70:100] = np.linspace(108.0, 106.0, 30)  # stay above bar_low
+    rng = np.random.RandomState(seed)
+    base = np.empty(n)
+    base[0:10] = np.linspace(100.0, 95.0, 10)
+    base[10:20] = np.linspace(95.0, 110.0, 10)
+    base[20:30] = np.linspace(110.0, 115.0, 10)
+    base[30:50] = np.linspace(115.0, 105.0, 20)
+    base[50:70] = np.linspace(105.0, 108.0, 20)
+    base[70:100] = np.linspace(108.0, 106.0, 30)
+    base[100:130] = np.linspace(106.0, 120.0, 30)
 
     closes = base + rng.normal(0, 0.3, n)
     opens = closes + rng.normal(0, 0.2, n)
@@ -311,21 +316,65 @@ def test_t10_breaker_death_unaffected_by_middle():
         pd.date_range('2026-01-01', periods=n, freq='4h')
         .astype('int64') // 10**6
     )
-    df = pd.DataFrame({
+    return pd.DataFrame({
         'open': opens, 'high': highs, 'low': lows, 'close': closes,
         'date': dates, 'volume': rng.uniform(100, 1000, n),
     })
 
-    _, ledger_mid = _run_pipeline(df, ob_mitigation_level='Middle')
 
-    mitigated = ledger_mid[ledger_mid['state'] == 'mitigated']
-    broken = ledger_mid[ledger_mid['state'] == 'breaker_broken']
+def test_t10_breaker_death_unaffected_by_middle():
+    """C11+C12: breaker death usa bar_high/bar_low (não midpoint),
+    independente de `ob_mitigation_level`.
 
-    for _, rec in mitigated.iterrows():
-        if rec['bias'] == BULLISH:
-            assert df.loc[
-                df['date'] > rec['t_mitigation'], 'high'
-            ].max() <= rec['bar_high'] or len(broken[
-                (broken['t_creation'] == rec['t_creation'])
-                & (broken['scope'] == rec['scope'])
-            ]) == 0
+    Itera sobre `state == 'breaker_broken'` (não `mitigated`, que era
+    tautológico) e valida geometricamente em ambos os modos:
+
+    1. Entre `t_mitigation` e `t_invalidation`, `high` (bullish) /
+       `low` (bearish) nunca ultrapassa `bar_high`/`bar_low`.
+    2. No candle de `t_invalidation`, o extremo ultrapassa.
+
+    A invariante C12 é sobre o **threshold** geométrico (sempre
+    `bar_high`/`bar_low`), não sobre o `t_invalidation` absoluto:
+    como Middle mitiga antes de Absolute, a janela de breaker abre
+    em momentos diferentes, e a primeira ultrapassagem subsequente
+    pode cair em candles distintos. O briefing §4 P5(4) sugeria
+    igualar `t_invalidation` entre modos, mas a engine corretamente
+    desacopla mitigação (mode-dependent) de death (mode-independent
+    apenas no threshold).
+    """
+    df = _build_breaker_death_df()
+    dates = df['date'].values
+
+    for mode in ('Middle', 'Absolute'):
+        _, ledger = _run_pipeline(df, ob_mitigation_level=mode)
+        broken = ledger[ledger['state'] == 'breaker_broken']
+        assert len(broken) >= 1, (
+            f'Cenário não disparou breaker death em modo {mode}; '
+            f'ajustar gerador.'
+        )
+
+        for _, rec in broken.iterrows():
+            i_mit = int(np.where(dates == rec['t_mitigation'])[0][0])
+            i_inv = int(np.where(dates == rec['t_invalidation'])[0][0])
+            assert i_mit < i_inv, (
+                f'[{mode}] Ordem causal violada: i_mit={i_mit} >= i_inv={i_inv}.'
+            )
+
+            if rec['bias'] == BULLISH:
+                window = df.iloc[i_mit + 1:i_inv]
+                if len(window) > 0:
+                    assert window['high'].max() <= rec['bar_high'], (
+                        f'[{mode}] high superou bar_high antes de t_invalidation.'
+                    )
+                assert df.iloc[i_inv]['high'] > rec['bar_high'], (
+                    f'[{mode}] high não superou bar_high no candle de t_invalidation.'
+                )
+            else:
+                window = df.iloc[i_mit + 1:i_inv]
+                if len(window) > 0:
+                    assert window['low'].min() >= rec['bar_low'], (
+                        f'[{mode}] low ultrapassou bar_low antes de t_invalidation.'
+                    )
+                assert df.iloc[i_inv]['low'] < rec['bar_low'], (
+                    f'[{mode}] low não ultrapassou bar_low no candle de t_invalidation.'
+                )
