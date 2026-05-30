@@ -42,6 +42,7 @@ from .pivots import detect_eqh_eql, detect_pivots
 from .result import AnalyzeResult
 from .structure import detect_structure
 from .trailing import compute_trailing_extremes
+from .zone_projection import promote_active_zones
 
 REQUIRED_COLUMNS = ('date', 'open', 'high', 'low', 'close')
 
@@ -172,6 +173,11 @@ def analyze(
         sweep_max_pivot_age_bars=config.sweep_max_pivot_age_bars,
         qualify_with_pd_zone=config.sweep_qualify_with_pd_zone,
     )
+    # Wave 9.5a §S1 — pós-passo causal: projeta a zona swing OB / FVG
+    # ativa por candle (12 colunas) a partir dos ledgers, para que a
+    # zona atravesse o merge @informative (que só carrega colunas do
+    # df). Lookahead-safe; não reconstrói detecção.
+    work = promote_active_zones(work, ledger_ob, ledger_fvg)
 
     from . import __version__
     meta: dict[str, Any] = {
