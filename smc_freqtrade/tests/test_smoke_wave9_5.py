@@ -78,21 +78,25 @@ def _golden_pipeline() -> pd.DataFrame:
 # §6 — invariante de regressão: 66 → 78 colunas, aditivo ao fim
 # ============================================================
 
-def test_golden_4h_goes_66_to_78_columns() -> None:
-    """§6: no golden 4H (com volume), analyze() vai de 66 para 78 colunas."""
+def test_golden_4h_goes_66_to_86_columns() -> None:
+    """§6: no golden 4H (com volume), analyze() vai de 66 para 86 colunas.
+
+    Wave 9.5b: a zona ativa passou de 12 → 20 colunas (OB swing +2
+    volume_pct; IFVG +6 = {bull,bear}×{top,bottom,id}). Aditivo ao fim —
+    o gate real do §7 é aditividade, não a contagem."""
     result = analyze(_load_ohlcv('btc_usdt_swap_4h_window.csv'))
-    assert len(result.df.columns) == 78
-    assert list(result.df.columns[-12:]) == list(ACTIVE_ZONE_COLUMNS)
+    assert len(result.df.columns) == 86
+    assert list(result.df.columns[-20:]) == list(ACTIVE_ZONE_COLUMNS)
 
 
-def test_analyze_adds_exactly_12_zone_columns(synthetic_df: pd.DataFrame) -> None:
-    """As 12 colunas de zona são anexadas ao fim (ordem das existentes
-    preservada). synthetic_df não tem `volume` → 65 base + 12 = 77."""
+def test_analyze_adds_exactly_20_zone_columns(synthetic_df: pd.DataFrame) -> None:
+    """As 20 colunas de zona são anexadas ao fim (ordem das existentes
+    preservada). synthetic_df não tem `volume` → 65 base + 20 = 85."""
     result = analyze(synthetic_df)
-    assert list(result.df.columns[-12:]) == list(ACTIVE_ZONE_COLUMNS)
-    # exatamente 12 colunas a mais que o set sem promoção.
+    assert list(result.df.columns[-20:]) == list(ACTIVE_ZONE_COLUMNS)
+    # exatamente 20 colunas a mais que o set sem promoção.
     non_zone = [c for c in result.df.columns if c not in ACTIVE_ZONE_COLUMNS]
-    assert len(non_zone) == len(result.df.columns) - 12
+    assert len(non_zone) == len(result.df.columns) - 20
 
 
 def test_ledger_counts_unchanged(synthetic_df: pd.DataFrame) -> None:

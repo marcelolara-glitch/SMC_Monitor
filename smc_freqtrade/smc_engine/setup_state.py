@@ -1,65 +1,55 @@
-"""Máquina de estados de setup SMC + assinatura A3 (Triple Confirmation).
+"""Máquina de estados de setup SMC multi-modo + matcher declarativo (9.5b).
 
 OBJETIVO
-    Implementar a máquina de estados de setup SMC (5 estados
-    conceituais, 4 realizados em coluna) e a assinatura **A3 — Triple
-    Confirmation (OB + FVG + Sweep)**, do tipo Continuação, consumindo
-    contexto multi-timeframe (4H trend / 1H zona / 15m confirmação) já
-    mergeado no DataFrame base.
+    Estende a FSM de setup da 9.5a com três entregas aditivas (Wave 9.5b):
 
-    Primeira wave cujo output (`setup_state == 'CONFIRMED'`) é consumido
-    por sinal de entrada de trade (Wave 10). Stateless: recebe o df
-    (15m base + colunas `_4h`/`_1h`) e devolve o mesmo df + 6 colunas
-    `setup_*`.
+    1. **Motor multi-modo:** `SetupConfig.entry_mode ∈
+       {confirmation, risk, hybrid}`. `confirmation` é o comportamento
+       da 9.5a (inalterado, caso de regressão). `risk` confirma direto na
+       interseção da zona (sem PENDING). `hybrid` é stub (NotImplementedError).
+    2. **Matcher declarativo:** a A3 hard-coded da 9.5a foi extraída para
+       uma representação declarativa (`Signature`), sobre a qual a FSM
+       itera. A A3 vira a 1ª instância declarativa — semântica preservada,
+       saída byte-idêntica em `confirmation`.
+    3. **4 arquétipos:** A3 (continuação, OB+FVG+sweep), A2 (continuação,
+       OB+sweep), A4a (reversão, IFVG), A5 (tap, OB+volume, modo risk).
+
+    Stateless (df in, df out). Modela **um** setup ativo por vez (FSM
+    sequencial, um vencedor por candle), re-armável após terminal.
 
 FONTE DE DADOS
     Colunas consumidas (sufixo conforme TF após merge `@informative`):
-    - 4H: `swing_trend_bias_4h` (∈ {1, −1}; +1 ⇒ LONG, −1 ⇒ SHORT).
-    - 1H (zona, promovida por zone_projection.py §S1):
-      `active_{bull,bear}_swing_ob_{top,bottom,id}_1h`,
-      `active_{bull,bear}_fvg_{top,bottom,id}_1h`.
-    - 15m (base, sem sufixo): `sweep_{bullish,bearish}_{wick,retest}`,
+    - 4H: `swing_trend_bias_{ts}` (∈ {1, −1}; +1 ⇒ LONG, −1 ⇒ SHORT) —
+      exigida só pelas assinaturas trend-gated (A3/A2/A5).
+    - Zona (promovida por zone_projection.py):
+      `active_{bull,bear}_swing_ob_{top,bottom,id,volume_pct}_{zs}`,
+      `active_{bull,bear}_fvg_{top,bottom,id}_{zs}`,
+      `active_{bull,bear}_ifvg_{top,bottom,id}_{zs}`.
+    - Base (15m, sem sufixo): `sweep_{bullish,bearish}_{wick,retest}`,
       `choch_internal_{bullish,bearish}`, `open/high/low/close`.
 
-    Predicados A3 conforme SMC_PRINCIPIOS_E_LEGADO.md §2-§3 e o briefing
-    da Wave 9.5a §S4. Filtro de mitigação via `t_mitigation.notna()`
-    (HOOKS §12.1) — codificado já na promoção de zona (§S1).
-
-PREDICADO DE VELA DE REJEIÇÃO (§S3, inline — sem módulo)
-    Não há detector formal de "vela de rejeição" no projeto. A fonte
-    (§2.2) é qualitativa ("pavio direcional longo + close forte");
-    operacionaliza-se aqui como quantitativo (divergência documentada):
-    com `rng = high - low` (guarda `rng > 0`):
-    - Rejeição bullish (LONG):
-      `(min(open,close) - low)/rng >= rejection_wick_frac`  E
-      `close >= low + rejection_close_frac * rng`.
-    - Rejeição bearish (SHORT): simétrico
-      `(high - max(open,close))/rng >= rejection_wick_frac`  E
-      `close <= high - rejection_close_frac * rng`.
+PREDICADO DE VELA DE REJEIÇÃO (inline — sem módulo)
+    Idêntico à 9.5a: com `rng = high - low` (guarda `rng > 0`):
+    - Rejeição bullish: `(min(open,close) - low)/rng >= rejection_wick_frac`
+      E `close >= low + rejection_close_frac * rng`.
+    - Rejeição bearish: simétrico.
 
 LIMITAÇÕES CONHECIDAS
-    - `pending_timeout_candles = 16` é **decisão de engenharia**, não
-      derivada de fonte (SMC_PRINCIPIOS §2.5 não numera "N candles
-      15m"). Rationale: 16 × 15m = 4h = 1 candle macro 4H = 4 candles
-      da zona 1H; acima da latência de formação do ChoCH 15m (~8-12
-      candles, dado `pivot_internal_length=5`); abaixo da janela ARMED
-      (24/6h). A tunar por backtest na Wave 9.5c.
-    - `fvg_ob_adjacency_pct` é decisão de projeto (a fonte não numera
-      adjacência OB↔FVG).
-    - Predicado de rejeição: divergência qualitativo→quantitativo
-      (acima).
-    - A engine não expõe trend "neutro"; sem gate de neutro — direção é
-      sempre +1 ou −1.
-    - **RESOLVED fica FORA da coluna.** A engine é stateless por candle
-      e não pode computar SL/TP hit sem lookahead (proibido —
-      VERIFICACAO §3.2, SMC_PRINCIPIOS §5.3). RESOLVED é conceitual /
-      ciclo de trade do Freqtrade. A coluna realiza 4 valores: ARMED,
-      PENDING_CONFIRMATION, CONFIRMED, INVALIDATED.
-    - Escopo do OB da zona = `swing` (D4). Apenas Confirmation Entry
-      (D6); Risk Entry fora de escopo.
-    - Modela **um** setup ativo por vez (FSM sequencial), re-armável
-      após terminal (CONFIRMED/INVALIDATED). Breaker/IFVG, Premium/
-      Discount e matcher declarativo ficam para a Wave 9.5b.
+    - **RESOLVED fica FORA da coluna** (stateless, sem lookahead). A coluna
+      realiza 4 valores: ARMED, PENDING_CONFIRMATION, CONFIRMED, INVALIDATED.
+    - `entry_mode='hybrid'` é stub que levanta `NotImplementedError` (D1):
+      o fallback do hybrid depende de SL atingido (= RESOLVED), incomputável
+      numa FSM stateless sem lookahead. Reaberto na Wave 9.5f/10 quando
+      houver realimentação de outcome. Falhar alto; nunca rotear
+      silenciosamente para comportamento diferente.
+    - `entry_mode='risk'` (D2): ARMED → CONFIRMED direto na interseção da
+      zona, sem PENDING. `zone_crossed` é estruturalmente impossível (tocar
+      a zona *é* a entrada). Reusa o conjunto de invalidação do ARMED
+      (escaped, timeout, trend_changed, mitigated); nenhuma razão nova.
+    - A engine não expõe trend "neutro"; assinaturas trend-gated têm
+      direção sempre +1/−1. A4a (reversão) é contra-tendência: **sem** gate
+      de trend (logo, sem invalidação `trend_changed`).
+    - N setups simultâneos → 9.5f/Wave 10 (MVP = um vencedor por candle).
 
 NÃO FAZER
     - Não usar `shift(-N)` (lookahead proibido).
@@ -71,22 +61,29 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 import pandas as pd
 
-# === Valores de estado realizados na coluna (D2) ===
+# === Valores de estado realizados na coluna ===
 STATE_ARMED = 'ARMED'
 STATE_PENDING = 'PENDING_CONFIRMATION'
 STATE_CONFIRMED = 'CONFIRMED'
 STATE_INVALIDATED = 'INVALIDATED'
 SETUP_STATES = (STATE_ARMED, STATE_PENDING, STATE_CONFIRMED, STATE_INVALIDATED)
 
-# === Direções (D2, minúscula) ===
+# === Direções (minúscula) ===
 DIRECTION_LONG = 'long'
 DIRECTION_SHORT = 'short'
 
-# === Razões de invalidação (D8, enum string) ===
+# === Modos de entrada (Wave 9.5b, D1) ===
+ENTRY_MODE_CONFIRMATION = 'confirmation'
+ENTRY_MODE_RISK = 'risk'
+ENTRY_MODE_HYBRID = 'hybrid'
+ENTRY_MODES = (ENTRY_MODE_CONFIRMATION, ENTRY_MODE_RISK, ENTRY_MODE_HYBRID)
+
+# === Razões de invalidação (enum string) ===
 REASON_ESCAPED = 'escaped'
 REASON_TIMEOUT = 'timeout'
 REASON_TREND_CHANGED = 'trend_changed'
@@ -97,7 +94,12 @@ INVALIDATION_REASONS = (
     REASON_ZONE_CROSSED, REASON_MITIGATED,
 )
 
-# === Colunas de output (S5) ===
+# === Ids de assinatura válidos (D3, ordem de prioridade) ===
+# A3 > A2 > A4a > A5 (qualidade de evidência). Decide só o empate
+# "duas armam no mesmo candle".
+_VALID_SIGNATURE_IDS = ('A3', 'A2', 'A4a', 'A5')
+
+# === Colunas de output ===
 COL_SETUP_ID = 'setup_id'
 COL_SETUP_STATE = 'setup_state'
 COL_SETUP_DIRECTION = 'setup_direction'
@@ -116,24 +118,29 @@ SETUP_OUTPUT_COLUMNS = (
 
 @dataclass(frozen=True)
 class SetupConfig:
-    """Configuração dedicada da máquina de estados de setup (Wave 9.5a).
+    """Configuração dedicada da máquina de estados de setup.
 
-    Não incha `SMCConfig` (D3). Defaults ancorados em SMC_PRINCIPIOS
-    §2.5 onde a fonte numera, e em decisão de engenharia onde não numera
-    (ver LIMITAÇÕES CONHECIDAS do módulo).
+    Não incha `SMCConfig`. Defaults ancorados em SMC_PRINCIPIOS §2.5 onde
+    a fonte numera, e em decisão de engenharia onde não numera.
     """
     # Invalidação ARMED (SMC_PRINCIPIOS §2.5)
     armed_escape_pct: float = 0.02        # >2% além da zona sem entrar
     armed_timeout_candles: int = 24       # 6h em 15m, sem atividade
     # Invalidação PENDING
     pending_timeout_candles: int = 16     # N — decisão de engenharia
-    # Catalisador / confirmação A3
+    # Catalisador / confirmação
     sweep_recency_candles: int = 16       # sweep válido nos últimos K candles
     fvg_ob_adjacency_pct: float = 0.003   # OB↔FVG adjacentes (decisão de projeto)
     rejection_wick_frac: float = 0.5      # pavio direcional >= 50% do range
     rejection_close_frac: float = 0.667   # close no terço favorável
-    signature: str = 'A3'                 # hard-coded nesta wave
-    # Sufixos de TF após o merge @informative (S1/D7)
+    # Wave 9.5b
+    entry_mode: str = ENTRY_MODE_CONFIRMATION   # confirmation | risk | hybrid (D1)
+    volume_pct_min: float = 0.2           # limiar de volume da A5 (D5)
+    # `signature` aceita um id (str) ou uma sequência de ids. Default 'A3'
+    # → caso de regressão byte-idêntico. Múltiplas → FSM itera por
+    # prioridade D3 (um vencedor por candle).
+    signature: object = 'A3'
+    # Sufixos de TF após o merge @informative
     trend_suffix: str = '4h'
     zone_suffix: str = '1h'
 
@@ -163,21 +170,63 @@ class SetupConfig:
                 f'rejection_close_frac deve estar em [0, 1], '
                 f'recebeu {self.rejection_close_frac}'
             )
+        if self.entry_mode not in ENTRY_MODES:
+            raise ValueError(
+                f'entry_mode deve estar em {ENTRY_MODES}, '
+                f'recebeu {self.entry_mode!r}'
+            )
+        if not 0.0 <= self.volume_pct_min <= 1.0:
+            raise ValueError(
+                f'volume_pct_min deve estar em [0, 1], '
+                f'recebeu {self.volume_pct_min}'
+            )
+        ids = [self.signature] if isinstance(self.signature, str) \
+            else list(self.signature)
+        if not ids:
+            raise ValueError('signature não pode ser vazia')
+        for sid in ids:
+            if sid not in _VALID_SIGNATURE_IDS:
+                raise ValueError(
+                    f'signature {sid!r} inválida; válidas: '
+                    f'{_VALID_SIGNATURE_IDS}'
+                )
+
+
+# ============================================================
+# setup_id determinístico
+# ============================================================
+
+def _make_setup_id_anchors(
+    signature: str, direction: str, anchors, t_armed,
+) -> str:
+    """Hash determinístico de (signature, direction, *anchors, t_armed).
+
+    Generaliza o id da 9.5a para um número arbitrário de âncoras
+    preservando a forma canônica da A3: com `anchors=(ob_id, fvg_id)` a
+    f-string resultante é **idêntica** à da 9.5a (gate de regressão).
+    """
+    parts = [signature, direction]
+    for a in anchors:
+        if a is None or (isinstance(a, float) and np.isnan(a)):
+            parts.append('')
+        else:
+            parts.append(str(int(a)))
+    parts.append(f'{t_armed}')
+    canonical = '|'.join(parts)
+    return hashlib.sha1(canonical.encode('utf-8')).hexdigest()[:16]
 
 
 def _make_setup_id(
     signature: str, direction: str, ob_id, fvg_id, t_armed,
 ) -> str:
-    """Hash determinístico de (signature, direction, ob_id, fvg_id, t_armed).
+    """Compat 9.5a: id de A3 a partir de (ob_id, fvg_id). Delega ao
+    construtor por âncoras (saída byte-idêntica)."""
+    return _make_setup_id_anchors(signature, direction, (ob_id, fvg_id), t_armed)
 
-    D5: string estável; permite que a 9.5b adicione assinaturas no mesmo
-    OB sem colisão. sha1 truncado de uma f-string canônica.
-    """
-    ob_part = '' if ob_id is None else str(int(ob_id))
-    fvg_part = '' if fvg_id is None else str(int(fvg_id))
-    canonical = f'{signature}|{direction}|{ob_part}|{fvg_part}|{t_armed}'
-    return hashlib.sha1(canonical.encode('utf-8')).hexdigest()[:16]
 
+# ============================================================
+# Helpers de coluna / arrays
+# ============================================================
 
 def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
     missing = [c for c in columns if c not in df.columns]
@@ -194,102 +243,306 @@ def _float_col(df: pd.DataFrame, col: str) -> np.ndarray:
     return pd.to_numeric(df[col], errors='coerce').to_numpy(dtype='float64')
 
 
+def _opt_float_col(df: pd.DataFrame, col: str, n: int) -> np.ndarray:
+    """Como `_float_col`, mas devolve array de NaN se a coluna faltar.
+
+    Permite que assinaturas não-selecionadas (cujas colunas podem não
+    existir no df) não derrubem o builder; `_require_columns` garante a
+    presença das colunas das assinaturas **selecionadas**.
+    """
+    if col in df.columns:
+        return _float_col(df, col)
+    return np.full(n, np.nan, dtype='float64')
+
+
 def _rolling_any(flag: np.ndarray, window: int) -> np.ndarray:
     """True em T se houver algum True na janela [T-window+1, T] (lookahead-safe)."""
     s = pd.Series(flag.astype('float64'))
     return (s.rolling(window, min_periods=1).max() > 0).to_numpy()
 
 
-def compute_setup_state(
-    df: pd.DataFrame,
-    config: SetupConfig | None = None,
-) -> pd.DataFrame:
-    """Computa a máquina de estados A3 (Triple Confirmation) com MTF.
+def _zone_arrays(A: dict, kind: str, direction: str):
+    """(top, bottom, id) da zona `kind` ∈ {ob, fvg, ifvg} na `direction`."""
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    return (
+        A[f'{pre}_{kind}_top'],
+        A[f'{pre}_{kind}_bottom'],
+        A[f'{pre}_{kind}_id'],
+    )
 
-    Stateless (df in, df out — igual `analyze()`). Recebe o DataFrame
-    base (15m) **já mergeado** com colunas `_4h` e `_1h` (incluindo as
-    12 colunas de zona promovidas por `zone_projection.promote_active_zones`).
-    Devolve o mesmo df + as 6 colunas `setup_*` (S5).
 
-    A3 é Continuação: trend macro 4H + pullback à zona OB+FVG 1H + sweep
-    catalisador recente + ChoCH 15m + vela de rejeição, na direção do
-    trend. Fluxo: (vazio) → ARMED → PENDING_CONFIRMATION → CONFIRMED, com
-    caminhos de INVALIDATED. Modela um setup ativo por vez, re-armável
-    após terminal.
+# ============================================================
+# Assinatura declarativa (matcher)
+# ============================================================
 
-    Args:
-        df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
-        config: SetupConfig. Se None, usa defaults.
+@dataclass(frozen=True)
+class Signature:
+    """Representação declarativa de uma assinatura de setup.
 
-    Returns:
-        Cópia de `df` + 6 colunas (`SETUP_OUTPUT_COLUMNS`). `setup_state`
-        ∈ {ARMED, PENDING_CONFIRMATION, CONFIRMED, INVALIDATED} ou <NA>;
-        `setup_invalidation_reason` ∈ INVALIDATION_REASONS ou <NA>.
+    A FSM itera as assinaturas selecionadas por `priority` e, num candle
+    sem setup ativo, arma a primeira cuja direção candidata é não-nula e
+    cujo `arm_fn` é True.
+
+    Callables operam sobre o dict de arrays `A` (saída de `_build_arrays`):
+    - `direction_fn(A) -> ndarray[object]` de {'long','short',None} por candle.
+    - `zone_fn(A, direction) -> (zlow[], zhigh[], anchors[n,k])`: zona e
+      âncoras (ids cuja persistência define a validade) da `direction`.
+    - `arm_fn(A, direction) -> ndarray[bool]`.
+    - `confirm_fn(A, direction) -> ndarray[bool]` (só consultado em
+      `confirmation`).
     """
-    if config is None:
-        config = SetupConfig()
+    id: str
+    tipo: str                          # 'continuacao' | 'reversao' | 'tap'
+    entry_mode_preferido: str          # documental; o efetivo vem do SetupConfig
+    priority: int                      # menor = maior prioridade (D3)
+    trend_gated: bool                  # consome trend 4H (e invalida por trend_changed)
+    required_kinds: tuple              # kinds de zona exigidos no df
+    direction_fn: Callable
+    zone_fn: Callable
+    arm_fn: Callable
+    confirm_fn: Callable
 
+
+# ---- Direção candidata ----
+
+def _direction_from_trend(A: dict) -> np.ndarray:
+    """Direção de assinaturas de continuação: +1 → long, −1 → short."""
+    trend = A['trend']
+    out = np.empty(len(trend), dtype=object)
+    out[:] = None
+    out[trend == 1.0] = DIRECTION_LONG
+    out[trend == -1.0] = DIRECTION_SHORT
+    return out
+
+
+def _direction_from_ifvg(A: dict) -> np.ndarray:
+    """Direção da A4a (reversão): da direção *negociável* da IFVG presente.
+
+    `active_bull_ifvg_*` presente → long; `active_bear_ifvg_*` → short.
+    **Sem** gate de trend 4H. Empate (ambas presentes) → a de menor
+    distância ao close; empate exato → long.
+    """
+    n = A['n']
+    c = A['c']
+    bull_top, bull_bot, bull_id = _zone_arrays(A, 'ifvg', DIRECTION_LONG)
+    bear_top, bear_bot, bear_id = _zone_arrays(A, 'ifvg', DIRECTION_SHORT)
+    out = np.empty(n, dtype=object)
+    out[:] = None
+    has_bull = ~np.isnan(bull_id)
+    has_bear = ~np.isnan(bear_id)
+    with np.errstate(invalid='ignore'):
+        d_bull = np.where(
+            c < bull_bot, bull_bot - c,
+            np.where(c > bull_top, c - bull_top, 0.0),
+        )
+        d_bear = np.where(
+            c < bear_bot, bear_bot - c,
+            np.where(c > bear_top, c - bear_top, 0.0),
+        )
+    only_bull = has_bull & ~has_bear
+    only_bear = has_bear & ~has_bull
+    both = has_bull & has_bear
+    out[only_bull] = DIRECTION_LONG
+    out[only_bear] = DIRECTION_SHORT
+    with np.errstate(invalid='ignore'):
+        both_long = both & (d_bull <= d_bear)
+        both_short = both & (d_bull > d_bear)
+    out[both_long] = DIRECTION_LONG
+    out[both_short] = DIRECTION_SHORT
+    return out
+
+
+# ---- Zona + âncoras ----
+
+def _zone_ob(A: dict, direction: str, with_fvg: bool):
+    """Zona = banda do OB swing; âncoras = (ob_id[, fvg_id])."""
+    ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
+    if with_fvg:
+        _, _, fvg_id = _zone_arrays(A, 'fvg', direction)
+        anchors = np.column_stack([ob_id, fvg_id])
+    else:
+        anchors = ob_id.reshape(-1, 1)
+    return ob_bot, ob_top, anchors
+
+
+def _zone_A3(A: dict, direction: str):
+    return _zone_ob(A, direction, with_fvg=True)
+
+
+def _zone_ob_only(A: dict, direction: str):
+    return _zone_ob(A, direction, with_fvg=False)
+
+
+def _zone_A4a(A: dict, direction: str):
+    """Zona = banda da IFVG; âncora = (ifvg_id,)."""
+    it, ib, iid = _zone_arrays(A, 'ifvg', direction)
+    return ib, it, iid.reshape(-1, 1)
+
+
+# ---- Armação ----
+
+def _outside(A: dict, direction: str, zlow: np.ndarray, zhigh: np.ndarray) -> np.ndarray:
+    """Preço ainda não entrou na zona: long → low > zhigh; short → high < zlow."""
+    with np.errstate(invalid='ignore'):
+        if direction == DIRECTION_LONG:
+            return A['low'] > zhigh
+        return A['h'] < zlow
+
+
+def _arm_A3(A: dict, direction: str) -> np.ndarray:
+    """OB swing + FVG (mesma direção) + adjacência OB↔FVG + preço fora."""
+    cfg = A['cfg']
+    ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
+    fv_top, fv_bot, fv_id = _zone_arrays(A, 'fvg', direction)
+    with np.errstate(invalid='ignore'):
+        ob_mid = (ob_top + ob_bot) / 2.0
+        overlap = (ob_bot <= fv_top) & (fv_bot <= ob_top)
+        gap = np.maximum(np.maximum(fv_bot - ob_top, ob_bot - fv_top), 0.0)
+        adjacent = overlap | (gap <= cfg.fvg_ob_adjacency_pct * ob_mid)
+    has = (~np.isnan(ob_id)) & (~np.isnan(fv_id))
+    return has & adjacent & _outside(A, direction, ob_bot, ob_top)
+
+
+def _arm_A2(A: dict, direction: str) -> np.ndarray:
+    """OB swing + sweep recente (mesma direção) + preço fora. Sem FVG."""
+    ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
+    has = ~np.isnan(ob_id)
+    sweep = A['bull_sweep_recent'] if direction == DIRECTION_LONG \
+        else A['bear_sweep_recent']
+    return has & sweep & _outside(A, direction, ob_bot, ob_top)
+
+
+def _arm_A5(A: dict, direction: str) -> np.ndarray:
+    """OB swing com volume_pct > volume_pct_min + preço fora."""
+    cfg = A['cfg']
+    ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    volpct = A[f'{pre}_ob_volpct']
+    has = ~np.isnan(ob_id)
+    with np.errstate(invalid='ignore'):
+        vol_ok = volpct > cfg.volume_pct_min
+    return has & vol_ok & _outside(A, direction, ob_bot, ob_top)
+
+
+def _arm_A4a(A: dict, direction: str) -> np.ndarray:
+    """IFVG (direção negociável) presente + preço fora da banda IFVG."""
+    it, ib, iid = _zone_arrays(A, 'ifvg', direction)
+    has = ~np.isnan(iid)
+    return has & _outside(A, direction, ib, it)
+
+
+# ---- Confirmação (só consultada em modo confirmation) ----
+
+def _confirm_choch_rej_sweep(A: dict, direction: str) -> np.ndarray:
+    """A3/A2: ChoCH + rejeição + sweep recente (mesmo primitivo)."""
+    if direction == DIRECTION_LONG:
+        return A['choch_bull'] & A['rej_bull'] & A['bull_sweep_recent']
+    return A['choch_bear'] & A['rej_bear'] & A['bear_sweep_recent']
+
+
+def _confirm_choch_rej(A: dict, direction: str) -> np.ndarray:
+    """A4a/A5: ChoCH (direção da reversão/setup) + rejeição."""
+    if direction == DIRECTION_LONG:
+        return A['choch_bull'] & A['rej_bull']
+    return A['choch_bear'] & A['rej_bear']
+
+
+# ---- Registro das 4 assinaturas (ordem de prioridade D3) ----
+
+SIGNATURES: dict[str, Signature] = {
+    'A3': Signature(
+        'A3', 'continuacao', ENTRY_MODE_CONFIRMATION, 0, True, ('ob', 'fvg'),
+        _direction_from_trend, _zone_A3, _arm_A3, _confirm_choch_rej_sweep,
+    ),
+    'A2': Signature(
+        'A2', 'continuacao', ENTRY_MODE_CONFIRMATION, 1, True, ('ob',),
+        _direction_from_trend, _zone_ob_only, _arm_A2, _confirm_choch_rej_sweep,
+    ),
+    'A4a': Signature(
+        'A4a', 'reversao', ENTRY_MODE_CONFIRMATION, 2, False, ('ifvg',),
+        _direction_from_ifvg, _zone_A4a, _arm_A4a, _confirm_choch_rej,
+    ),
+    'A5': Signature(
+        'A5', 'tap', ENTRY_MODE_RISK, 3, True, ('ob', 'volpct'),
+        _direction_from_trend, _zone_ob_only, _arm_A5, _confirm_choch_rej,
+    ),
+}
+
+
+def _resolve_signatures(config: SetupConfig) -> list[Signature]:
+    """Lista de assinaturas selecionadas, ordenada por prioridade (D3)."""
+    ids = [config.signature] if isinstance(config.signature, str) \
+        else list(config.signature)
+    sigs = [SIGNATURES[sid] for sid in ids]
+    return sorted(sigs, key=lambda s: s.priority)
+
+
+_KIND_COLUMNS = {
+    'ob': ('active_{pre}_swing_ob_top_{zs}',
+           'active_{pre}_swing_ob_bottom_{zs}',
+           'active_{pre}_swing_ob_id_{zs}'),
+    'fvg': ('active_{pre}_fvg_top_{zs}',
+            'active_{pre}_fvg_bottom_{zs}',
+            'active_{pre}_fvg_id_{zs}'),
+    'ifvg': ('active_{pre}_ifvg_top_{zs}',
+             'active_{pre}_ifvg_bottom_{zs}',
+             'active_{pre}_ifvg_id_{zs}'),
+    'volpct': ('active_{pre}_swing_ob_volume_pct_{zs}',),
+}
+
+
+def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[str]:
+    """Colunas exigidas: base + trend (se trend-gated) + kinds das sigs."""
     zs = config.zone_suffix
     ts = config.trend_suffix
-    trend_col = f'swing_trend_bias_{ts}'
-    # Colunas de zona 1H (promovidas em §S1).
-    c_bull_ob_top = f'active_bull_swing_ob_top_{zs}'
-    c_bull_ob_bot = f'active_bull_swing_ob_bottom_{zs}'
-    c_bull_ob_id = f'active_bull_swing_ob_id_{zs}'
-    c_bear_ob_top = f'active_bear_swing_ob_top_{zs}'
-    c_bear_ob_bot = f'active_bear_swing_ob_bottom_{zs}'
-    c_bear_ob_id = f'active_bear_swing_ob_id_{zs}'
-    c_bull_fvg_top = f'active_bull_fvg_top_{zs}'
-    c_bull_fvg_bot = f'active_bull_fvg_bottom_{zs}'
-    c_bull_fvg_id = f'active_bull_fvg_id_{zs}'
-    c_bear_fvg_top = f'active_bear_fvg_top_{zs}'
-    c_bear_fvg_bot = f'active_bear_fvg_bottom_{zs}'
-    c_bear_fvg_id = f'active_bear_fvg_id_{zs}'
-
-    base_cols = [
+    cols = [
         'open', 'high', 'low', 'close', 'date',
         'sweep_bullish_wick', 'sweep_bullish_retest',
         'sweep_bearish_wick', 'sweep_bearish_retest',
         'choch_internal_bullish', 'choch_internal_bearish',
     ]
-    mtf_cols = [
-        trend_col,
-        c_bull_ob_top, c_bull_ob_bot, c_bull_ob_id,
-        c_bear_ob_top, c_bear_ob_bot, c_bear_ob_id,
-        c_bull_fvg_top, c_bull_fvg_bot, c_bull_fvg_id,
-        c_bear_fvg_top, c_bear_fvg_bot, c_bear_fvg_id,
-    ]
-    _require_columns(df, base_cols + mtf_cols)
+    if any(sig.trend_gated for sig in signatures):
+        cols.append(f'swing_trend_bias_{ts}')
+    seen = set(cols)
+    for sig in signatures:
+        for kind in sig.required_kinds:
+            for tmpl in _KIND_COLUMNS[kind]:
+                for pre in ('bull', 'bear'):
+                    name = tmpl.format(pre=pre, zs=zs)
+                    if name not in seen:
+                        seen.add(name)
+                        cols.append(name)
+    return cols
 
+
+def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
+    """Empacota todos os arrays que os predicados das assinaturas consomem."""
+    zs = config.zone_suffix
+    ts = config.trend_suffix
     n = len(df)
-    out = df.copy()
+    A: dict = {'cfg': config, 'n': n}
+    A['o'] = df['open'].to_numpy(dtype='float64')
+    A['h'] = df['high'].to_numpy(dtype='float64')
+    A['low'] = df['low'].to_numpy(dtype='float64')
+    A['c'] = df['close'].to_numpy(dtype='float64')
+    A['dates'] = df['date'].to_numpy()
+    A['trend'] = _opt_float_col(df, f'swing_trend_bias_{ts}', n)
 
-    # --- arrays base ---
-    o = df['open'].to_numpy(dtype='float64')
-    h = df['high'].to_numpy(dtype='float64')
-    low = df['low'].to_numpy(dtype='float64')
-    c = df['close'].to_numpy(dtype='float64')
-    dates = df['date'].to_numpy()
-    trend = _float_col(df, trend_col)
+    for pre in ('bull', 'bear'):
+        A[f'{pre}_ob_top'] = _opt_float_col(df, f'active_{pre}_swing_ob_top_{zs}', n)
+        A[f'{pre}_ob_bottom'] = _opt_float_col(df, f'active_{pre}_swing_ob_bottom_{zs}', n)
+        A[f'{pre}_ob_id'] = _opt_float_col(df, f'active_{pre}_swing_ob_id_{zs}', n)
+        A[f'{pre}_ob_volpct'] = _opt_float_col(df, f'active_{pre}_swing_ob_volume_pct_{zs}', n)
+        A[f'{pre}_fvg_top'] = _opt_float_col(df, f'active_{pre}_fvg_top_{zs}', n)
+        A[f'{pre}_fvg_bottom'] = _opt_float_col(df, f'active_{pre}_fvg_bottom_{zs}', n)
+        A[f'{pre}_fvg_id'] = _opt_float_col(df, f'active_{pre}_fvg_id_{zs}', n)
+        A[f'{pre}_ifvg_top'] = _opt_float_col(df, f'active_{pre}_ifvg_top_{zs}', n)
+        A[f'{pre}_ifvg_bottom'] = _opt_float_col(df, f'active_{pre}_ifvg_bottom_{zs}', n)
+        A[f'{pre}_ifvg_id'] = _opt_float_col(df, f'active_{pre}_ifvg_id_{zs}', n)
 
-    # zonas 1H (NaN quando não há zona ativa)
-    bull_ob_top = _float_col(df, c_bull_ob_top)
-    bull_ob_bot = _float_col(df, c_bull_ob_bot)
-    bull_ob_id = _float_col(df, c_bull_ob_id)
-    bear_ob_top = _float_col(df, c_bear_ob_top)
-    bear_ob_bot = _float_col(df, c_bear_ob_bot)
-    bear_ob_id = _float_col(df, c_bear_ob_id)
-    bull_fvg_top = _float_col(df, c_bull_fvg_top)
-    bull_fvg_bot = _float_col(df, c_bull_fvg_bot)
-    bull_fvg_id = _float_col(df, c_bull_fvg_id)
-    bear_fvg_top = _float_col(df, c_bear_fvg_top)
-    bear_fvg_bot = _float_col(df, c_bear_fvg_bot)
-    bear_fvg_id = _float_col(df, c_bear_fvg_id)
+    A['choch_bull'] = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
+    A['choch_bear'] = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
 
-    choch_bull = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
-    choch_bear = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
-
-    # --- precompute sweep recency (rolling-any, lookahead-safe) ---
     sweep_bull = (
         df['sweep_bullish_wick'].fillna(False).to_numpy(dtype='bool')
         | df['sweep_bullish_retest'].fillna(False).to_numpy(dtype='bool')
@@ -298,27 +551,100 @@ def compute_setup_state(
         df['sweep_bearish_wick'].fillna(False).to_numpy(dtype='bool')
         | df['sweep_bearish_retest'].fillna(False).to_numpy(dtype='bool')
     )
-    bull_sweep_recent = _rolling_any(sweep_bull, config.sweep_recency_candles)
-    bear_sweep_recent = _rolling_any(sweep_bear, config.sweep_recency_candles)
+    A['bull_sweep_recent'] = _rolling_any(sweep_bull, config.sweep_recency_candles)
+    A['bear_sweep_recent'] = _rolling_any(sweep_bear, config.sweep_recency_candles)
 
-    # --- precompute rejeição (S3) ---
-    rng = h - low
+    rng = A['h'] - A['low']
     safe = rng > 0
     with np.errstate(invalid='ignore', divide='ignore'):
-        upper_body = np.minimum(o, c)
-        lower_body = np.maximum(o, c)
-        bull_wick_frac = np.where(safe, (upper_body - low) / rng, 0.0)
-        bear_wick_frac = np.where(safe, (h - lower_body) / rng, 0.0)
-    rej_bull = (
+        upper_body = np.minimum(A['o'], A['c'])
+        lower_body = np.maximum(A['o'], A['c'])
+        bull_wick_frac = np.where(safe, (upper_body - A['low']) / rng, 0.0)
+        bear_wick_frac = np.where(safe, (A['h'] - lower_body) / rng, 0.0)
+    A['rej_bull'] = (
         safe
         & (bull_wick_frac >= config.rejection_wick_frac)
-        & (c >= low + config.rejection_close_frac * rng)
+        & (A['c'] >= A['low'] + config.rejection_close_frac * rng)
     )
-    rej_bear = (
+    A['rej_bear'] = (
         safe
         & (bear_wick_frac >= config.rejection_wick_frac)
-        & (c <= h - config.rejection_close_frac * rng)
+        & (A['c'] <= A['h'] - config.rejection_close_frac * rng)
     )
+    return A
+
+
+def compute_setup_state(
+    df: pd.DataFrame,
+    config: SetupConfig | None = None,
+) -> pd.DataFrame:
+    """Computa a máquina de estados de setup (matcher declarativo, multi-modo).
+
+    Stateless (df in, df out — igual `analyze()`). Recebe o DataFrame base
+    (15m) **já mergeado** com as colunas de zona promovidas por
+    `zone_projection.promote_active_zones`. Devolve o mesmo df + as 6
+    colunas `setup_*`.
+
+    A FSM itera as assinaturas selecionadas em `config.signature` (default
+    A3) por prioridade D3 e, num candle sem setup ativo, arma a primeira
+    elegível. Fluxo `confirmation`: ARMED → PENDING_CONFIRMATION →
+    CONFIRMED, com caminhos de INVALIDATED. Fluxo `risk` (D2): ARMED →
+    CONFIRMED direto na interseção da zona (sem PENDING). Modela um setup
+    ativo por vez, re-armável após terminal.
+
+    Args:
+        df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
+        config: SetupConfig. Se None, usa defaults (A3, confirmation).
+
+    Returns:
+        Cópia de `df` + 6 colunas (`SETUP_OUTPUT_COLUMNS`).
+
+    Raises:
+        NotImplementedError: se `config.entry_mode == 'hybrid'` (D1 — o
+            fallback do hybrid depende de RESOLVED/SL, incomputável numa
+            FSM stateless sem lookahead; ver SMC_PRINCIPIOS §3.4 e as
+            LIMITAÇÕES deste módulo). Reaberto na Wave 9.5f/10.
+    """
+    if config is None:
+        config = SetupConfig()
+
+    if config.entry_mode == ENTRY_MODE_HYBRID:
+        raise NotImplementedError(
+            "entry_mode='hybrid' é stub nesta wave (D1): o fallback do "
+            "hybrid depende de SL atingido (= RESOLVED), incomputável numa "
+            "FSM stateless sem lookahead. Ver SMC_PRINCIPIOS §3.4 e as "
+            "LIMITAÇÕES de setup_state.py. Reaberto na Wave 9.5f/10 quando "
+            "houver realimentação de outcome."
+        )
+
+    signatures = _resolve_signatures(config)
+    _require_columns(df, _required_columns(config, signatures))
+
+    n = len(df)
+    out = df.copy()
+    A = _build_arrays(df, config)
+    dates = A['dates']
+    low = A['low']
+    h = A['h']
+    c = A['c']
+    trend = A['trend']
+    entry_mode = config.entry_mode
+    escape_pct = config.armed_escape_pct
+    armed_timeout = config.armed_timeout_candles
+    pending_timeout = config.pending_timeout_candles
+
+    # Precompute, por assinatura e direção, os arrays de zona/arm/confirm.
+    # prec: list de (Signature, dir_arr, {direction: (zlow, zhigh, anch, arm, conf)}).
+    prec = []
+    for sig in signatures:
+        dir_arr = sig.direction_fn(A)
+        per = {}
+        for d in (DIRECTION_LONG, DIRECTION_SHORT):
+            zlow, zhigh, anch = sig.zone_fn(A, d)
+            arm = sig.arm_fn(A, d)
+            conf = sig.confirm_fn(A, d)
+            per[d] = (zlow, zhigh, anch, arm, conf)
+        prec.append((sig, dir_arr, per))
 
     # --- output buffers ---
     out_id: list[str | None] = [None] * n
@@ -330,12 +656,14 @@ def compute_setup_state(
 
     # --- estado da FSM (um setup ativo por vez) ---
     state: str | None = None
+    s_sig: Signature | None = None
     s_dir = ''
     s_id = ''
     s_zlow = np.nan
     s_zhigh = np.nan
-    s_ob_id = np.nan
-    s_fvg_id = np.nan
+    s_anch_arr = np.empty((0, 0))   # âncoras (n, k) da direção congelada
+    s_captured_anch = np.empty(0)   # tupla de âncoras capturada na armação
+    s_confirm = np.empty(0, dtype='bool')
     armed_idx = -1
     pending_idx = -1
 
@@ -349,81 +677,70 @@ def compute_setup_state(
 
     for i in range(n):
         if state is None:
-            # ---- (vazio) → ARMED ----
-            armed = False
-            if trend[i] == 1.0 and not np.isnan(bull_ob_id[i]) \
-                    and not np.isnan(bull_fvg_id[i]):
-                ob_t, ob_b = bull_ob_top[i], bull_ob_bot[i]
-                fv_t, fv_b = bull_fvg_top[i], bull_fvg_bot[i]
-                ob_mid = (ob_t + ob_b) / 2.0
-                overlap = (ob_b <= fv_t) and (fv_b <= ob_t)
-                gap = max(fv_b - ob_t, ob_b - fv_t, 0.0)
-                adjacent = overlap or (gap <= config.fvg_ob_adjacency_pct * ob_mid)
-                if adjacent and low[i] > ob_t:
-                    s_dir = DIRECTION_LONG
-                    s_zlow, s_zhigh = ob_b, ob_t
-                    s_ob_id, s_fvg_id = bull_ob_id[i], bull_fvg_id[i]
-                    armed = True
-            elif trend[i] == -1.0 and not np.isnan(bear_ob_id[i]) \
-                    and not np.isnan(bear_fvg_id[i]):
-                ob_t, ob_b = bear_ob_top[i], bear_ob_bot[i]
-                fv_t, fv_b = bear_fvg_top[i], bear_fvg_bot[i]
-                ob_mid = (ob_t + ob_b) / 2.0
-                overlap = (ob_b <= fv_t) and (fv_b <= ob_t)
-                gap = max(fv_b - ob_t, ob_b - fv_t, 0.0)
-                adjacent = overlap or (gap <= config.fvg_ob_adjacency_pct * ob_mid)
-                if adjacent and h[i] < ob_b:
-                    s_dir = DIRECTION_SHORT
-                    s_zlow, s_zhigh = ob_b, ob_t
-                    s_ob_id, s_fvg_id = bear_ob_id[i], bear_fvg_id[i]
-                    armed = True
-            if armed:
-                t_armed = dates[i]
-                s_id = _make_setup_id(
-                    config.signature, s_dir, s_ob_id, s_fvg_id, t_armed,
-                )
-                armed_idx = i
-                state = STATE_ARMED
-                _emit(i, STATE_ARMED)
+            # ---- (vazio) → ARMED: scan por prioridade D3 ----
+            for sig, dir_arr, per in prec:
+                d = dir_arr[i]
+                if d is None:
+                    continue
+                zlow, zhigh, anch, arm, conf = per[d]
+                if arm[i]:
+                    s_sig = sig
+                    s_dir = d
+                    s_zlow = zlow[i]
+                    s_zhigh = zhigh[i]
+                    s_anch_arr = anch
+                    s_confirm = conf
+                    s_captured_anch = anch[i]
+                    s_id = _make_setup_id_anchors(
+                        sig.id, d, tuple(s_captured_anch), dates[i],
+                    )
+                    armed_idx = i
+                    state = STATE_ARMED
+                    _emit(i, STATE_ARMED)
+                    break
             continue
 
         is_long = s_dir == DIRECTION_LONG
         trend_ok_val = 1.0 if is_long else -1.0
 
         if state == STATE_ARMED:
-            cur_ob_id = bull_ob_id[i] if is_long else bear_ob_id[i]
-            cur_fvg_id = bull_fvg_id[i] if is_long else bear_fvg_id[i]
-            # 1. trend_changed
-            if trend[i] != trend_ok_val:
+            # 1. trend_changed (só assinaturas trend-gated)
+            if s_sig.trend_gated and trend[i] != trend_ok_val:
                 _emit(i, STATE_INVALIDATED, REASON_TREND_CHANGED)
                 state = None
                 continue
-            # 2. mitigated (zona OB/FVG sumiu ou trocou de id)
-            mitigated = (
-                np.isnan(cur_ob_id) or np.isnan(cur_fvg_id)
-                or cur_ob_id != s_ob_id or cur_fvg_id != s_fvg_id
-            )
+            # 2. mitigated (qualquer âncora NaN ou diferente da capturada)
+            cur = s_anch_arr[i]
+            mitigated = False
+            for a_now, a_cap in zip(cur, s_captured_anch):
+                if np.isnan(a_now) or a_now != a_cap:
+                    mitigated = True
+                    break
             if mitigated:
                 _emit(i, STATE_INVALIDATED, REASON_MITIGATED)
                 state = None
                 continue
-            # 3. intersecta zona → PENDING
+            # 3. intersecta zona → PENDING (confirmation) ou CONFIRMED (risk)
             if low[i] <= s_zhigh and h[i] >= s_zlow:
+                if entry_mode == ENTRY_MODE_RISK:
+                    _emit(i, STATE_CONFIRMED)
+                    state = None
+                    continue
                 pending_idx = i
                 state = STATE_PENDING
                 _emit(i, STATE_PENDING)
                 continue
             # 4. escaped
             if is_long:
-                escaped = low[i] > s_zhigh * (1.0 + config.armed_escape_pct)
+                escaped = low[i] > s_zhigh * (1.0 + escape_pct)
             else:
-                escaped = h[i] < s_zlow * (1.0 - config.armed_escape_pct)
+                escaped = h[i] < s_zlow * (1.0 - escape_pct)
             if escaped:
                 _emit(i, STATE_INVALIDATED, REASON_ESCAPED)
                 state = None
                 continue
             # 5. timeout
-            if i - armed_idx >= config.armed_timeout_candles:
+            if i - armed_idx >= armed_timeout:
                 _emit(i, STATE_INVALIDATED, REASON_TIMEOUT)
                 state = None
                 continue
@@ -431,8 +748,8 @@ def compute_setup_state(
             continue
 
         if state == STATE_PENDING:
-            # 1. trend_changed
-            if trend[i] != trend_ok_val:
+            # 1. trend_changed (só assinaturas trend-gated)
+            if s_sig.trend_gated and trend[i] != trend_ok_val:
                 _emit(i, STATE_INVALIDATED, REASON_TREND_CHANGED)
                 state = None
                 continue
@@ -445,17 +762,13 @@ def compute_setup_state(
                 _emit(i, STATE_INVALIDATED, REASON_ZONE_CROSSED)
                 state = None
                 continue
-            # 3. confirm (Triple Confirmation: ChoCH + rejeição + sweep recente)
-            if is_long:
-                confirm = choch_bull[i] and rej_bull[i] and bull_sweep_recent[i]
-            else:
-                confirm = choch_bear[i] and rej_bear[i] and bear_sweep_recent[i]
-            if confirm:
+            # 3. confirm
+            if s_confirm[i]:
                 _emit(i, STATE_CONFIRMED)
                 state = None
                 continue
             # 4. timeout
-            if i - pending_idx >= config.pending_timeout_candles:
+            if i - pending_idx >= pending_timeout:
                 _emit(i, STATE_INVALIDATED, REASON_TIMEOUT)
                 state = None
                 continue
