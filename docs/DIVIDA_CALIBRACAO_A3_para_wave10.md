@@ -1,10 +1,19 @@
-# Dívida de calibração — A3 (Wave 9.5a → resolver na 9.5c)
+# Dívida de calibração — A3 (Wave 9.5a → resolver na Wave 10)
+
+> **REDIRECIONAMENTO (Wave 9.5c):** este doc foi escrito na 9.5a assumindo
+> "9.5c = backtest". A sequência real (ver §12 de `CONCEITOS_LUXALGO_HOOKS.md`)
+> coloca a calibração de parâmetros (`pending_timeout`, tolerância de
+> `zone_crossed`, janela ChoCH↔rejeição) contra dado amplo na **Wave 10**
+> (backtest estruturado de 2 anos). A 9.5c **não calibra nada** — só codifica
+> assinaturas. O próprio diagnóstico abaixo admite que 1 janela de 4 meses é
+> overfit; a varredura de parâmetros é por assinatura isolada na Wave 10.
+> Conteúdo de diagnóstico preservado abaixo como ponto de partida.
 
 > Registro para `docs/` ou changelog interno. Medições obtidas rodando
 > o pipeline MTF real (`analyze` 4h/1h/15m → `align_informative` →
 > `compute_setup_state`) sobre o golden **BTC-USDT-SWAP jan–abr 2026**
 > (11.520 candles 15m). Não é bug — é calibração pendente, deliberadamente
-> adiada para a 9.5c (backtest) por falta de amostra na 9.5a.
+> adiada para a **Wave 10** (backtest) por falta de amostra na 9.5a.
 
 ## Fato observado
 
