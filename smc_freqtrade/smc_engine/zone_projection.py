@@ -7,11 +7,13 @@ OBJETIVO
     colunas do `df`, nunca os ledgers). Genérico e reutilizável — não
     é específico de nenhuma assinatura de setup.
 
-    20 colunas novas no df (12 da 9.5a + 8 da 9.5b, aditivas ao fim):
+    26 colunas novas no df (12 da 9.5a + 8 da 9.5b + 6 da 9.5c, aditivas
+    ao fim):
         active_{bull,bear}_swing_ob_{top,bottom,id}        (9.5a)
         active_{bull,bear}_fvg_{top,bottom,id}             (9.5a)
         active_{bull,bear}_swing_ob_volume_pct             (9.5b, A5/D5)
         active_{bull,bear}_ifvg_{top,bottom,id}            (9.5b, A4a/D4)
+        active_{bull,bear}_breaker_{top,bottom,id}         (9.5c, A6/D-C9)
 
 FONTE DE DADOS
     - `df['date']` (Int64 epoch ms OU pd.Timestamp) — o instante T de
@@ -78,10 +80,21 @@ COL_ACTIVE_BEAR_IFVG_TOP = 'active_bear_ifvg_top'
 COL_ACTIVE_BEAR_IFVG_BOTTOM = 'active_bear_ifvg_bottom'
 COL_ACTIVE_BEAR_IFVG_ID = 'active_bear_ifvg_id'
 
-# Ordem canônica das 20 colunas anexadas (12 originais + 2 volume_pct +
-# 6 IFVG). As novas são **aditivas ao fim** — o gate real do §7 é
-# aditividade, não a contagem (a estimativa "16/18" do briefing
-# esqueceu que a zona IFVG precisa de top/bottom/id por direção = 6).
+# === Wave 9.5c — zona breaker (OB mitigado vivo) com inversão de
+# direção (A6/D-C9). O rótulo bull/bear é a **direção negociável**
+# (pós-inversão), oposta ao `bias` do OB de origem: OB BEARISH mitigado
+# → suporte/long (`active_bull_breaker_*`); OB BULLISH mitigado →
+# resistência/short (`active_bear_breaker_*`).
+COL_ACTIVE_BULL_BREAKER_TOP = 'active_bull_breaker_top'
+COL_ACTIVE_BULL_BREAKER_BOTTOM = 'active_bull_breaker_bottom'
+COL_ACTIVE_BULL_BREAKER_ID = 'active_bull_breaker_id'
+COL_ACTIVE_BEAR_BREAKER_TOP = 'active_bear_breaker_top'
+COL_ACTIVE_BEAR_BREAKER_BOTTOM = 'active_bear_breaker_bottom'
+COL_ACTIVE_BEAR_BREAKER_ID = 'active_bear_breaker_id'
+
+# Ordem canônica das 26 colunas anexadas (12 originais + 2 volume_pct +
+# 6 IFVG + 6 breaker). As novas são **aditivas ao fim** — o gate real do
+# §7 é aditividade, não a contagem.
 ACTIVE_ZONE_COLUMNS = (
     COL_ACTIVE_BULL_SWING_OB_TOP,
     COL_ACTIVE_BULL_SWING_OB_BOTTOM,
@@ -104,6 +117,13 @@ ACTIVE_ZONE_COLUMNS = (
     COL_ACTIVE_BEAR_IFVG_TOP,
     COL_ACTIVE_BEAR_IFVG_BOTTOM,
     COL_ACTIVE_BEAR_IFVG_ID,
+    # --- Wave 9.5c (aditivo ao fim) ---
+    COL_ACTIVE_BULL_BREAKER_TOP,
+    COL_ACTIVE_BULL_BREAKER_BOTTOM,
+    COL_ACTIVE_BULL_BREAKER_ID,
+    COL_ACTIVE_BEAR_BREAKER_TOP,
+    COL_ACTIVE_BEAR_BREAKER_BOTTOM,
+    COL_ACTIVE_BEAR_BREAKER_ID,
 )
 
 
@@ -298,30 +318,80 @@ def _project_ifvg_group(
     return out_top, out_bottom, out_id
 
 
+def _breaker_group_arrays(
+    ledger_ob: pd.DataFrame, ob_bias: int, breaker_scope: str,
+) -> tuple[np.ndarray, ...]:
+    """Extrai arrays de breaker vivo para um `bias` do **ledger OB** (D-C9).
+
+    Espelha `_ifvg_group_arrays` adaptado ao ledger OB. Breaker nasce na
+    mitigação do OB (`order_blocks.py`, Onda 6.2): por isso o filtro de
+    origem é `t_mitigation.notna()` — **NUNCA** `state == 'mitigated'`
+    (HOOKS §12.1: filtrar por `state` perderia ~95% dos breakers já
+    quebrados, que vivem em `[t_mitigation, t_invalidation)`). Restrito por
+    `breaker_scope ∈ {'swing','internal','both'}` (default 'swing',
+    consistente com a zona OB da D4).
+
+    Governo temporal = par `(t_mitigation, t_invalidation)` (idêntico ao
+    IFVG): breaker vivo em T sse `t_mitigation <= T AND (t_invalidation is
+    NaT OR t_invalidation > T)`. Geometria = `bar_high`/`bar_low` do OB;
+    id = `ob_id`. `t_inv` tem NaT preenchido com `t_mitigation` só para
+    `to_numpy()` comparável; a máscara `t_inv_isna` decide o ramo.
+    """
+    sub = ledger_ob[ledger_ob['t_mitigation'].notna()]
+    if breaker_scope != 'both':
+        sub = sub[sub['scope'] == breaker_scope]
+    sub = sub[sub['bias'] == ob_bias]
+    if len(sub) == 0:
+        empty = np.empty(0)
+        return empty, empty, empty, empty, empty, empty
+    tops = sub['bar_high'].to_numpy(dtype='float64')
+    bottoms = sub['bar_low'].to_numpy(dtype='float64')
+    ids = sub['ob_id'].astype('float64').to_numpy()
+    mit = sub['t_mitigation']
+    inv = sub['t_invalidation']
+    isna = pd.isna(inv)
+    inv_filled = inv.where(~isna, other=mit)
+    return (
+        tops, bottoms, ids,
+        mit.to_numpy(), inv_filled.to_numpy(), isna.to_numpy(),
+    )
+
+
 def promote_active_zones(
     df: pd.DataFrame,
     ledger_ob: pd.DataFrame,
     ledger_fvg: pd.DataFrame,
+    breaker_scope: str = 'swing',
 ) -> pd.DataFrame:
-    """Anexa as 20 colunas de zona ativa por candle ao `df`.
+    """Anexa as 26 colunas de zona ativa por candle ao `df`.
 
     Pós-passo causal de `analyze()`. Lê os ledgers já construídos e
-    projeta, por candle, a zona swing OB / FVG / IFVG ativa mais próxima
-    do close, para cada viés, mais o `volume_pct` do OB vencedor.
+    projeta, por candle, a zona swing OB / FVG / IFVG / breaker ativa mais
+    próxima do close, para cada viés, mais o `volume_pct` do OB vencedor.
     Preserva o `df` de entrada intocado (opera sobre cópia; só anexa
     colunas).
 
     Args:
         df: DataFrame base (saída dos detectores), com coluna `date`.
-        ledger_ob: ledger de Order Blocks (15 colunas). Apenas linhas
-            `scope == 'swing'` são consideradas.
+        ledger_ob: ledger de Order Blocks (15 colunas). A zona OB swing
+            usa apenas `scope == 'swing'`; a zona breaker usa o escopo de
+            `breaker_scope`.
         ledger_fvg: ledger de Fair Value Gaps (11 colunas).
+        breaker_scope: escopo dos OBs de origem da zona breaker (D-C9):
+            `'swing'` (default, consistente com a zona OB), `'internal'`
+            ou `'both'`. Os outros valores apenas alimentam o backtest da
+            Wave 10 (varredura por escopo).
 
     Returns:
-        Cópia de `df` + 12 colunas (`ACTIVE_ZONE_COLUMNS`). `*_top` /
+        Cópia de `df` + 26 colunas (`ACTIVE_ZONE_COLUMNS`). `*_top` /
         `*_bottom` são float64 (NaN sem zona); `*_id` é Int64 nullable
         (<NA> sem zona).
     """
+    if breaker_scope not in ('swing', 'internal', 'both'):
+        raise ValueError(
+            f"breaker_scope deve ser 'swing', 'internal' ou 'both', "
+            f"recebeu {breaker_scope!r}",
+        )
     out = df.copy()
     dates = df['date'].to_numpy()
     closes = df['close'].to_numpy(dtype='float64')
@@ -385,6 +455,31 @@ def promote_active_zones(
     for fvg_bias, col_top, col_bottom, col_id in ifvg_specs:
         tops, bottoms, ids, t_mit, t_inv, t_inv_isna = _ifvg_group_arrays(
             ledger_fvg, fvg_bias,
+        )
+        proj_top, proj_bottom, proj_id = _project_ifvg_group(
+            dates, closes, tops, bottoms, ids, t_mit, t_inv, t_inv_isna,
+        )
+        out[col_top] = proj_top
+        out[col_bottom] = proj_bottom
+        out[col_id] = pd.array(proj_id, dtype='Int64')
+
+    # --- Wave 9.5c: zona breaker com inversão de direção (A6/D-C9) ---
+    # active_bull_breaker_* ← OB BEARISH mitigado (vira suporte/long).
+    # active_bear_breaker_* ← OB BULLISH mitigado (vira resistência/short).
+    # Predicado temporal idêntico ao IFVG → reusa `_project_ifvg_group`.
+    breaker_specs = (
+        (BEARISH,
+         COL_ACTIVE_BULL_BREAKER_TOP,
+         COL_ACTIVE_BULL_BREAKER_BOTTOM,
+         COL_ACTIVE_BULL_BREAKER_ID),
+        (BULLISH,
+         COL_ACTIVE_BEAR_BREAKER_TOP,
+         COL_ACTIVE_BEAR_BREAKER_BOTTOM,
+         COL_ACTIVE_BEAR_BREAKER_ID),
+    )
+    for ob_bias, col_top, col_bottom, col_id in breaker_specs:
+        tops, bottoms, ids, t_mit, t_inv, t_inv_isna = _breaker_group_arrays(
+            ledger_ob, ob_bias, breaker_scope,
         )
         proj_top, proj_bottom, proj_id = _project_ifvg_group(
             dates, closes, tops, bottoms, ids, t_mit, t_inv, t_inv_isna,

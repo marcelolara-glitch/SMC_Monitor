@@ -81,10 +81,10 @@ adicional). Documentar como divergência potencial vs PAC paid.
 - A1 (OB Retest + CHoCH) — opcional usar `choch_plus`
 - A4a (IFVG Retest) — confirmação de reversão estrutural
 - A6 (Unicorn) — Market Structure Shift literatura ICT
-- A8 — validação de falha
 - A9 (EQH/EQL Sweep + CHoCH) — robustez
 
-**5 das 11 assinaturas beneficiam.**
+**4 das 12 entradas do catálogo beneficiam** (A8 removida, dobrada na A6;
+A11 reservada — ver §13).
 
 ---
 
@@ -368,7 +368,8 @@ Documentar como divergência intencional.
 ### Implicação para catálogo
 
 Não habilita assinatura nova. Melhora qualidade de **todas** as
-assinaturas com FVG: A3, A4a, A4b, A6, A7, A11.
+assinaturas com FVG: A3, A4a, A4b, A6, A7. (A11 é reservada — sem spec;
+ver §13. Não se afirma que use FVG.)
 
 ---
 
@@ -588,10 +589,13 @@ Onda 9 ✅ FECHADA (v0.9.0)
   └─ Wave 9.4  — Engine MTF           (6ª, infra MTF arquitetural)
   │
   ▼
-Wave 9.5a — Setup state machine + matcher + A3 com MTF
-Wave 9.5b — Catálogo expandido (A1, A4a, A4b, A6, A8, A11)
-Wave 9.5c — Persistência + edge cases
-Wave 10  — SMCStrategy.py (Freqtrade IStrategy)
+Wave 9.5a — Setup FSM + A3 (Confirmation)
+Wave 9.5b — Motor multi-modo + matcher + A2/A4a/A5 + zona IFVG
+Wave 9.5c — Catálogo A1/A9/A6 + projetor breaker + saneamento doc
+Wave 9.5d — Hooks Sessions (§10.6) + Fib/OTE (§10.3)
+Wave 9.5e — A7 (Silver Bullet) + A10 (OTE)
+Wave 9.5f — Persistência (estado vivo entre candles) + edge cases
+Wave 10  — SMCStrategy.py (IStrategy) + backtest estruturado 2 anos
 ```
 
 ### 12.1 Nota para Wave 9.5 — filtro de OBs/Breakers mitigados
@@ -614,7 +618,7 @@ campo `state`.
 
 ---
 
-## 13. Catálogo de assinaturas — 11 entradas
+## 13. Catálogo de assinaturas — 12 entradas
 
 | ID | Nome | Tipo | Hook necessário |
 |---|---|---|---|
@@ -628,10 +632,11 @@ campo `state`.
 | A7 | Silver Bullet (Sweep+FVG window) | Continuação | §10.6 (Sessions — reservado) |
 | A9 | EQH/EQL Sweep + CHoCH | Reversão | 8.1 (EQH/EQL fix) |
 | A10 | OTE (Fib 62-79%) | Continuação | §10.3 (Fib over MSS — reservado) |
+| A11 | (reservada — sem definição) | — | citada em §6/§12 sem spec; design pendente |
 | A12 | Liquidity Run multi-pool | Reversão | 8.1 |
 
-**Total: 11 assinaturas conceituais.** A8 removida (redundante com
-A6 — Breaker LuxAlgo).
+**Total: 12 entradas (A11 reservada, sem definição); A8 removida
+(dobrada na A6 — Breaker LuxAlgo).**
 
 ---
 

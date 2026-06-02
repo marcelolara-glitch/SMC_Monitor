@@ -95,9 +95,10 @@ INVALIDATION_REASONS = (
 )
 
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
-# A3 > A2 > A4a > A5 (qualidade de evidência). Decide só o empate
-# "duas armam no mesmo candle".
-_VALID_SIGNATURE_IDS = ('A3', 'A2', 'A4a', 'A5')
+# A3 > A2 > A4a > A5 > A1 > A9 > A6 (qualidade de evidência). Decide só o
+# empate "duas armam no mesmo candle"; é revisável (o backtest da Wave 10
+# isola por assinatura — §3.5/§6).
+_VALID_SIGNATURE_IDS = ('A3', 'A2', 'A4a', 'A5', 'A1', 'A9', 'A6')
 
 # === Colunas de output ===
 COL_SETUP_ID = 'setup_id'
@@ -261,6 +262,22 @@ def _rolling_any(flag: np.ndarray, window: int) -> np.ndarray:
     return (s.rolling(window, min_periods=1).max() > 0).to_numpy()
 
 
+def _recency_age(flag: np.ndarray) -> np.ndarray:
+    """Idade (em candles) do último True em [0, T], `inf` se nenhum.
+
+    Lookahead-safe: só olha passado/presente. Usado para desempatar a
+    direção da A9 (sweep mais recente vence)."""
+    n = len(flag)
+    age = np.full(n, np.inf, dtype='float64')
+    last = -1
+    for i in range(n):
+        if flag[i]:
+            last = i
+        if last >= 0:
+            age[i] = i - last
+    return age
+
+
 def _zone_arrays(A: dict, kind: str, direction: str):
     """(top, bottom, id) da zona `kind` ∈ {ob, fvg, ifvg} na `direction`."""
     pre = 'bull' if direction == DIRECTION_LONG else 'bear'
@@ -315,17 +332,17 @@ def _direction_from_trend(A: dict) -> np.ndarray:
     return out
 
 
-def _direction_from_ifvg(A: dict) -> np.ndarray:
-    """Direção da A4a (reversão): da direção *negociável* da IFVG presente.
+def _direction_from_zone(A: dict, kind: str) -> np.ndarray:
+    """Direção *negociável* da zona `kind` presente (reversão).
 
-    `active_bull_ifvg_*` presente → long; `active_bear_ifvg_*` → short.
+    `active_bull_{kind}_*` presente → long; `active_bear_{kind}_*` → short.
     **Sem** gate de trend 4H. Empate (ambas presentes) → a de menor
     distância ao close; empate exato → long.
     """
     n = A['n']
     c = A['c']
-    bull_top, bull_bot, bull_id = _zone_arrays(A, 'ifvg', DIRECTION_LONG)
-    bear_top, bear_bot, bear_id = _zone_arrays(A, 'ifvg', DIRECTION_SHORT)
+    bull_top, bull_bot, bull_id = _zone_arrays(A, kind, DIRECTION_LONG)
+    bear_top, bear_bot, bear_id = _zone_arrays(A, kind, DIRECTION_SHORT)
     out = np.empty(n, dtype=object)
     out[:] = None
     has_bull = ~np.isnan(bull_id)
@@ -349,6 +366,45 @@ def _direction_from_ifvg(A: dict) -> np.ndarray:
         both_short = both & (d_bull > d_bear)
     out[both_long] = DIRECTION_LONG
     out[both_short] = DIRECTION_SHORT
+    return out
+
+
+def _direction_from_ifvg(A: dict) -> np.ndarray:
+    """Direção da A4a (reversão): direção negociável da IFVG presente."""
+    return _direction_from_zone(A, 'ifvg')
+
+
+def _direction_from_breaker(A: dict) -> np.ndarray:
+    """Direção da A6 (reversão): direção negociável da zona breaker presente.
+
+    `active_bull_breaker_*` → long; `active_bear_breaker_*` → short.
+    Desempate por menor distância ao close (espelha IFVG).
+    """
+    return _direction_from_zone(A, 'breaker')
+
+
+def _direction_from_sweep(A: dict) -> np.ndarray:
+    """Direção da A9 (reversão): vinda do sweep recente.
+
+    `bull_sweep_recent` → long; `bear_sweep_recent` → short. Empate (ambos
+    recentes) → o de sweep **mais recente** (menor idade); empate exato →
+    long (espelha a convenção de desempate de `_direction_from_zone`).
+    **Sem** gate de trend 4H.
+    """
+    n = A['n']
+    bull_recent = A['bull_sweep_recent']
+    bear_recent = A['bear_sweep_recent']
+    bull_age = A['bull_sweep_age']
+    bear_age = A['bear_sweep_age']
+    out = np.empty(n, dtype=object)
+    out[:] = None
+    only_bull = bull_recent & ~bear_recent
+    only_bear = bear_recent & ~bull_recent
+    both = bull_recent & bear_recent
+    out[only_bull] = DIRECTION_LONG
+    out[only_bear] = DIRECTION_SHORT
+    out[both & (bull_age <= bear_age)] = DIRECTION_LONG
+    out[both & (bull_age > bear_age)] = DIRECTION_SHORT
     return out
 
 
@@ -379,6 +435,18 @@ def _zone_A4a(A: dict, direction: str):
     return ib, it, iid.reshape(-1, 1)
 
 
+def _zone_A6(A: dict, direction: str):
+    """Zona = banda do breaker; âncora = (breaker_id, fvg_id).
+
+    O `fvg_id` participa da âncora (junto do `breaker_id`) para que a
+    invalidação por âncora na FSM também derrube o setup se o FVG sumir
+    (briefing §3.4)."""
+    bt, bb, bid = _zone_arrays(A, 'breaker', direction)
+    _, _, fvg_id = _zone_arrays(A, 'fvg', direction)
+    anchors = np.column_stack([bid, fvg_id])
+    return bb, bt, anchors
+
+
 # ---- Armação ----
 
 def _outside(A: dict, direction: str, zlow: np.ndarray, zhigh: np.ndarray) -> np.ndarray:
@@ -389,18 +457,41 @@ def _outside(A: dict, direction: str, zlow: np.ndarray, zhigh: np.ndarray) -> np
         return A['h'] < zlow
 
 
-def _arm_A3(A: dict, direction: str) -> np.ndarray:
-    """OB swing + FVG (mesma direção) + adjacência OB↔FVG + preço fora."""
+def _arm_zone_with_fvg(A: dict, direction: str, kind: str) -> np.ndarray:
+    """Zona `kind` + FVG (mesma direção) + adjacência zona↔FVG + preço fora.
+
+    Núcleo compartilhado por A3 (`kind='ob'`) e A6 (`kind='breaker'`): a
+    banda da zona base e a banda do FVG devem sobrepor ou ser adjacentes
+    (gap <= `fvg_ob_adjacency_pct` da banda), com ambas as âncoras
+    presentes e o preço ainda fora da zona base.
+    """
     cfg = A['cfg']
-    ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
+    z_top, z_bot, z_id = _zone_arrays(A, kind, direction)
     fv_top, fv_bot, fv_id = _zone_arrays(A, 'fvg', direction)
     with np.errstate(invalid='ignore'):
-        ob_mid = (ob_top + ob_bot) / 2.0
-        overlap = (ob_bot <= fv_top) & (fv_bot <= ob_top)
-        gap = np.maximum(np.maximum(fv_bot - ob_top, ob_bot - fv_top), 0.0)
-        adjacent = overlap | (gap <= cfg.fvg_ob_adjacency_pct * ob_mid)
-    has = (~np.isnan(ob_id)) & (~np.isnan(fv_id))
-    return has & adjacent & _outside(A, direction, ob_bot, ob_top)
+        z_mid = (z_top + z_bot) / 2.0
+        overlap = (z_bot <= fv_top) & (fv_bot <= z_top)
+        gap = np.maximum(np.maximum(fv_bot - z_top, z_bot - fv_top), 0.0)
+        adjacent = overlap | (gap <= cfg.fvg_ob_adjacency_pct * z_mid)
+    has = (~np.isnan(z_id)) & (~np.isnan(fv_id))
+    return has & adjacent & _outside(A, direction, z_bot, z_top)
+
+
+def _arm_A3(A: dict, direction: str) -> np.ndarray:
+    """OB swing + FVG (mesma direção) + adjacência OB↔FVG + preço fora."""
+    return _arm_zone_with_fvg(A, direction, 'ob')
+
+
+def _arm_A1(A: dict, direction: str) -> np.ndarray:
+    """OB swing presente + preço fora. Sem sweep (vs A2), sem FVG (vs A3)."""
+    ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
+    has = ~np.isnan(ob_id)
+    return has & _outside(A, direction, ob_bot, ob_top)
+
+
+def _arm_A6(A: dict, direction: str) -> np.ndarray:
+    """Breaker + FVG (mesma direção negociável) + adjacência + preço fora."""
+    return _arm_zone_with_fvg(A, direction, 'breaker')
 
 
 def _arm_A2(A: dict, direction: str) -> np.ndarray:
@@ -447,7 +538,10 @@ def _confirm_choch_rej(A: dict, direction: str) -> np.ndarray:
     return A['choch_bear'] & A['rej_bear']
 
 
-# ---- Registro das 4 assinaturas (ordem de prioridade D3) ----
+# ---- Registro das assinaturas (ordem de prioridade D3) ----
+# As 4 da 9.5b ficam **inalteradas** (gate de regressão); a 9.5c apenda
+# A1 (prioridade 4), A9 (5) e A6 (6). Prioridade só decide empate "duas
+# armam no mesmo candle"; é revisável no backtest da Wave 10 (§3.5/§6).
 
 SIGNATURES: dict[str, Signature] = {
     'A3': Signature(
@@ -465,6 +559,19 @@ SIGNATURES: dict[str, Signature] = {
     'A5': Signature(
         'A5', 'tap', ENTRY_MODE_RISK, 3, True, ('ob', 'volpct'),
         _direction_from_trend, _zone_ob_only, _arm_A5, _confirm_choch_rej,
+    ),
+    # --- Wave 9.5c (apêndice) ---
+    'A1': Signature(
+        'A1', 'continuacao', ENTRY_MODE_CONFIRMATION, 4, True, ('ob',),
+        _direction_from_trend, _zone_ob_only, _arm_A1, _confirm_choch_rej,
+    ),
+    'A9': Signature(
+        'A9', 'reversao', ENTRY_MODE_CONFIRMATION, 5, False, ('ob',),
+        _direction_from_sweep, _zone_ob_only, _arm_A2, _confirm_choch_rej,
+    ),
+    'A6': Signature(
+        'A6', 'reversao', ENTRY_MODE_CONFIRMATION, 6, False, ('breaker', 'fvg'),
+        _direction_from_breaker, _zone_A6, _arm_A6, _confirm_choch_rej,
     ),
 }
 
@@ -487,6 +594,9 @@ _KIND_COLUMNS = {
     'ifvg': ('active_{pre}_ifvg_top_{zs}',
              'active_{pre}_ifvg_bottom_{zs}',
              'active_{pre}_ifvg_id_{zs}'),
+    'breaker': ('active_{pre}_breaker_top_{zs}',
+                'active_{pre}_breaker_bottom_{zs}',
+                'active_{pre}_breaker_id_{zs}'),
     'volpct': ('active_{pre}_swing_ob_volume_pct_{zs}',),
 }
 
@@ -539,6 +649,9 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
         A[f'{pre}_ifvg_top'] = _opt_float_col(df, f'active_{pre}_ifvg_top_{zs}', n)
         A[f'{pre}_ifvg_bottom'] = _opt_float_col(df, f'active_{pre}_ifvg_bottom_{zs}', n)
         A[f'{pre}_ifvg_id'] = _opt_float_col(df, f'active_{pre}_ifvg_id_{zs}', n)
+        A[f'{pre}_breaker_top'] = _opt_float_col(df, f'active_{pre}_breaker_top_{zs}', n)
+        A[f'{pre}_breaker_bottom'] = _opt_float_col(df, f'active_{pre}_breaker_bottom_{zs}', n)
+        A[f'{pre}_breaker_id'] = _opt_float_col(df, f'active_{pre}_breaker_id_{zs}', n)
 
     A['choch_bull'] = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
     A['choch_bear'] = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
@@ -553,6 +666,10 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
     )
     A['bull_sweep_recent'] = _rolling_any(sweep_bull, config.sweep_recency_candles)
     A['bear_sweep_recent'] = _rolling_any(sweep_bear, config.sweep_recency_candles)
+    # Idade do último sweep (desempate de direção da A9 — sweep mais
+    # recente vence; espelha o desempate por distância da reversão de zona).
+    A['bull_sweep_age'] = _recency_age(sweep_bull)
+    A['bear_sweep_age'] = _recency_age(sweep_bear)
 
     rng = A['h'] - A['low']
     safe = rng > 0
