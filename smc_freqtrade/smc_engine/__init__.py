@@ -163,6 +163,26 @@ from .zone_projection import (
     COL_ACTIVE_BEAR_IFVG_BOTTOM,
     COL_ACTIVE_BEAR_IFVG_ID,
 )
+# === Onda 9.5d — hooks Sessions (§10.6) + Fib/OTE (§10.3) ===
+from .sessions import (
+    tag_sessions,
+    SESSION_COLUMNS,
+    COL_IN_KZ_SILVER_BULLET_AM,
+    COL_IN_KZ_SILVER_BULLET_LATE,
+    COL_IN_KZ_SILVER_BULLET_PM,
+)
+from .fib_ote import (
+    project_ote_zones,
+    OTE_COLUMNS,
+    OTE_RETRACE_LOW,
+    OTE_RETRACE_HIGH,
+    COL_ACTIVE_BULL_OTE_TOP,
+    COL_ACTIVE_BULL_OTE_BOTTOM,
+    COL_ACTIVE_BULL_OTE_ID,
+    COL_ACTIVE_BEAR_OTE_TOP,
+    COL_ACTIVE_BEAR_OTE_BOTTOM,
+    COL_ACTIVE_BEAR_OTE_ID,
+)
 from .setup_state import (
     compute_setup_state,
     SetupConfig,
@@ -224,6 +244,23 @@ __all__ = [
     "COL_ACTIVE_BEAR_IFVG_TOP",
     "COL_ACTIVE_BEAR_IFVG_BOTTOM",
     "COL_ACTIVE_BEAR_IFVG_ID",
+    # Onda 9.5d — hooks Sessions (Silver Bullet §10.6)
+    "tag_sessions",
+    "SESSION_COLUMNS",
+    "COL_IN_KZ_SILVER_BULLET_AM",
+    "COL_IN_KZ_SILVER_BULLET_LATE",
+    "COL_IN_KZ_SILVER_BULLET_PM",
+    # Onda 9.5d — hook Fib/OTE (§10.3)
+    "project_ote_zones",
+    "OTE_COLUMNS",
+    "OTE_RETRACE_LOW",
+    "OTE_RETRACE_HIGH",
+    "COL_ACTIVE_BULL_OTE_TOP",
+    "COL_ACTIVE_BULL_OTE_BOTTOM",
+    "COL_ACTIVE_BULL_OTE_ID",
+    "COL_ACTIVE_BEAR_OTE_TOP",
+    "COL_ACTIVE_BEAR_OTE_BOTTOM",
+    "COL_ACTIVE_BEAR_OTE_ID",
     # Onda 9.5a/9.5b — máquina de estados + matcher declarativo
     "compute_setup_state",
     "SetupConfig",

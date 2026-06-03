@@ -73,9 +73,12 @@ def test_analyze_meta_fields(synthetic_df: pd.DataFrame) -> None:
     """meta tem 4 campos obrigatórios."""
     result = analyze(synthetic_df)
     assert result.meta['engine_version'] == __version__
-    assert len(result.meta['modules_run']) == 8
+    # Wave 9.5d: +tag_sessions +project_ote_zones (hooks §10.6/§10.3).
+    assert len(result.meta['modules_run']) == 10
     assert 'detect_eqh_eql' in result.meta['modules_run']
     assert 'compose_balanced_price_ranges' in result.meta['modules_run']
+    assert 'tag_sessions' in result.meta['modules_run']
+    assert 'project_ote_zones' in result.meta['modules_run']
     assert result.meta['candle_count'] == len(synthetic_df)
     assert isinstance(result.meta['config_used'], dict)
     assert 'pivot_swings_length' in result.meta['config_used']

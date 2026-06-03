@@ -38,6 +38,8 @@ from smc_engine import (
     compute_setup_state,
     promote_active_zones,
     ACTIVE_ZONE_COLUMNS,
+    SESSION_COLUMNS,
+    OTE_COLUMNS,
     SETUP_OUTPUT_COLUMNS,
     SETUP_STATES,
     INVALIDATION_REASONS,
@@ -78,24 +80,33 @@ def _golden_pipeline() -> pd.DataFrame:
 # §6 — invariante de regressão: 66 → 78 colunas, aditivo ao fim
 # ============================================================
 
-def test_golden_4h_goes_66_to_92_columns() -> None:
-    """§6: no golden 4H (com volume), analyze() vai de 66 para 92 colunas.
+def test_golden_4h_goes_66_to_101_columns() -> None:
+    """§6: no golden 4H (com volume), analyze() vai de 66 para 101 colunas.
 
-    Wave 9.5c: a zona ativa passou de 20 → 26 colunas (breaker +6 =
-    {bull,bear}×{top,bottom,id}). Aditivo ao fim — o gate real do §7 é
-    aditividade, não a contagem."""
+    Wave 9.5c: a zona ativa passou de 20 → 26 colunas (breaker +6).
+    Wave 9.5d: +9 colunas de hook (3 Sessions §10.6 + 6 OTE §10.3),
+    aditivas ao fim, *após* o bloco de zona ativa. Aditivo ao fim — o
+    gate real do §7 é aditividade, não a contagem."""
     result = analyze(_load_ohlcv('btc_usdt_swap_4h_window.csv'))
-    assert len(result.df.columns) == 92
+    assert len(result.df.columns) == 101
     n = len(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-n:]) == list(ACTIVE_ZONE_COLUMNS)
+    hooks = list(SESSION_COLUMNS) + list(OTE_COLUMNS)
+    h = len(hooks)
+    # Bloco de zona ativa contíguo, seguido pelos hooks 9.5d (tail real).
+    assert list(result.df.columns[-(n + h):-h]) == list(ACTIVE_ZONE_COLUMNS)
+    assert list(result.df.columns[-h:]) == hooks
 
 
 def test_analyze_adds_exactly_26_zone_columns(synthetic_df: pd.DataFrame) -> None:
-    """As 26 colunas de zona são anexadas ao fim (ordem das existentes
-    preservada). synthetic_df não tem `volume` → 65 base + 26 = 91."""
+    """As 26 colunas de zona são anexadas em bloco contíguo (ordem das
+    existentes preservada), seguidas pelos 9 hooks da Wave 9.5d.
+    synthetic_df não tem `volume` → 65 base + 26 + 9 = 100."""
     result = analyze(synthetic_df)
     n = len(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-n:]) == list(ACTIVE_ZONE_COLUMNS)
+    hooks = list(SESSION_COLUMNS) + list(OTE_COLUMNS)
+    h = len(hooks)
+    assert list(result.df.columns[-(n + h):-h]) == list(ACTIVE_ZONE_COLUMNS)
+    assert list(result.df.columns[-h:]) == hooks
     # exatamente len(ACTIVE_ZONE_COLUMNS) colunas a mais que o set sem promoção.
     non_zone = [c for c in result.df.columns if c not in ACTIVE_ZONE_COLUMNS]
     assert len(non_zone) == len(result.df.columns) - n
