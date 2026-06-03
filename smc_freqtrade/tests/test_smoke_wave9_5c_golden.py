@@ -26,6 +26,8 @@ from smc_engine import (
     analyze,
     compute_setup_state,
     ACTIVE_ZONE_COLUMNS,
+    SESSION_COLUMNS,
+    OTE_COLUMNS,
     SetupConfig,
     SETUP_STATES,
     INVALIDATION_REASONS,
@@ -98,7 +100,10 @@ def test_zone_active_20_to_26_and_ledgers_unchanged() -> None:
     result = analyze(_load_ohlcv('btc_usdt_swap_4h_window.csv'))
     assert len(ACTIVE_ZONE_COLUMNS) == 26
     n = len(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-n:]) == list(ACTIVE_ZONE_COLUMNS)
+    # Wave 9.5d anexou 9 hooks (3 Sessions + 6 OTE) após o bloco de zona
+    # ativa — este deixa de ser o tail literal, mas segue contíguo.
+    h = len(SESSION_COLUMNS) + len(OTE_COLUMNS)
+    assert list(result.df.columns[-(n + h):-h]) == list(ACTIVE_ZONE_COLUMNS)
     assert len(result.ledger_ob.columns) == 15
     assert len(result.ledger_fvg.columns) == 11
     assert len(result.ledger_bpr.columns) == 7

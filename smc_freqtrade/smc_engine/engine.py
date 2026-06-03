@@ -35,11 +35,13 @@ from typing import Any
 import pandas as pd
 
 from .config import SMCConfig
+from .fib_ote import project_ote_zones
 from .fvg import compose_balanced_price_ranges, detect_fair_value_gaps
 from .liquidity_sweep import detect_liquidity_sweeps
 from .order_blocks import detect_order_blocks
 from .pivots import detect_eqh_eql, detect_pivots
 from .result import AnalyzeResult
+from .sessions import tag_sessions
 from .structure import detect_structure
 from .trailing import compute_trailing_extremes
 from .zone_projection import promote_active_zones
@@ -178,6 +180,12 @@ def analyze(
     # ledgers, para que a zona atravesse o merge @informative (que só
     # carrega colunas do df). Lookahead-safe; não reconstrói detecção.
     work = promote_active_zones(work, ledger_ob, ledger_fvg)
+    # Wave 9.5d (HOOKS §10.6/§10.3) — hooks aditivos puros: marca as 3
+    # killzones Silver Bullet (NY-time) e projeta a zona OTE (banda Fib
+    # 0.62-0.79) ancorada no último MSS swing. Lookahead-safe; só anexam
+    # colunas (3 Sessions + 6 OTE). Consumidos por A7/A10 na Wave 9.5e.
+    work = tag_sessions(work)
+    work = project_ote_zones(work)
 
     from . import __version__
     meta: dict[str, Any] = {
@@ -191,6 +199,8 @@ def analyze(
             'detect_fair_value_gaps',
             'compose_balanced_price_ranges',
             'detect_liquidity_sweeps',
+            'tag_sessions',
+            'project_ote_zones',
         ],
         'candle_count': len(work),
         'config_used': asdict(config),
