@@ -2,7 +2,7 @@
 
 OBJETIVO
     Receber um DataFrame OHLCV e produzir AnalyzeResult com df
-    expandido (52 colunas) + 2 ledgers (OB, FVG) + meta de execução.
+    expandido (101 colunas) + 3 ledgers (OB, FVG, BPR) + meta de execução.
 
 FONTE DE DADOS
     DataFrame OHLCV com colunas: date, open, high, low, close
@@ -113,7 +113,7 @@ def analyze(
 
     Returns:
         AnalyzeResult com:
-            - df: input + 52 colunas dos 6 detectores
+            - df: input + 95 colunas dos 6 detectores
             - ledger_ob: ledger de Order Blocks (15 colunas)
             - ledger_fvg: ledger de FVGs (11 colunas, is_double
               populado pela composição BPR da Onda 7.2)

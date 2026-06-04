@@ -35,7 +35,7 @@ class AnalyzeResult:
     """Output empacotado de smc_engine.engine.analyze().
 
     Campos:
-        df: DataFrame original + 52 colunas dos 6 módulos das Ondas 3-8.
+        df: DataFrame original + 95 colunas dos 6 módulos das Ondas 3-8.
         ledger_ob: ledger de Order Blocks (12 colunas, ver
             order_blocks._build_ledger). 1 row por OB.
         ledger_fvg: ledger de Fair Value Gaps (11 colunas, ver
