@@ -24,9 +24,14 @@ FONTE DE DADOS
     - Zona (promovida por zone_projection.py):
       `active_{bull,bear}_swing_ob_{top,bottom,id,volume_pct}_{zs}`,
       `active_{bull,bear}_fvg_{top,bottom,id}_{zs}`,
-      `active_{bull,bear}_ifvg_{top,bottom,id}_{zs}`.
+      `active_{bull,bear}_ifvg_{top,bottom,id}_{zs}`,
+      `active_{bull,bear}_breaker_{top,bottom,id}_{zs}`,
+      `active_{bull,bear}_ote_{top,bottom,id}_{zs}` (9.5e — Fib 62–79%,
+      tratada como zona; bull = banda discount/long, bear = premium/short).
     - Base (15m, sem sufixo): `sweep_{bullish,bearish}_{wick,retest}`,
-      `choch_internal_{bullish,bearish}`, `open/high/low/close`.
+      `choch_internal_{bullish,bearish}`, `open/high/low/close`,
+      `in_kz_silver_bullet_{am,late,pm}` (9.5e — killzones da A7, exigidas
+      só por assinaturas com `required_base`).
 
 PREDICADO DE VELA DE REJEIÇÃO (inline — sem módulo)
     Idêntico à 9.5a: com `rng = high - low` (guarda `rng > 0`):
@@ -66,6 +71,8 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from .sessions import SESSION_COLUMNS
+
 # === Valores de estado realizados na coluna ===
 STATE_ARMED = 'ARMED'
 STATE_PENDING = 'PENDING_CONFIRMATION'
@@ -95,10 +102,11 @@ INVALIDATION_REASONS = (
 )
 
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
-# A3 > A2 > A4a > A5 > A1 > A9 > A6 (qualidade de evidência). Decide só o
-# empate "duas armam no mesmo candle"; é revisável (o backtest da Wave 10
-# isola por assinatura — §3.5/§6).
-_VALID_SIGNATURE_IDS = ('A3', 'A2', 'A4a', 'A5', 'A1', 'A9', 'A6')
+# A3 > A2 > A4a > A5 > A1 > A9 > A6 > A7 > A10 (qualidade de evidência).
+# Decide só o empate "duas armam no mesmo candle"; é revisável (o backtest
+# da Wave 10 isola por assinatura — §3.5/§6). A 9.5e APENDA A7 (prioridade
+# 7) e A10 (8) — prioridades 0–6 das existentes ficam intactas (D4).
+_VALID_SIGNATURE_IDS = ('A3', 'A2', 'A4a', 'A5', 'A1', 'A9', 'A6', 'A7', 'A10')
 
 # === Colunas de output ===
 COL_SETUP_ID = 'setup_id'
@@ -256,6 +264,19 @@ def _opt_float_col(df: pd.DataFrame, col: str, n: int) -> np.ndarray:
     return np.full(n, np.nan, dtype='float64')
 
 
+def _opt_bool_col(df: pd.DataFrame, col: str, n: int) -> np.ndarray:
+    """Coluna booleana densa; devolve array all-False se a coluna faltar.
+
+    Análogo a `_opt_float_col` para gates booleanos de base (ex.: killzones
+    `in_kz_silver_bullet_*`). Coluna ausente ⇒ gate inativo (all-False),
+    não erro — só as colunas das assinaturas **selecionadas** são exigidas
+    por `_require_columns` (via `required_base`).
+    """
+    if col in df.columns:
+        return df[col].fillna(False).to_numpy(dtype='bool')
+    return np.zeros(n, dtype='bool')
+
+
 def _rolling_any(flag: np.ndarray, window: int) -> np.ndarray:
     """True em T se houver algum True na janela [T-window+1, T] (lookahead-safe)."""
     s = pd.Series(flag.astype('float64'))
@@ -318,6 +339,11 @@ class Signature:
     zone_fn: Callable
     arm_fn: Callable
     confirm_fn: Callable
+    # Colunas de **base** (sem sufixo de TF) exigidas além dos kinds de
+    # zona — ex.: killzones da A7 (`SESSION_COLUMNS`). Campo trailing com
+    # default (9.5e, D6.1): as instâncias posicionais anteriores ficam
+    # válidas sem alteração.
+    required_base: tuple = ()
 
 
 # ---- Direção candidata ----
@@ -522,6 +548,94 @@ def _arm_A4a(A: dict, direction: str) -> np.ndarray:
     return has & _outside(A, direction, ib, it)
 
 
+def _zone_A7(A: dict, direction: str):
+    """A7 (Silver Bullet): zona = banda do FVG da direção; âncora = (fvg_id,).
+
+    OBJETIVO
+        Fornecer a banda (zlow, zhigh) e a âncora de invalidação da A7 a
+        partir do FVG ativo da `direction` (long → `bull_fvg_*`, short →
+        `bear_fvg_*`).
+    FONTE DE DADOS
+        `_zone_arrays(A, 'fvg', direction)` → (top, bottom, id). As colunas
+        FVG são consumidas com sufixo de zona `_{zs}` (default `_1h`).
+    LIMITAÇÕES
+        Espelha `_zone_A4a`; só fornece a forma declarativa, não decide
+        armação (ver `_arm_A7`).
+    NÃO FAZER
+        Não suffixar killzone aqui (killzone é gate de base, em `_arm_A7`);
+        não inverter direção (FVG bull → long).
+    """
+    ft, fb, fid = _zone_arrays(A, 'fvg', direction)
+    return fb, ft, fid.reshape(-1, 1)
+
+
+def _arm_A7(A: dict, direction: str) -> np.ndarray:
+    """A7: FVG(dir) + sweep recente(dir) + killzone ativa + preço fora.
+
+    OBJETIVO
+        Armar a continuação Silver Bullet: FVG da direção presente, sweep
+        recente da mesma direção, candle dentro de alguma killzone Silver
+        Bullet (`in_kz_any`) e preço ainda fora da banda do FVG.
+    FONTE DE DADOS
+        `_zone_arrays(A, 'fvg', direction)`; `A['{bull,bear}_sweep_recent']`
+        (base 15m, janela `sweep_recency_candles`); `A['in_kz_any']` (OR das
+        3 colunas `in_kz_silver_bullet_*`, base/sem sufixo); `_outside`.
+    LIMITAÇÕES
+        Gate de killzone só na armação (D2): o setup origina-se na janela e
+        pode confirmar depois. Quais killzones / recência de sweep / janela
+        de confirmação são varredura da Wave 10, não definitivo aqui.
+    NÃO FAZER
+        Não pré-podar para AM (§6/§7); não suffixar as colunas de killzone.
+    """
+    ft, fb, fid = _zone_arrays(A, 'fvg', direction)
+    has = ~np.isnan(fid)
+    sweep = A['bull_sweep_recent'] if direction == DIRECTION_LONG \
+        else A['bear_sweep_recent']
+    return has & sweep & A['in_kz_any'] & _outside(A, direction, fb, ft)
+
+
+def _zone_A10(A: dict, direction: str):
+    """A10 (OTE): zona = banda OTE da direção; âncora = (ote_id,).
+
+    OBJETIVO
+        Fornecer a banda (zlow, zhigh) e a âncora da A10 a partir da zona
+        OTE ativa da `direction` (long → `bull_ote_*` = banda discount,
+        short → `bear_ote_*` = banda premium).
+    FONTE DE DADOS
+        `_zone_arrays(A, 'ote', direction)` → (top, bottom, id). As colunas
+        OTE são tratadas como zona, consumidas com sufixo `_{zs}` (default
+        `_1h`), igual a OB/FVG/IFVG/breaker.
+    LIMITAÇÕES
+        Espelha `_zone_A4a`; não decide armação (ver `_arm_A10`).
+    NÃO FAZER
+        Não inverter direção (D3): o hook já mapeia bull→discount/long e
+        bear→premium/short; `_direction_from_trend` concorda por construção.
+    """
+    ot, ob, oid = _zone_arrays(A, 'ote', direction)
+    return ob, ot, oid.reshape(-1, 1)
+
+
+def _arm_A10(A: dict, direction: str) -> np.ndarray:
+    """A10: OTE(dir) presente + preço fora da banda OTE.
+
+    OBJETIVO
+        Armar a continuação OTE: zona OTE da direção presente e preço ainda
+        fora da banda (Fib 62–79%). Sem premissa de sweep (vs A7).
+    FONTE DE DADOS
+        `_zone_arrays(A, 'ote', direction)`; `_outside`.
+    LIMITAÇÕES
+        OTE é zona persistente (medido: bear ativa em 572/720 no 4h golden)
+        → contagem alta de armações é esperada e não justifica pré-poda
+        nesta wave (§6).
+    NÃO FAZER
+        Não inverter direção (D3 — qualquer inversão aqui é bug, oposto do
+        trap do IFVG).
+    """
+    ot, ob, oid = _zone_arrays(A, 'ote', direction)
+    has = ~np.isnan(oid)
+    return has & _outside(A, direction, ob, ot)
+
+
 # ---- Confirmação (só consultada em modo confirmation) ----
 
 def _confirm_choch_rej_sweep(A: dict, direction: str) -> np.ndarray:
@@ -573,6 +687,21 @@ SIGNATURES: dict[str, Signature] = {
         'A6', 'reversao', ENTRY_MODE_CONFIRMATION, 6, False, ('breaker', 'fvg'),
         _direction_from_breaker, _zone_A6, _arm_A6, _confirm_choch_rej,
     ),
+    # --- Wave 9.5e (apêndice; D4 — não renumerar 0–6) ---
+    # A7 (7): Silver Bullet (Sweep+FVG+killzone), continuação trend-gated,
+    # confirmação por ChoCH+rej+sweep (paridade A3/A2). `required_base` =
+    # killzones (base, sem sufixo).
+    'A7': Signature(
+        'A7', 'continuacao', ENTRY_MODE_CONFIRMATION, 7, True, ('fvg',),
+        _direction_from_trend, _zone_A7, _arm_A7, _confirm_choch_rej_sweep,
+        required_base=SESSION_COLUMNS,
+    ),
+    # A10 (8): OTE (Fib 62–79%), continuação trend-gated, confirmação por
+    # ChoCH+rejeição (A10 não tem premissa de sweep).
+    'A10': Signature(
+        'A10', 'continuacao', ENTRY_MODE_CONFIRMATION, 8, True, ('ote',),
+        _direction_from_trend, _zone_A10, _arm_A10, _confirm_choch_rej,
+    ),
 }
 
 
@@ -597,6 +726,9 @@ _KIND_COLUMNS = {
     'breaker': ('active_{pre}_breaker_top_{zs}',
                 'active_{pre}_breaker_bottom_{zs}',
                 'active_{pre}_breaker_id_{zs}'),
+    'ote': ('active_{pre}_ote_top_{zs}',
+            'active_{pre}_ote_bottom_{zs}',
+            'active_{pre}_ote_id_{zs}'),
     'volpct': ('active_{pre}_swing_ob_volume_pct_{zs}',),
 }
 
@@ -622,6 +754,13 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
                     if name not in seen:
                         seen.add(name)
                         cols.append(name)
+    # Colunas de base exigidas além dos kinds (ex.: killzones da A7). Base,
+    # sem sufixo de TF (9.5e, D6.4).
+    for sig in signatures:
+        for name in sig.required_base:
+            if name not in seen:
+                seen.add(name)
+                cols.append(name)
     return cols
 
 
@@ -652,6 +791,18 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
         A[f'{pre}_breaker_top'] = _opt_float_col(df, f'active_{pre}_breaker_top_{zs}', n)
         A[f'{pre}_breaker_bottom'] = _opt_float_col(df, f'active_{pre}_breaker_bottom_{zs}', n)
         A[f'{pre}_breaker_id'] = _opt_float_col(df, f'active_{pre}_breaker_id_{zs}', n)
+        # OTE (9.5e): tratada como zona — sufixo `_{zs}` (default `_1h`).
+        A[f'{pre}_ote_top'] = _opt_float_col(df, f'active_{pre}_ote_top_{zs}', n)
+        A[f'{pre}_ote_bottom'] = _opt_float_col(df, f'active_{pre}_ote_bottom_{zs}', n)
+        A[f'{pre}_ote_id'] = _opt_float_col(df, f'active_{pre}_ote_id_{zs}', n)
+
+    # Gate de killzone Silver Bullet (A7): OR booleano das 3 colunas
+    # `in_kz_silver_bullet_*` (base/sem sufixo, 9.5e D6.3), fallback
+    # all-False se ausentes.
+    in_kz_any = np.zeros(n, dtype='bool')
+    for col in SESSION_COLUMNS:
+        in_kz_any = in_kz_any | _opt_bool_col(df, col, n)
+    A['in_kz_any'] = in_kz_any
 
     A['choch_bull'] = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
     A['choch_bear'] = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
