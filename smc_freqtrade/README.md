@@ -77,4 +77,4 @@ Dois tipos de dados são usados pelo subprojeto e nunca se confundem:
 
 O subprojeto `smc_freqtrade/` tem versionamento próprio, independente do
 sistema legado em `../legacy/`. Sequencial estrito (sem pular). Atual:
-`0.1.0`.
+`0.10.0`.
