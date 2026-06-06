@@ -4,11 +4,15 @@ OBJETIVO
     Ratificar a maquinaria de execução da 10b por smoke SINTÉTICO (o ambiente
     do Code tem rede de exchange bloqueada e golden com 0 CONFIRMED → sem trades
     reais; o selo empírico via `lookahead-analysis`/`backtesting` é gate da
-    VM/10c). Cobre §7 do briefing:
-      T1 — entrada STRICT em CONFIRMED, `enter_tag == setup_id`; nada em
-           ARMED/PENDING/INVALIDATED.
-      T2 — `order_filled` grava `sl_anchor` = `setup_zone_low` (long) /
-           `setup_zone_high` (short) da linha causal (± buffer fora da zona).
+    VM/10c). Cobre §7 do briefing (atualizado pela instrumentação por
+    assinatura — 10c):
+      T1 — entrada STRICT em CONFIRMED, `enter_tag ==
+           f"{setup_signature}_{setup_direction}"` (ex.: "A3_long", não mais o
+           hash `setup_id`); nada em ARMED/PENDING/INVALIDATED.
+      T2 — `order_filled` captura `custom_data['setup_id']` (identidade única da
+           linha causal) e grava `sl_anchor` = `setup_zone_low` (long) /
+           `setup_zone_high` (short) da linha causal (± buffer fora da zona); o
+           casamento da âncora/saída passa a ser por `custom_data['setup_id']`.
       T3 — `custom_stoploss` devolve o stop relativo coerente com
            `stoploss_from_absolute` (abaixo do preço em long, acima em short).
       T4 — `custom_exit` sai por (a) invalidação estrutural e (b) R:R.
@@ -115,7 +119,8 @@ def _dt(i: int) -> pd.Timestamp:
 
 def test_t1_entry_strict_confirmed_only():
     """`enter_long`/`enter_short`==1 só em CONFIRMED casando direção;
-    `enter_tag == setup_id`; nada em ARMED/PENDING/INVALIDATED."""
+    `enter_tag == f"{setup_signature}_{setup_direction}"` (10c, não mais o
+    hash `setup_id`); nada em ARMED/PENDING/INVALIDATED."""
     strat = _strategy()
     df = pd.DataFrame({
         "date": [_dt(i) for i in range(6)],
@@ -124,6 +129,7 @@ def test_t1_entry_strict_confirmed_only():
             "CONFIRMED", "INVALIDATED", "CONFIRMED",
         ],
         "setup_direction": ["long", "long", "long", "short", "long", None],
+        "setup_signature": ["A3", "A3", "A3", "A3", "A3", None],
         "setup_id": ["idA", "idA", "idLONG", "idSHORT", "idA", None],
     })
 
@@ -132,12 +138,12 @@ def test_t1_entry_strict_confirmed_only():
     el = out["enter_long"].fillna(0) if "enter_long" in out else pd.Series([0] * len(out))
     es = out["enter_short"].fillna(0) if "enter_short" in out else pd.Series([0] * len(out))
 
-    # Linha 2: CONFIRMED long → enter_long==1, tag idLONG.
+    # Linha 2: CONFIRMED long → enter_long==1, tag "A3_long" (assinatura×direção).
     assert el.iloc[2] == 1
-    assert out["enter_tag"].iloc[2] == "idLONG"
-    # Linha 3: CONFIRMED short → enter_short==1, tag idSHORT.
+    assert out["enter_tag"].iloc[2] == "A3_long"
+    # Linha 3: CONFIRMED short → enter_short==1, tag "A3_short".
     assert es.iloc[3] == 1
-    assert out["enter_tag"].iloc[3] == "idSHORT"
+    assert out["enter_tag"].iloc[3] == "A3_short"
     # Nada em ARMED/PENDING/INVALIDATED.
     for i in (0, 1, 4):
         assert el.iloc[i] == 0
@@ -153,7 +159,8 @@ def test_t1_hybrid_is_stub():
     strat = _strategy()
     strat.entry_mode = "hybrid"
     df = pd.DataFrame({
-        "setup_state": ["CONFIRMED"], "setup_direction": ["long"], "setup_id": ["x"],
+        "setup_state": ["CONFIRMED"], "setup_direction": ["long"],
+        "setup_signature": ["A3"], "setup_id": ["x"],
     })
     with pytest.raises(NotImplementedError):
         strat.populate_entry_trend(df, {"pair": "BTC/USDT:USDT"})
@@ -164,11 +171,12 @@ def test_t1_hybrid_is_stub():
 # ============================================================
 
 def _df_with_setup(setup_id, zone_low, zone_high, state="CONFIRMED",
-                   direction="long", n_lead=3):
+                   direction="long", signature="A3", n_lead=3):
     """Df causal com `n_lead` linhas neutras + 1 linha do setup (última)."""
     rows = {
         "date": [_dt(i) for i in range(n_lead + 1)],
         "setup_id": [None] * n_lead + [setup_id],
+        "setup_signature": [None] * n_lead + [signature],
         "setup_state": [None] * n_lead + [state],
         "setup_direction": [None] * n_lead + [direction],
         "setup_zone_low": [np.nan] * n_lead + [zone_low],
@@ -177,45 +185,56 @@ def _df_with_setup(setup_id, zone_low, zone_high, state="CONFIRMED",
     return pd.DataFrame(rows)
 
 
-def test_t2_order_filled_writes_anchor_long():
-    """Long: `sl_anchor` == `setup_zone_low * (1 - buffer)` da linha causal."""
+def test_t2_order_filled_captures_setup_id_and_anchor_long():
+    """Long: `order_filled` captura `custom_data['setup_id']` (= setup_id da
+    linha causal) e grava `sl_anchor == setup_zone_low * (1 - buffer)`.
+
+    `enter_tag` é a assinatura×direção ("A3_long"); o casamento da âncora passa
+    a ser pela chave `custom_data['setup_id']` (10c), não mais pelo `enter_tag`.
+    O SL resultante é IDÊNTICO ao da 10b (mesma zona, mesma fórmula)."""
     strat = _strategy()
     zlow, zhigh = 95.0, 98.0
-    df = _df_with_setup("idLONG", zlow, zhigh, direction="long")
+    df = _df_with_setup("hashLONG", zlow, zhigh, direction="long")
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG", is_short=False)
+    trade = _FakeTrade("A3_long", is_short=False)
 
     strat.order_filled(
         "BTC/USDT:USDT", trade, _FakeOrder("buy"), _dt(3),
     )
+    # Identidade única capturada em custom_data (não no enter_tag).
+    assert trade.get_custom_data(strat.SETUP_ID_KEY) == "hashLONG"
     expected = zlow * (1.0 - strat.sl_zone_buffer_pct)
     assert trade.get_custom_data(strat.SL_ANCHOR_KEY) == pytest.approx(expected)
 
 
-def test_t2_order_filled_writes_anchor_short():
-    """Short: `sl_anchor` == `setup_zone_high * (1 + buffer)` da linha causal."""
+def test_t2_order_filled_captures_setup_id_and_anchor_short():
+    """Short: captura `custom_data['setup_id']` e grava
+    `sl_anchor == setup_zone_high * (1 + buffer)` da linha causal."""
     strat = _strategy()
     zlow, zhigh = 102.0, 105.0
-    df = _df_with_setup("idSHORT", zlow, zhigh, direction="short")
+    df = _df_with_setup("hashSHORT", zlow, zhigh, direction="short")
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idSHORT", is_short=True, entry_side="sell", exit_side="buy")
+    trade = _FakeTrade("A3_short", is_short=True, entry_side="sell", exit_side="buy")
 
     strat.order_filled(
         "BTC/USDT:USDT", trade, _FakeOrder("sell"), _dt(3),
     )
+    assert trade.get_custom_data(strat.SETUP_ID_KEY) == "hashSHORT"
     expected = zhigh * (1.0 + strat.sl_zone_buffer_pct)
     assert trade.get_custom_data(strat.SL_ANCHOR_KEY) == pytest.approx(expected)
 
 
 def test_t2_anchor_idempotent_and_exit_skips():
-    """Âncora não é re-gravada; fill de saída não toca `sl_anchor`."""
+    """Âncora e setup_id não são re-gravados; fill de saída não toca `sl_anchor`."""
     strat = _strategy()
-    df = _df_with_setup("idLONG", 95.0, 98.0)
+    df = _df_with_setup("hashLONG", 95.0, 98.0)
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG")
+    trade = _FakeTrade("A3_long")
+    trade.set_custom_data(strat.SETUP_ID_KEY, "preexisting")  # já capturado
     trade.set_custom_data(strat.SL_ANCHOR_KEY, 1.23)  # já ancorado
 
     strat.order_filled("BTC/USDT:USDT", trade, _FakeOrder("buy"), _dt(3))
+    assert trade.get_custom_data(strat.SETUP_ID_KEY) == "preexisting"  # inalterado
     assert trade.get_custom_data(strat.SL_ANCHOR_KEY) == 1.23  # inalterado
 
 
@@ -278,9 +297,10 @@ def test_t4a_exit_on_structural_invalidation():
     """`custom_exit` sai com EXIT_STRUCTURAL quando o `setup_id` aparece
     INVALIDATED na linha causal atual."""
     strat = _strategy()
-    df = _df_with_setup("idLONG", 95.0, 98.0, state="INVALIDATED")
+    df = _df_with_setup("hashLONG", 95.0, 98.0, state="INVALIDATED")
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG", open_rate=100.0)
+    trade = _FakeTrade("A3_long", open_rate=100.0)
+    trade.set_custom_data(strat.SETUP_ID_KEY, "hashLONG")
     trade.set_custom_data(strat.SL_ANCHOR_KEY, 95.0)
 
     reason = strat.custom_exit(
@@ -295,9 +315,10 @@ def test_t4b_exit_on_rr_target_long():
     entry=100, anchor=95 → risk=5; rr=2 → alvo=110. Sem invalidação na fonte.
     """
     strat = _strategy()
-    df = _df_with_setup("idLONG", 95.0, 98.0, state="CONFIRMED")
+    df = _df_with_setup("hashLONG", 95.0, 98.0, state="CONFIRMED")
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG", open_rate=100.0)
+    trade = _FakeTrade("A3_long", open_rate=100.0)
+    trade.set_custom_data(strat.SETUP_ID_KEY, "hashLONG")
     trade.set_custom_data(strat.SL_ANCHOR_KEY, 95.0)
 
     # Abaixo do alvo → não sai.
@@ -311,9 +332,10 @@ def test_t4b_exit_on_rr_target_long():
 def test_t4b_exit_on_rr_target_short():
     """Short: entry=100, anchor=105 → risk=5; rr=2 → alvo=90."""
     strat = _strategy()
-    df = _df_with_setup("idSHORT", 102.0, 105.0, state="CONFIRMED", direction="short")
+    df = _df_with_setup("hashSHORT", 102.0, 105.0, state="CONFIRMED", direction="short")
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idSHORT", is_short=True, open_rate=100.0)
+    trade = _FakeTrade("A3_short", is_short=True, open_rate=100.0)
+    trade.set_custom_data(strat.SETUP_ID_KEY, "hashSHORT")
     trade.set_custom_data(strat.SL_ANCHOR_KEY, 105.0)
 
     assert strat.custom_exit("BTC/USDT:USDT", trade, _dt(3), 90.1, 0.099) is None
@@ -325,9 +347,10 @@ def test_t4b_exit_on_rr_target_short():
 def test_t4_no_exit_when_neither():
     """Sem invalidação e antes do alvo → `None` (segura o trade)."""
     strat = _strategy()
-    df = _df_with_setup("idLONG", 95.0, 98.0, state="CONFIRMED")
+    df = _df_with_setup("hashLONG", 95.0, 98.0, state="CONFIRMED")
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG", open_rate=100.0)
+    trade = _FakeTrade("A3_long", open_rate=100.0)
+    trade.set_custom_data(strat.SETUP_ID_KEY, "hashLONG")
     trade.set_custom_data(strat.SL_ANCHOR_KEY, 95.0)
     assert strat.custom_exit("BTC/USDT:USDT", trade, _dt(3), 103.0, 0.03) is None
 
@@ -350,10 +373,12 @@ def test_t5_anchor_ignores_future_row():
         "setup_zone_high": [np.nan, np.nan, 98.0, 83.0],
     })
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG")
+    trade = _FakeTrade("A3_long")
 
     # current_time = i=2: a linha i=5 é futura e NÃO pode influenciar.
     strat.order_filled("BTC/USDT:USDT", trade, _FakeOrder("buy"), _dt(2))
+    # O setup_id capturado é o da linha causal (i=2), não o da futura.
+    assert trade.get_custom_data(strat.SETUP_ID_KEY) == "idLONG"
     expected = 95.0 * (1.0 - strat.sl_zone_buffer_pct)
     assert trade.get_custom_data(strat.SL_ANCHOR_KEY) == pytest.approx(expected)
 
@@ -370,7 +395,8 @@ def test_t5_invalidation_ignores_future_row():
         "setup_zone_high": [98.0, 98.0],
     })
     strat.dp = _FakeDP(df)
-    trade = _FakeTrade("idLONG", open_rate=100.0)
+    trade = _FakeTrade("A3_long", open_rate=100.0)
+    trade.set_custom_data(strat.SETUP_ID_KEY, "idLONG")
     trade.set_custom_data(strat.SL_ANCHOR_KEY, 95.0)
 
     # current_time = i=2: a INVALIDATED (i=5) é futura → não sai por estrutura.

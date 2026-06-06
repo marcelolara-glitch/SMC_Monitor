@@ -6,7 +6,10 @@ OBJETIVO
     por trade:
       1. **Entrada STRICT em `CONFIRMED`** (§3.1 do briefing 10b): `enter_long`/
          `enter_short` só quando `setup_state == 'CONFIRMED'` e `setup_direction`
-         casa; `enter_tag = setup_id` (rastreio por assinatura para a 10c).
+         casa; `enter_tag = f"{setup_signature}_{setup_direction}"` (instrumentação
+         10c: rótulo por assinatura×direção, agrupado nativamente pelo relatório
+         de backtest). A identidade única (`setup_id`) migra para
+         `custom_data['setup_id']` no fill, seguindo como chave da âncora/saída.
       2. **SL ancorado na zona do setup** (§3.2, caso canônico dos helpers
          nativos): `order_filled` lê, no candle causal, `setup_zone_low` (long) /
          `setup_zone_high` (short) e grava em `custom_data['sl_anchor']` (+ um
@@ -163,6 +166,12 @@ class SMCStrategy(IStrategy):
     rr_target: float = 2.0
 
     # === Chaves de `custom_data` (persistência por trade) ===
+    # `setup_id`: a identidade única (hash da âncora) do setup causal do fill.
+    # Movida do `enter_tag` para `custom_data` na 10c — o `enter_tag` passou a
+    # carregar a assinatura×direção (`setup_signature_setup_direction`), legível
+    # pelo relatório de backtest. O `setup_id` segue sendo a chave de casamento
+    # da âncora/saída por trade (`_causal_setup_row`).
+    SETUP_ID_KEY = "setup_id"
     SL_ANCHOR_KEY = "sl_anchor"
     RESOLVED_KEY = "resolved"
 
@@ -237,15 +246,18 @@ class SMCStrategy(IStrategy):
     # ------------------------------------------------------------------
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        """Entrada STRICT: `enter_long`/`enter_short` em `CONFIRMED`, tag=setup_id.
+        """Entrada STRICT: `enter_long`/`enter_short` em `CONFIRMED`, tag=assinatura×direção.
 
         OBJETIVO
             Emitir entrada exatamente nas linhas onde `setup_state ==
             'CONFIRMED'` e `setup_direction` casa com o lado, marcando
-            `enter_tag = setup_id` (rastreio por assinatura para a 10c e âncora
-            do SL/saída por trade).
+            `enter_tag = f"{setup_signature}_{setup_direction}"` (ex.: `"A3_long"`)
+            — rótulo legível por assinatura×direção que o relatório de backtest
+            agrupa nativamente (10c). A identidade única (`setup_id`) migra para
+            `custom_data` no fill (`order_filled`), seguindo como chave da âncora/
+            saída por trade.
         FONTE DE DADOS
-            Colunas `setup_state`/`setup_direction`/`setup_id` de
+            Colunas `setup_state`/`setup_direction`/`setup_signature` de
             `compute_setup_state` (já no df após `populate_indicators`).
         LIMITAÇÕES CONHECIDAS
             `entry_mode='hybrid'` é stub (`NotImplementedError`): antecipar
@@ -269,10 +281,19 @@ class SMCStrategy(IStrategy):
 
         dataframe.loc[long_sig, "enter_long"] = 1
         dataframe.loc[short_sig, "enter_short"] = 1
-        # `enter_tag = setup_id`: assinatura por trade (rastreio 10c + chave da
-        # âncora/saída). `setup_id` é não-nulo onde o estado é CONFIRMED.
-        dataframe.loc[long_sig, "enter_tag"] = dataframe.loc[long_sig, "setup_id"]
-        dataframe.loc[short_sig, "enter_tag"] = dataframe.loc[short_sig, "setup_id"]
+        # `enter_tag = f"{setup_signature}_{setup_direction}"` (ex.: "A3_long"):
+        # rótulo por assinatura×direção (agrupado nativamente pelo relatório de
+        # backtest da 10c). `setup_signature`/`setup_direction` são não-nulos onde
+        # o estado é CONFIRMED. A identidade única (`setup_id`) migra para
+        # `custom_data` no fill (`order_filled`).
+        dataframe.loc[long_sig, "enter_tag"] = (
+            dataframe.loc[long_sig, "setup_signature"].astype(str)
+            + "_" + dataframe.loc[long_sig, "setup_direction"].astype(str)
+        )
+        dataframe.loc[short_sig, "enter_tag"] = (
+            dataframe.loc[short_sig, "setup_signature"].astype(str)
+            + "_" + dataframe.loc[short_sig, "setup_direction"].astype(str)
+        )
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -303,21 +324,27 @@ class SMCStrategy(IStrategy):
         """Grava a âncora do SL no preenchimento da entrada; RESOLVED na saída.
 
         OBJETIVO
-            (a) No fill da ORDEM DE ENTRADA, ler a zona do setup do trade na
-            linha causal (`setup_zone_low` long / `setup_zone_high` short) e
-            gravar `custom_data['sl_anchor']` = borda da zona ± buffer (fora da
-            zona). (b) No fill de uma ordem de SAÍDA (trade fechado), gravar o
-            desfecho RESOLVED em `custom_data['resolved']` (§3.4).
+            (a) No fill da ORDEM DE ENTRADA, capturar o `setup_id` (identidade
+            única) do setup ativo na linha causal e gravá-lo em
+            `custom_data['setup_id']` — a chave de casamento da âncora/saída, já
+            que o `enter_tag` agora carrega a assinatura×direção (10c). Em
+            seguida, ler a zona do setup na linha causal (`setup_zone_low` long /
+            `setup_zone_high` short) e gravar `custom_data['sl_anchor']` = borda
+            da zona ± buffer (fora da zona). (b) No fill de uma ordem de SAÍDA
+            (trade fechado), gravar o desfecho RESOLVED em
+            `custom_data['resolved']` (§3.4).
         FONTE DE DADOS
             `order.ft_order_side == trade.entry_side` distingue entrada de saída
-            (`trade_model.py:315`). Zona: `self.dp.get_analyzed_dataframe(pair,
-            timeframe)` filtrado por `date <= current_time` e `setup_id ==
-            trade.enter_tag` (causal — §4). RESOLVED: `trade.exit_reason`.
+            (`trade_model.py:315`). `setup_id`: última linha causal com
+            `setup_id` não-nulo (`date <= current_time`; FSM single → um setup
+            ativo no candle do fill). Zona: `_causal_setup_row` casa por
+            `custom_data['setup_id']` (causal — §4). RESOLVED: `trade.exit_reason`.
         LIMITAÇÕES CONHECIDAS
-            A âncora é gravada uma vez (idempotente: se já existe, não re-grava —
-            cobre fills parciais/ajustes de posição, fora de escopo aqui). Sem a
-            linha causal correspondente (df vazio/sem o `setup_id`), não grava —
-            `custom_stoploss` cai no `stoploss` duro até haver âncora.
+            A captura do `setup_id` e a âncora são gravadas uma vez (idempotente:
+            se já existem, não re-gravam — cobre fills parciais/ajustes de
+            posição, fora de escopo aqui). Sem a linha causal correspondente (df
+            vazio/sem `setup_id`), não grava — `custom_stoploss` cai no `stoploss`
+            duro até haver âncora.
         NÃO FAZER
             Não indexar o df por posição futura (§4); não remontar a zona das
             `active_*` (usar a âncora pronta `setup_zone_*`).
@@ -328,7 +355,14 @@ class SMCStrategy(IStrategy):
                 self._record_resolved(trade)
             return
 
-        # Fill de ENTRADA: ancora o SL uma única vez.
+        # Fill de ENTRADA: captura o `setup_id` causal (chave da âncora/saída)
+        # uma única vez. FSM single → no candle do fill há um setup ativo.
+        if trade.get_custom_data(self.SETUP_ID_KEY) is None:
+            setup_id = self._causal_setup_id(pair, current_time)
+            if setup_id is not None:
+                trade.set_custom_data(self.SETUP_ID_KEY, setup_id)
+
+        # Ancora o SL uma única vez (lê a zona pela chave `custom_data['setup_id']`).
         if trade.get_custom_data(self.SL_ANCHOR_KEY) is not None:
             return
         anchor = self._compute_sl_anchor(pair, trade, current_time)
@@ -388,7 +422,7 @@ class SMCStrategy(IStrategy):
             sl_anchor|` é atingido por `current_rate`.
         FONTE DE DADOS
             (a) `self.dp.get_analyzed_dataframe` filtrado por `date <=
-            current_time` e `setup_id == trade.enter_tag` (causal — §4),
+            current_time` e `setup_id == custom_data['setup_id']` (causal — §4),
             checando `setup_state == 'INVALIDATED'`. (b) `trade.open_rate`,
             `custom_data['sl_anchor']`, `current_rate`, `trade.is_short`.
         LIMITAÇÕES CONHECIDAS
@@ -411,18 +445,22 @@ class SMCStrategy(IStrategy):
     # Helpers (puros o suficiente para o smoke sintético — §7)
     # ------------------------------------------------------------------
 
-    def _causal_setup_row(self, pair, trade, current_time):
-        """Última linha causal do df analisado para o `setup_id` deste trade.
+    def _causal_setup_id(self, pair, current_time):
+        """`setup_id` da última linha causal com setup ativo (captura no fill).
 
         OBJETIVO
-            Devolver a linha (Series) mais recente com `date <= current_time` e
-            `setup_id == trade.enter_tag`, ou `None` se não houver. É o ponto
-            único de leitura causal do df nos callbacks (§4): liga a âncora/saída
-            à assinatura exata do trade (`enter_tag == setup_id`).
+            Devolver o `setup_id` (identidade única) da linha (Series) mais
+            recente com `date <= current_time` e `setup_id` não-nulo, ou `None`
+            se não houver. FSM single-setup → no candle do fill há exatamente um
+            setup ativo, então a última linha causal com `setup_id` é a
+            inequívoca do trade. Usado por `order_filled` para mover a chave de
+            casamento para `custom_data['setup_id']` (o `enter_tag` virou
+            assinatura×direção).
         FONTE DE DADOS
             `self.dp.get_analyzed_dataframe(pair, self.timeframe)`.
         LIMITAÇÕES CONHECIDAS
-            Df vazio (cache frio) ou sem o `setup_id` → `None`.
+            Df vazio (cache frio) ou sem nenhuma linha causal com `setup_id` →
+            `None`.
         NÃO FAZER
             Não usar `iloc` futuro; o filtro `date <= current_time` é a barreira
             anti-lookahead.
@@ -431,7 +469,39 @@ class SMCStrategy(IStrategy):
         if df is None or df.empty or "setup_id" not in df.columns:
             return None
         causal = df[df["date"] <= current_time]
-        rows = causal[causal["setup_id"] == trade.enter_tag]
+        rows = causal[causal["setup_id"].notna()]
+        if rows.empty:
+            return None
+        return rows.iloc[-1]["setup_id"]
+
+    def _causal_setup_row(self, pair, trade, current_time):
+        """Última linha causal do df analisado para o `setup_id` deste trade.
+
+        OBJETIVO
+            Devolver a linha (Series) mais recente com `date <= current_time` e
+            `setup_id == trade.get_custom_data('setup_id')`, ou `None` se não
+            houver. É o ponto único de leitura causal do df nos callbacks (§4):
+            liga a âncora/saída à identidade exata do trade pela chave em
+            `custom_data` (o `enter_tag` agora carrega a assinatura×direção, não
+            o hash). Lógica idêntica à 10b; só muda a chave de casamento.
+        FONTE DE DADOS
+            `self.dp.get_analyzed_dataframe(pair, self.timeframe)`;
+            `trade.get_custom_data('setup_id')` (gravado em `order_filled`).
+        LIMITAÇÕES CONHECIDAS
+            Df vazio (cache frio), `setup_id` ainda não capturado, ou sem o
+            `setup_id` no df causal → `None`.
+        NÃO FAZER
+            Não usar `iloc` futuro; o filtro `date <= current_time` é a barreira
+            anti-lookahead.
+        """
+        df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        if df is None or df.empty or "setup_id" not in df.columns:
+            return None
+        setup_id = trade.get_custom_data(self.SETUP_ID_KEY)
+        if setup_id is None:
+            return None
+        causal = df[df["date"] <= current_time]
+        rows = causal[causal["setup_id"] == setup_id]
         if rows.empty:
             return None
         return rows.iloc[-1]
