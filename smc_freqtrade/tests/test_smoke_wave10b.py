@@ -419,16 +419,19 @@ def test_t6_resolved_recorded_on_close(reason, outcome):
     strat = _strategy()
     strat.dp = _FakeDP(pd.DataFrame())  # não usado no ramo de saída
     trade = _FakeTrade(
-        "idLONG", entry_side="buy", exit_side="sell",
+        "A3_long", entry_side="buy", exit_side="sell",
         is_open=False, exit_reason=reason,
     )
+    # enter_tag = rótulo `assinatura_direção`; o hash vem do custom_data.
+    trade.set_custom_data(strat.SETUP_ID_KEY, "hashLONG")
     strat.order_filled("BTC/USDT:USDT", trade, _FakeOrder("sell"), _dt(9))
 
     resolved = trade.get_custom_data(strat.RESOLVED_KEY)
     assert resolved is not None
     assert resolved["outcome"] == outcome
     assert resolved["exit_reason"] == reason
-    assert resolved["setup_id"] == "idLONG"
+    assert resolved["setup_id"] == "hashLONG"  # o hash, não o rótulo
+    assert resolved["enter_tag"] == "A3_long"  # o rótulo assinatura_direção
 
 
 def test_t6_resolved_not_written_on_open_exit_fill():

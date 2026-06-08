@@ -586,11 +586,15 @@ class SMCStrategy(IStrategy):
         OBJETIVO
             Classificar o desfecho a partir de `trade.exit_reason` em
             {`tp`, `sl`, `invalidation`, `other`} e gravar
-            `custom_data['resolved']` = `{outcome, exit_reason, setup_id}`.
+            `custom_data['resolved']` =
+            `{outcome, exit_reason, setup_id, enter_tag}`.
             RESOLVED é estado pós-trade do Freqtrade — NÃO do engine (§3.4).
         FONTE DE DADOS
             `trade.exit_reason` (`EXIT_RR` → tp; `EXIT_STRUCTURAL` →
-            invalidation; `'stoploss'` → sl), `trade.enter_tag`.
+            invalidation; `'stoploss'` → sl); `setup_id` ← o hash em
+            `custom_data[SETUP_ID_KEY]` (pode ser `None` em cache frio —
+            honesto); `enter_tag` ← `trade.enter_tag` (rótulo
+            `assinatura_direção`, ex.: `"A3_long"`).
         LIMITAÇÕES CONHECIDAS
             Idempotente (não re-grava se já existe). `other` cobre saídas não
             mapeadas (ex.: `force_exit`).
@@ -614,6 +618,7 @@ class SMCStrategy(IStrategy):
             {
                 "outcome": outcome,
                 "exit_reason": reason,
-                "setup_id": trade.enter_tag,
+                "setup_id": trade.get_custom_data(self.SETUP_ID_KEY),
+                "enter_tag": trade.enter_tag,
             },
         )
