@@ -115,18 +115,20 @@ def test_t2_populate_indicators_pipeline(strategy):
 def test_t3_no_signal_without_confirmed(strategy):
     """Sem nenhum `CONFIRMED`, `populate_entry/exit_trend` não emitem sinais.
 
-    NOTA 10b: a 10a tinha `populate_entry_trend` como no-op puro; a 10b passou a
-    emitir entrada STRICT em `CONFIRMED` (lendo `setup_state`/`setup_direction`/
-    `setup_id`, sempre presentes após `populate_indicators`). Este teste preserva
-    a garantia 10a-equivalente — nenhuma entrada quando não há `CONFIRMED` — com
-    o df já carregando as colunas do matcher (não-CONFIRMED). `populate_exit_trend`
-    permanece no-op (a saída determinística da 10b vive em `custom_exit`).
+    NOTA 10b/10c: a 10a tinha `populate_entry_trend` como no-op puro; a 10b passou
+    a emitir entrada STRICT em `CONFIRMED` (lendo `setup_state`/`setup_direction`/
+    `setup_signature`, sempre presentes após `populate_indicators`). Este teste
+    preserva a garantia 10a-equivalente — nenhuma entrada quando não há
+    `CONFIRMED` — com o df já carregando as colunas do matcher (não-CONFIRMED).
+    `populate_exit_trend` permanece no-op (a saída determinística da 10b vive em
+    `custom_exit`).
     """
     df = _load_golden("15m").head(50).copy()
     # Colunas do matcher como em produção (após `populate_indicators`), sem
     # nenhum CONFIRMED na janela.
     df["setup_state"] = "ARMED"
     df["setup_direction"] = "long"
+    df["setup_signature"] = "A3"
     df["setup_id"] = "armed_placeholder"
 
     entry = strategy.populate_entry_trend(df.copy(), {"pair": "BTC/USDT:USDT"})

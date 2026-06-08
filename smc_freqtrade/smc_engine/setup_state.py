@@ -110,6 +110,7 @@ _VALID_SIGNATURE_IDS = ('A3', 'A2', 'A4a', 'A5', 'A1', 'A9', 'A6', 'A7', 'A10')
 
 # === Colunas de output ===
 COL_SETUP_ID = 'setup_id'
+COL_SETUP_SIGNATURE = 'setup_signature'
 COL_SETUP_STATE = 'setup_state'
 COL_SETUP_DIRECTION = 'setup_direction'
 COL_SETUP_ZONE_LOW = 'setup_zone_low'
@@ -117,6 +118,7 @@ COL_SETUP_ZONE_HIGH = 'setup_zone_high'
 COL_SETUP_INVALIDATION_REASON = 'setup_invalidation_reason'
 SETUP_OUTPUT_COLUMNS = (
     COL_SETUP_ID,
+    COL_SETUP_SIGNATURE,
     COL_SETUP_STATE,
     COL_SETUP_DIRECTION,
     COL_SETUP_ZONE_LOW,
@@ -850,8 +852,9 @@ def compute_setup_state(
 
     Stateless (df in, df out — igual `analyze()`). Recebe o DataFrame base
     (15m) **já mergeado** com as colunas de zona promovidas por
-    `zone_projection.promote_active_zones`. Devolve o mesmo df + as 6
-    colunas `setup_*`.
+    `zone_projection.promote_active_zones`. Devolve o mesmo df + as 7
+    colunas `setup_*` (inclui `setup_signature` — a assinatura A1–A10 do
+    setup ativo, ao lado do `setup_id` hash; rastreio por assinatura).
 
     A FSM itera as assinaturas selecionadas em `config.signature` (default
     A3) por prioridade D3 e, num candle sem setup ativo, arma a primeira
@@ -865,7 +868,7 @@ def compute_setup_state(
         config: SetupConfig. Se None, usa defaults (A3, confirmation).
 
     Returns:
-        Cópia de `df` + 6 colunas (`SETUP_OUTPUT_COLUMNS`).
+        Cópia de `df` + 7 colunas (`SETUP_OUTPUT_COLUMNS`).
 
     Raises:
         NotImplementedError: se `config.entry_mode == 'hybrid'` (D1 — o
@@ -916,6 +919,7 @@ def compute_setup_state(
 
     # --- output buffers ---
     out_id: list[str | None] = [None] * n
+    out_sig: list[str | None] = [None] * n
     out_state: list[str | None] = [None] * n
     out_dir: list[str | None] = [None] * n
     out_zlow = np.full(n, np.nan, dtype='float64')
@@ -938,6 +942,7 @@ def compute_setup_state(
     def _emit(i: int, st: str, reason: str | None = None) -> None:
         out_state[i] = st
         out_id[i] = s_id
+        out_sig[i] = s_sig.id
         out_dir[i] = s_dir
         out_zlow[i] = s_zlow
         out_zhigh[i] = s_zhigh
@@ -1044,6 +1049,7 @@ def compute_setup_state(
             continue
 
     out[COL_SETUP_ID] = pd.array(out_id, dtype='string')
+    out[COL_SETUP_SIGNATURE] = pd.array(out_sig, dtype='string')
     out[COL_SETUP_STATE] = pd.array(out_state, dtype='string')
     out[COL_SETUP_DIRECTION] = pd.array(out_dir, dtype='string')
     out[COL_SETUP_ZONE_LOW] = out_zlow
