@@ -4,7 +4,14 @@
 >
 > **Próxima fase:** subprojeto `smc_freqtrade/` neste mesmo repositório, com freqtrade como base de infraestrutura e lógica SMC implementada como `IStrategy` customizada. O sistema legado é preservado em `legacy/` para referência.
 >
-> **Última atualização:** 2026-04-26.
+> **Última atualização:** 2026-07-03 — **Revisão v2.0** (Fase A Parte 1: proposta P0–P10
+> ratificada integralmente pelo Marcelo; evidência e fontes em
+> `docs/RELATORIO_FASE_A_PARTE1_CONCEITUAL.md`).
+>
+> **Convenção [v2.0]:** requisitos marcados com `[v2.0]` foram introduzidos nesta revisão e
+> **não descrevem o comportamento histórico do código**. Na auditoria da Fase A Parte 2,
+> divergência código↔conceito em item `[v2.0]` classifica-se como *lacuna esperada*;
+> divergência em item sem a marca classifica-se como *candidato a bug de fidelidade*.
 
 ---
 
@@ -50,6 +57,24 @@ A Parte 8 ("Instruções para Claude") é especialmente importante — destina-s
 
 **Como fazer certo.** A modelagem deve verificar **transições** entre estados, não estados isolados. Sweep precisa ter ocorrido **antes** da formação do OB que se observa agora. BOS no 15m precisa ter ocorrido **depois** que o preço retornou à zona do 1H. Ordem temporal é parte do critério.
 
+### 2.1.1 As duas famílias de setup [v2.0]
+
+A literatura contém duas arquiteturas de entrada distintas, ambas legítimas. O canônico passa
+a declará-las, e cada assinatura do catálogo (Parte 9) é etiquetada com a sua:
+
+- **Família I — Retest de POI pré-existente.** Uma zona (OB/FVG) já formada em TF maior espera
+  o retorno do preço; o sweep atua como qualificador de qualidade. É a família que a máquina de
+  estados da Parte 3 modela: a zona existe antes, o setup ARMED existe antes do gatilho.
+- **Família II — Zona-nascente (modelo-2022).** O sweep dispara um MSS com deslocamento, e a
+  zona de entrada **nasce desse impulso** (o FVG/OB criado pelo displacement). Não existe setup
+  antes do sweep, porque a zona ainda não existe; ARMED só pode surgir pós-sweep. Sequência
+  canônica: sweep → MSS com displacement → retração à zona do impulso → entrada.
+
+Fontes: modelo-2022 como sequência nomeada sweep→MSS→FVG (tradingview.com/script/SD8VyvVg,
+tradingfinder.com/education/forex/ict-mentorship-2022-model, fxnx.com); retest de POI
+(innercircletrader.net/tutorials/ict-order-block). Detalhe e grau de consenso:
+`docs/RELATORIO_FASE_A_PARTE1_CONCEITUAL.md` §1-F1, §4-E-1/E-3, §5.
+
 ### 2.2 Zona de entrada é armadilha, não preço
 
 **Princípio.** Um operador SMC profissional nunca pensa "entrar em 75720". Pensa "se o preço retornar à zona 75600-75850 (que é meu OB), e nesse retorno o 15m mostrar uma ChoCH bullish + rejeição (vela com pavio inferior longo + close forte), aí entro". A entrada é **um evento condicional dentro de uma zona**, não um número.
@@ -69,6 +94,12 @@ A Parte 8 ("Instruções para Claude") é especialmente importante — destina-s
 - **Setup A+ (premium):** sweep recente na direção contrária + retorno à zona = trade de alta probabilidade
 - **Setup B (standard):** sem sweep mas zona forte (OB com volume alto + FVG limpa + trend macro firme) = entrada apenas com confirmação extra no 15m
 - **Não-setup:** sem sweep e zona fraca = ignorar, não emitir
+
+**Leitura por família [v2.0].** Na Família II (§2.1.1) o sweep é estágio obrigatório por
+definição — sem ele não há setup, de nenhuma qualidade. A diferenciação A+/B acima aplica-se à
+Família I, e é uma **síntese declarada** deste projeto (alternativa legítima na literatura, não
+consenso): o default do modelo-2022 é sweep-obrigatório, e modelos de retest de POI sem sweep
+existem condicionados a viés HTF. Registro do espaço: RELATORIO Fase A Parte 1, §4-E-3.
 
 ### 2.4 Multi-timeframe é hierarquia decisória, não AND lógico
 
@@ -91,6 +122,13 @@ A Parte 8 ("Instruções para Claude") é especialmente importante — destina-s
                                                   └─ ChoCH 15m + rejeição → setup CONFIRMED → entrar
 ```
 
+**Hierarquia com duas saídas [v2.0].** No corpus ICT, o timeframe alto entrega **direção e
+alvo**: além do viés, ele define o *draw on liquidity* — o pool de liquidez oposto
+não-mitigado para onde o preço tende a ser entregue (ver §2.9). A máquina de estados atual
+consome apenas a direção; o alvo-HTF é função declarada da hierarquia ainda não modelada.
+Fontes: backtrex.com/en/blog/ict-market-structure-shift-mss-guide;
+tradezella.com/learning-items/ict-model-4.
+
 ### 2.5 Invalidação é tão importante quanto entrada
 
 **Princípio.** Setups morrem o tempo todo. Um especialista deleta setups com naturalidade. Se preço passou da zona sem voltar, ou voltou mas sem confirmação, ou confirmou mas o contexto macro mudou — o setup morre. Sistema sem invalidação acumula "zumbis" que parecem ativos mas são lixo.
@@ -102,6 +140,127 @@ A Parte 8 ("Instruções para Claude") é especialmente importante — destina-s
 - **ARMED → invalidado** se OB/FVG mitigado, se preço escapou >2% acima/abaixo da zona sem voltar, ou se 6h sem atividade
 - **PENDING_CONFIRMATION → invalidado** se preço atravessou a zona inteira sem confirmar, ou se contexto macro 4H mudou direção, ou se N candles 15m sem confirmação (timeout)
 - **CONFIRMED → trade ativo**, com SL e TP estruturais. Saída por SL, TP, ou trailing.
+
+---
+
+### 2.6 Displacement é critério de validade, não filtro opcional [v2.0]
+
+**Definição.** Displacement é o movimento impulsivo que evidencia participação institucional:
+candle(s) com corpo maior que a média dos últimos N corpos e wicks pequenos relativo ao corpo
+(fórmula de referência já registrada em `CONCEITOS_LUXALGO_HOOKS.md §10.5`, do Pine
+`ICT Concepts [LuxAlgo]`: `body > meanBody` e wicks `< 0.36 * body`), idealmente deixando FVG.
+
+**Regras.** (i) Um MSS/ChoCH usado como **confirmação de entrada** só é válido se a quebra
+ocorre com displacement. (ii) Um **OB estratégico** (§2.10) só é válido se seguido de
+displacement. CHoCH estrutural puro sem deslocamento continua existindo como evento de
+estrutura — mas não qualifica confirmação de entrada.
+
+Fontes: backtrex.com (o impulso que valida o MSS quase sempre cria imbalance);
+thesimpleict.com/ict-displacement-explained-2025 (OB sem displacement não é pegada
+institucional); strike.money/technical-analysis/order-block;
+tradingstrategyguides.com/day-5-order-blocks-explained; e a operacionalização de terceiros do
+Anexo A (`profittown-sniper-smc`: "Impulse from OB caused BOS" como condição dura).
+
+### 2.7 Premium/Discount, Dealing Range e OTE [v2.0]
+
+**Dealing range.** O range de referência do ICT é o swing low↔high do **impulso relevante** —
+tipicamente o movimento pós-raid que quebrou estrutura — e não um extremo trailing de longo
+prazo. Equilibrium (EQ) = 50% do dealing range. **LONG só em discount (abaixo do EQ), SHORT só
+em premium (acima do EQ), relativo ao dealing range.**
+
+**OTE.** Faixa 62%–79% da retração do impulso, ponto central 70,5%. Requisitos de validade:
+a retração precisa **cruzar o EQ** (retração até 40% não arma OTE); o nível sozinho não é
+trade — exige **confluência** (OB/FVG dentro da faixa) e **confirmação**; invalidação
+estrutural = fechamento além do 100% (origem do swing); SL além do 100% com buffer; alvos
+preferenciais nas extensões −0.27/−0.62 ou liquidez oposta (§2.9).
+
+**Distinção de implementação.** A engine deriva um P/D de *trailing extremes* (porta LuxAlgo —
+`MAPA_LUXALGO_CAMADA_1_v1.1.md §6-Onda 4`). São **âncoras diferentes** que produzem zonas
+diferentes. O canônico estratégico adota o dealing range; cada filtro/assinatura declara na
+Parte 9 qual âncora consome. A convivência das duas âncoras é decisão documentada, não bug.
+
+Fontes: innercircletrader.net/tutorials/ict-fibonacci-levels e
+/ict-optimal-trade-entry-ote-pattern; ictflow.com/blog/ict-optimal-trade-entry-ote;
+tradingstrategyguides.com/understanding-ict-optimal-trade-entry-ote; fxnx.com.
+
+### 2.8 Tempo como dimensão do modelo [v2.0]
+
+No corpus ICT, tempo (killzones/sessões) é **filtro transversal de qualidade** — condiciona
+todos os modelos, não uma assinatura. Janelas herdadas (horário de NY): London open 3–4h,
+NY AM 10–11h, NY PM 14–15h.
+
+**Decisão de adaptação a cripto (explícita):** essas janelas foram calibradas para FX/índices.
+Em perpétuos cripto 24/7 seu valor é **hipótese experimental**, não fato — será decidida por
+medição (backtest estruturado com/sem gate temporal), nunca por doutrina. Até lá: cada
+assinatura declara na Parte 9 sua sensibilidade a tempo — **obrigatória** (A7, por definição) /
+**qualificadora** (usável como filtro de qualidade opcional) / **nenhuma**.
+
+Registro honesto do espaço: parte da comunidade trata OTE como retração pura, não time-based
+(discussão em innercircletrader.net/tutorials/ict-optimal-trade-entry-ote-pattern). Fontes da
+posição majoritária: tradingfinder.com (alinhamento com sessões como marca do 2022);
+forexfactory.com/thread/1342719 ("trade exclusivamente na kill zone" para OTE);
+grandalgo.com/blog/ict-silver-bullet-strategy (janela não-negociável na SB);
+thesimpleict.com (session timing como filtro de qualidade do displacement).
+
+### 2.9 Alvos: draw on liquidity [v2.0]
+
+O alvo primário do corpus é **liquidez oposta não-mitigada** (old/session highs-lows, EQH/EQL)
+— o *draw on liquidity* definido no TF alto. Framework alternativo ancorado: extensões de
+Fibonacci −0.27/−0.62 sobre o swing do impulso.
+
+**Removido do modelo conceitual:** o antigo TP2 = *retracement* 0.618 (escolha sem âncora no
+corpus — ICT usa extensões negativas e pools, não retrações como alvo). Se o código atual o
+utiliza, reclassifica-se como escolha de engenharia declarada (§2.11) até decisão do Briefing 2.
+Escada de parciais e BE-após-TP1 permanecem como gestão idiossincrática declarada (§2.11).
+
+Fontes: tradezella.com/learning-items/ict-model-4 (alvos em liquidez externa);
+fxopen.com/blog/en/what-is-the-ict-silver-bullet-strategy;
+innercircletrader.net/tutorials/ict-fibonacci-levels (extensões);
+innercircletrader.net/tutorials/ict-breaker-block-trading (TP no próximo pool).
+
+### 2.10 OB primitivo vs OB estratégico [v2.0]
+
+**OB primitivo (LuxAlgo).** Vela de extremo (`parsed_low`/`parsed_high`) na janela
+`[pivot_idx, break_idx)`. É e continua sendo a referência de **match do golden dataset** — a
+política de fidelidade do `MAPA_LUXALGO_CAMADA_1_v1.1.md §7.9` fica **integralmente
+preservada**: quando a engine bate com o LuxAlgo gratuito e diverge do dogma, a engine está
+correta *como primitivo*.
+
+**OB estratégico (ICT).** A **última vela oposta antes do displacement** (última de baixa
+antes do impulso de alta, e vice-versa), válido apenas com: displacement subsequente (§2.6),
+estrutura/liquidez tomada pelo impulso, e alinhamento com o viés HTF.
+
+**Ponte.** São camadas distintas com funções distintas: o primitivo valida a portagem; o
+estratégico define zona de entrada. Cada assinatura declara na Parte 9 qual semântica consome.
+Divergências engine↔dogma no nível do primitivo continuam regidas pelo MAPA §7.9.
+
+Fontes: innercircletrader.net/tutorials/ict-order-block; strike.money;
+blog.trinitytrading.io/order-blocks-ict-trading-guide-2026; Anexo A (`smc_quant`: "last
+opposing candle before a major move").
+
+### 2.11 Escolhas de engenharia declaradas (sem âncora externa) [v2.0]
+
+Os itens abaixo **não têm âncora no corpus** — são engenharia deste projeto: calibráveis,
+não-dogma. A Fase A Parte 2 audita **presença e coerência de implementação**, nunca "correção"
+contra fonte inexistente. Valores finais serão decididos por hyperopt sob gate out-of-sample.
+
+- Escape >2% da zona (invalidação ARMED); timeout 6h (ARMED); N candles 15m (PENDING).
+- Parametrização do sweep: X%·ATR de ultrapassagem e janela temporal (núcleo
+  wick-beyond-close-back tem âncora; os parâmetros não).
+- Gestão: BE após TP1; escada de parciais 20-30/40-50/20-30; R:R mínimo 1:2 (corpus oscila
+  entre 1:2 e 1:3).
+- **Conjunção de confirmação "ChoCH 15m + vela de rejeição":** o consensual no corpus é
+  MSS/CISD como gatilho, com padrão candlestick (rejeição/engolfo) como **alternativa** — a
+  conjunção obrigatória dos dois é composição deste projeto (precedente de risco: a modelagem
+  original da A3). Mantida como escolha declarada; revisão pertence ao Briefing 2.
+
+### 2.12 Escopo de liquidez [v2.0]
+
+Pools modelados hoje: **EQH/EQL** (threshold ATR) — um **subconjunto** do espaço do corpus.
+Pools não-cobertos, registrados para roadmap (não são requisito das assinaturas atuais):
+PDH/PDL, highs/lows de sessão, old highs/lows semanais, trendline liquidity.
+Fontes: backtrex.com; forexfactory.com/thread/1347627;
+innercircletrader.net/tutorials/ict-silver-bullet-strategy.
 
 ---
 
@@ -158,6 +317,12 @@ A Parte 8 ("Instruções para Claude") é especialmente importante — destina-s
 | PENDING_CONFIRMATION | CONFIRMED | ChoCH 15m + vela de rejeição na direção do trade |
 | PENDING_CONFIRMATION | INVALIDATED | preço atravessou a zona inteira OU N candles 15m sem confirmar OU trend 4H mudou |
 | CONFIRMED | RESOLVED | SL hit, TP hit, ou timeout configurado |
+
+**Escopo desta máquina [v2.0].** O diagrama e a tabela acima modelam a **Família I** (§2.1.1):
+a zona existe antes, ARMED existe antes do gatilho. Para a **Família II**, a máquina tem um
+pré-estado implícito — nenhum setup existe antes do sweep; a zona (FVG/OB do impulso) nasce no
+MSS pós-sweep e só então o fluxo PENDING → CONFIRMED se aplica por analogia. A formalização de
+uma FSM-II é trabalho pós-Fase A; **não implementar por antecipação** (anti-over-engineering).
 
 ### 3.3 Por que essa modelagem e não outra
 
@@ -418,6 +583,9 @@ A menos que o Marcelo apresente evidência forte e específica em sentido contr�
 
 8. **A infraestrutura é freqtrade, não sistema próprio.** Não proponha reescrever WebSocket, persistência, gestão de ordens. Esse caminho foi explicitamente descartado em abril 2026.
 
+9. **[v2.0] Displacement é critério de validade** (§2.6) — MSS de confirmação e OB estratégico
+   sem deslocamento não qualificam entrada. Não trate displacement como filtro opcional.
+
 ### 8.2 Sinais de alerta — quando você (Claude) está derivando
 
 Se você se pegar fazendo qualquer uma destas coisas, **pare e releia este documento**:
@@ -428,6 +596,9 @@ Se você se pegar fazendo qualquer uma destas coisas, **pare e releia este docum
 - Calculando entry de evento A com SL de evento B sem checar coerência temporal → bug clássico do legado, não repita.
 - Modelando "tracker" como módulo separado que simula forward → freqtrade faz isso nativamente. Não reimplemente.
 - Sugerindo backtest opcional ou "depois se preocupa com isso" → backtest é primeira validação, não última.
+- [v2.0] Auditando um parâmetro da §2.11 "contra a literatura" → esses itens não têm âncora;
+  são engenharia declarada. Audita-se presença e coerência, calibra-se por hyperopt sob gate
+  out-of-sample.
 
 ### 8.3 Perguntas a fazer antes de propor solução
 
@@ -454,6 +625,64 @@ O Marcelo é inteligente, paciente, e identifica buracos lógicos em raciocínio
 
 ---
 
+## Parte 9 — Catálogo conceitual das assinaturas [v2.0]
+
+> Especificação conceitual mínima de cada assinatura implementada. Complementa (não substitui)
+> a tabela de hooks de `CONCEITOS_LUXALGO_HOOKS.md §13`. Campos: **família** (§2.1.1),
+> sequência, zona, confirmação, **semântica de OB** consumida (§2.10), **tempo** (§2.8),
+> direção. Requisitos desta Parte são `[v2.0]` por inteiro: divergência código↔spec aqui é
+> *lacuna esperada* na Parte 2, salvo onde o requisito já constava do canônico anterior.
+
+**A1 — OB Retest + CHoCH** · Família I · continuação. OB ativo alinhado ao viés 4H → preço
+retorna à zona → confirmação por MSS/CHoCH **com displacement** (§2.6) no TF menor. Semântica
+de OB: estratégica (§2.10) como conceito; a zona operacional atual vem do primitivo LuxAlgo —
+divergência de semântica a classificar na Parte 2. Tempo: qualificadora. Direção: OB de alta →
+long; de baixa → short, a favor do viés.
+
+**A2 — Sweep + Swing OB Retest** · Família I com catalisador (fronteira com a II) ·
+continuação. Sweep de liquidez → retorno ao swing OB ativo → confirmação. Tempo:
+qualificadora. Direção: reversão-do-sweep alinhada ao viés.
+
+**A3 — Triple Confirmation (OB+FVG+Sweep)** · Família I, grau A+ · continuação. Confluência
+intra-zona (OB e FVG sobrepostos) + sweep prévio → retorno → confirmação conforme §2.11
+(conjunção declarada). Tempo: qualificadora.
+
+**A4a — IFVG Retest** · Família I · reversão. FVG mitigado inverte o papel (definição PAC);
+retest da zona invertida com confirmação; a inversão vale com displacement no rompimento
+(§2.6). Tempo: qualificadora. Direção: a do papel invertido.
+
+**A5 — Direct OB Tap** · Família I, modo Risk Entry (§3.4) · continuação agressiva. Toque na
+zona sem confirmação LTF; exige zona de qualidade (volumetric como qualificador opcional).
+Tempo: qualificadora.
+
+**A6 — Unicorn (Breaker + FVG)** · fronteira I/II · reversão. Sequência do breaker: sweep no
+extremo do OB → falha do OB (close além do extremo, não wick) → MSS confirmando → zona =
+sobreposição breaker+FVG do movimento que o quebrou → retest. Direção: a do breaker. Fonte:
+innercircletrader.net/tutorials/ict-breaker-block-trading. Tempo: qualificadora.
+
+**A7 — Silver Bullet** · Família II · **decisão adotada: variante majoritária** — dentro da
+janela (§2.8): sweep de liquidez → **MSS com displacement** → **primeiro FVG criado pelo
+impulso** → entrada no retest do FVG. Tempo: **obrigatória** (a janela define a assinatura;
+deslocamento fora da janela não é Silver Bullet). Direção: reversão-do-sweep alinhada ao viés
+diário — o rótulo "continuação" do catálogo de hooks refere-se ao viés, não ao sweep. Alvo:
+liquidez oposta da sessão. **Variante minoritária registrada** (sweep+FVG sem MSS explícito —
+corresponde à formulação anterior do catálogo e à implementação atual): fluxcharts.com. Fontes
+da majoritária: grandalgo.com; fxnx.com; tradingfinder.com/education/forex/ict-silver-bullet.
+
+**A9 — EQH/EQL Sweep + CHoCH** · Família II · reversão. Sweep de EQH/EQL → CHoCH com
+displacement (§2.6) → entrada. Tempo: qualificadora. Direção: reversão-do-sweep.
+
+**A10 — OTE** · Família II (a retração arma sobre o impulso do MSS — coerente com o hook DTFX
+§10.3) · continuação do impulso. Spec integral em §2.7: dealing range do impulso; retração
+cruza o EQ; entrada na faixa 62–79% (70,5% central) **com confluência OB/FVG e confirmação**;
+SL além do 100%; alvos conforme §2.9. Tempo: qualificadora (janela 8:30–11h NY citada no
+corpus; status experimental — §2.8).
+
+**Não-especificadas aqui:** A4b, A11 (reservada), A12 — sem implementação; permanecem apenas
+na tabela de hooks até entrarem em onda própria.
+
+---
+
 ## Anexo A — Repositórios e referências estudados
 
 **Bibliotecas de detecção SMC (utilizadas):**
@@ -462,7 +691,7 @@ O Marcelo é inteligente, paciente, e identifica buracos lógicos em raciocínio
 
 **Bots SMC com decisão (referência conceitual):**
 - `starckyang/smc_quant` — padrão "detect FVG → locate OB → wait for retracement → enter"
-- `manuelinfosec/profittown-sniper-smc` — fluxo sequencial `detect_bos → detect_order_block → is_perfect_ob → place_limit_order`
+- `manuelinfosec/profittown-sniper-smc` — fluxo sequencial `detect_bos → detect_order_block → is_perfect_ob → place_limit_order`. **[v2.0] Rebaixado para "amostra de operacionalização":** o README promete performance ("$1k → $3k per day") e falha o critério de confiabilidade para expectativa; aproveitável apenas para estrutura de regra.
 - `ilahuerta-IA/mt5_live_trading_bot` — não-SMC, mas exemplo claro de máquina de estados (`SCANNING → ARMED → WINDOW_OPEN → ENTRY`)
 
 **Plataforma adotada:**
@@ -480,6 +709,13 @@ O Marcelo é inteligente, paciente, e identifica buracos lógicos em raciocínio
 - ICT (Inner Circle Trader) — fonte primária dos conceitos
 - LuxAlgo SMC — implementação visual amplamente referenciada
 - Documento conceitual do projeto: "Análise Técnica: Smart Money Concepts (SMC) em Criptomoedas e Automação"
+
+**[v2.0] Padrão de grading de fontes externas (adotado na Fase A):** T1 quase-primária
+(documentação dedicada ao material ICT) / T2 secundária técnica (guias com método explícito) /
+T3 vendor-blog. Fontes que prometem performance ficam desqualificadas como âncora de
+expectativa (aproveitáveis só para estrutura de regra). Afirmações sustentadas apenas por
+convergência T2/T3 recebem no máximo [Provável]. Lista completa de fontes, grading e
+divergências entre fontes: `docs/RELATORIO_FASE_A_PARTE1_CONCEITUAL.md` §2 e §8.
 
 ---
 
