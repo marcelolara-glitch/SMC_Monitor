@@ -55,6 +55,42 @@ LIMITAÇÕES CONHECIDAS
       direção sempre +1/−1. A4a (reversão) é contra-tendência: **sem** gate
       de trend (logo, sem invalidação `trend_changed`).
     - N setups simultâneos → 9.5f/Wave 10 (MVP = um vencedor por candle).
+      Mitigação parcial no Bloco 1: `compute_setup_state_multi` roda a FSM
+      independentemente por assinatura (G9), mas a FSM interna segue
+      um-setup-por-vez dentro de cada assinatura.
+
+BLOCO 1 (Briefing 2, 2026-07-04) — mecanismos config-gated
+    Correções estruturais da FSM ratificadas sobre os achados da Fase A
+    Parte 2 (`docs/RELATORIO_FASE_A_PARTE2_FIDELIDADE.md` §1/§4 e
+    `docs/ADENDO_FASE_A_PARTE2_MEDICAO_2Y.md`). Todos os mecanismos são
+    desligados por default — com `SetupConfig()` puro o output é
+    byte-idêntico ao pré-Bloco 1 (gate de regressão T1):
+
+    - **G1** `arming_proximity_pct` (default None = desligado): gate de
+      proximidade na armação. Evidência: armação sem limite de distância
+      + escape absoluto 2% ⇒ 97–99% das invalidações são `escaped`, vida
+      mediana de setup = 1 candle (relatório §1).
+    - **G2** `confirmation_trigger` (default 'legacy'): re-desenho do
+      gatilho de confirmação. `legacy` = ChoCH ∧ rejeição no mesmo candle
+      (co-ocorrência medida: 10,4/10k BTC, 5,7/10k ETH; 7–8 CONFIRMED em
+      2 anos somando as 9 assinaturas — adendo §1). `choch` = MSS puro
+      (canônico §2.11 [v2.0]); `choch_or_rej` = MSS ∨ rejeição. A2/A3/A7
+      (premissa de sweep) mantêm o ∧ sweep_recent.
+    - **G3** `anchor_invalidation` (default 'promoted_id'): em
+      `frozen_band` a vigília de âncora do ARMED é removida —
+      `REASON_MITIGATED` deixa de ser emitida. Evidência: a vigília de id
+      mede troca da zona promovida por proximidade, não mitigação (15/15
+      espúrios no golden; lower-bound 65–100% em 2 anos). LIMITAÇÃO
+      declarada: decadência de premissa (ex.: FVG de confluência da A3/A6
+      sumir durante ARMED) fica sem monitor neste modo.
+    - **G5** `a9_variant` (default 'legacy_ob'): em `sweep_band` a zona
+      da A9 vira a banda do próprio sweep (bull `[low_evt, level]`, bear
+      `[level, high_evt]`), eliminando o gate de OB sem proveniência
+      conceitual (relatório G5).
+    - **G9** `compute_setup_state_multi`: FSM independente por assinatura,
+      colunas sufixadas `__{sid}` (starvation medida do slot único:
+      A10 24.564→1 em 2 anos — adendo G9). Função nova; a antiga fica
+      intocada.
 
 NÃO FAZER
     - Não usar `shift(-N)` (lookahead proibido).
@@ -65,7 +101,7 @@ NÃO FAZER
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
 import numpy as np
@@ -101,6 +137,29 @@ INVALIDATION_REASONS = (
     REASON_ZONE_CROSSED, REASON_MITIGATED,
 )
 
+# === Gatilhos de confirmação (Bloco 1, G2) ===
+CONFIRMATION_TRIGGER_LEGACY = 'legacy'
+CONFIRMATION_TRIGGER_CHOCH = 'choch'
+CONFIRMATION_TRIGGER_CHOCH_OR_REJ = 'choch_or_rej'
+CONFIRMATION_TRIGGERS = (
+    CONFIRMATION_TRIGGER_LEGACY,
+    CONFIRMATION_TRIGGER_CHOCH,
+    CONFIRMATION_TRIGGER_CHOCH_OR_REJ,
+)
+
+# === Modos de invalidação por âncora (Bloco 1, G3) ===
+ANCHOR_INVALIDATION_PROMOTED_ID = 'promoted_id'
+ANCHOR_INVALIDATION_FROZEN_BAND = 'frozen_band'
+ANCHOR_INVALIDATIONS = (
+    ANCHOR_INVALIDATION_PROMOTED_ID,
+    ANCHOR_INVALIDATION_FROZEN_BAND,
+)
+
+# === Variantes de zona da A9 (Bloco 1, G5) ===
+A9_VARIANT_LEGACY_OB = 'legacy_ob'
+A9_VARIANT_SWEEP_BAND = 'sweep_band'
+A9_VARIANTS = (A9_VARIANT_LEGACY_OB, A9_VARIANT_SWEEP_BAND)
+
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
 # A3 > A2 > A4a > A5 > A1 > A9 > A6 > A7 > A10 (qualidade de evidência).
 # Decide só o empate "duas armam no mesmo candle"; é revisável (o backtest
@@ -133,6 +192,15 @@ class SetupConfig:
 
     Não incha `SMCConfig`. Defaults ancorados em SMC_PRINCIPIOS §2.5 onde
     a fonte numera, e em decisão de engenharia onde não numera.
+
+    NOTA G4 (`volume_pct_min`, adendo §1): tetos empíricos de 2 anos do
+    `active_*_swing_ob_volume_pct_1h` — BTC bull 0,110 / bear 0,199; ETH
+    bull 0,231 / bear 0,128. O default 0,2 fica **acima do teto em 3 dos
+    4 lados-ativo** (A5-BTC = 0 setups em 2 anos). O valor pertence ao
+    espaço de hyperopt sob gate treino/OOS; o default NÃO muda no Bloco 1.
+
+    Campos do Bloco 1 (Briefing 2) — ver docstring do módulo. Com os
+    defaults abaixo o comportamento é byte-idêntico ao pré-Bloco 1.
     """
     # Invalidação ARMED (SMC_PRINCIPIOS §2.5)
     armed_escape_pct: float = 0.02        # >2% além da zona sem entrar
@@ -154,6 +222,11 @@ class SetupConfig:
     # Sufixos de TF após o merge @informative
     trend_suffix: str = '4h'
     zone_suffix: str = '1h'
+    # --- Bloco 1 (Briefing 2): mecanismos config-gated; defaults preservam o legado ---
+    arming_proximity_pct: float | None = None   # G1: None = desativado
+    confirmation_trigger: str = 'legacy'        # G2: legacy | choch | choch_or_rej
+    anchor_invalidation: str = 'promoted_id'    # G3: promoted_id | frozen_band
+    a9_variant: str = 'legacy_ob'               # G5: legacy_ob | sweep_band
 
     def __post_init__(self) -> None:
         if self.armed_timeout_candles < 1:
@@ -190,6 +263,27 @@ class SetupConfig:
             raise ValueError(
                 f'volume_pct_min deve estar em [0, 1], '
                 f'recebeu {self.volume_pct_min}'
+            )
+        if self.arming_proximity_pct is not None \
+                and not 0.0 < self.arming_proximity_pct <= 1.0:
+            raise ValueError(
+                f'arming_proximity_pct deve ser None ou estar em (0, 1], '
+                f'recebeu {self.arming_proximity_pct}'
+            )
+        if self.confirmation_trigger not in CONFIRMATION_TRIGGERS:
+            raise ValueError(
+                f'confirmation_trigger deve estar em {CONFIRMATION_TRIGGERS}, '
+                f'recebeu {self.confirmation_trigger!r}'
+            )
+        if self.anchor_invalidation not in ANCHOR_INVALIDATIONS:
+            raise ValueError(
+                f'anchor_invalidation deve estar em {ANCHOR_INVALIDATIONS}, '
+                f'recebeu {self.anchor_invalidation!r}'
+            )
+        if self.a9_variant not in A9_VARIANTS:
+            raise ValueError(
+                f'a9_variant deve estar em {A9_VARIANTS}, '
+                f'recebeu {self.a9_variant!r}'
             )
         ids = [self.signature] if isinstance(self.signature, str) \
             else list(self.signature)
@@ -299,6 +393,33 @@ def _recency_age(flag: np.ndarray) -> np.ndarray:
         if last >= 0:
             age[i] = i - last
     return age
+
+
+def _sweep_band_ffill(
+    flag: np.ndarray, low_evt: np.ndarray, high_evt: np.ndarray,
+):
+    """Banda do sweep forward-filled desde o último candle-evento (G5).
+
+    Nos candles-evento `e` (flag True) captura a banda
+    `[low_evt[e], high_evt[e]]` e a propaga para frente até o próximo
+    evento; `id` = índice do candle-evento (float, análogo aos ids de
+    zona promovida). Lookahead-safe (só passado/presente). NaN antes do
+    primeiro evento.
+    """
+    n = len(flag)
+    lo = np.full(n, np.nan, dtype='float64')
+    hi = np.full(n, np.nan, dtype='float64')
+    bid = np.full(n, np.nan, dtype='float64')
+    cur_lo = cur_hi = cur_id = np.nan
+    for i in range(n):
+        if flag[i]:
+            cur_lo = low_evt[i]
+            cur_hi = high_evt[i]
+            cur_id = float(i)
+        lo[i] = cur_lo
+        hi[i] = cur_hi
+        bid[i] = cur_id
+    return lo, hi, bid
 
 
 def _zone_arrays(A: dict, kind: str, direction: str):
@@ -638,6 +759,60 @@ def _arm_A10(A: dict, direction: str) -> np.ndarray:
     return has & _outside(A, direction, ob, ot)
 
 
+def _zone_A9_sweep_band(A: dict, direction: str):
+    """A9 variante `sweep_band` (G5): zona = banda do próprio sweep.
+
+    OBJETIVO
+        Fornecer a banda (zlow, zhigh) e a âncora `(id,)` da A9 a partir
+        do último sweep da direção: bull → `[low_evt, level_price]`,
+        bear → `[level_price, high_evt]` (arrays de `_build_arrays`).
+        Elimina o gate de OB sem proveniência conceitual (relatório
+        Fase A Parte 2, achado G5).
+    FONTE DE DADOS
+        `A['{pre}_sweepband_{low,high,id}']` — construídos de
+        `sweep_{pre}_{wick,retest}` + `sweep_{pre}_level_price` (base
+        15m, sem sufixo) via `_sweep_band_ffill`.
+    LIMITAÇÕES
+        `id` é o índice do candle-evento; um novo sweep da mesma direção
+        troca a âncora (relevante só em `anchor_invalidation='promoted_id'`).
+    NÃO FAZER
+        Não consumir colunas de OB aqui; não inverter direção
+        (`_direction_from_sweep` permanece a fonte da direção).
+    """
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    return (
+        A[f'{pre}_sweepband_low'],
+        A[f'{pre}_sweepband_high'],
+        A[f'{pre}_sweepband_id'].reshape(-1, 1),
+    )
+
+
+def _arm_A9_sweep_band(A: dict, direction: str) -> np.ndarray:
+    """A9 variante `sweep_band` (G5): banda do sweep recente + preço fora.
+
+    OBJETIVO
+        Armar a A9 sem OB: banda do sweep presente, idade do evento
+        `<= cfg.sweep_recency_candles` e preço ainda fora da banda.
+    FONTE DE DADOS
+        `A['{pre}_sweepband_{low,high,age,id}']`; `_outside`.
+    LIMITAÇÕES
+        A confirmação no mapeamento G2 usa a variante **sem** sweep
+        (o sweep já é a armação — briefing Bloco 1 §2.5).
+    NÃO FAZER
+        Não exigir OB (é exatamente o gate removido pelo G5).
+    """
+    cfg = A['cfg']
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    lo = A[f'{pre}_sweepband_low']
+    hi = A[f'{pre}_sweepband_high']
+    bid = A[f'{pre}_sweepband_id']
+    age = A[f'{pre}_sweepband_age']
+    has = (~np.isnan(bid)) & (~np.isnan(lo)) & (~np.isnan(hi))
+    with np.errstate(invalid='ignore'):
+        recent = age <= cfg.sweep_recency_candles
+    return has & recent & _outside(A, direction, lo, hi)
+
+
 # ---- Confirmação (só consultada em modo confirmation) ----
 
 def _confirm_choch_rej_sweep(A: dict, direction: str) -> np.ndarray:
@@ -652,6 +827,58 @@ def _confirm_choch_rej(A: dict, direction: str) -> np.ndarray:
     if direction == DIRECTION_LONG:
         return A['choch_bull'] & A['rej_bull']
     return A['choch_bear'] & A['rej_bear']
+
+
+# ---- Gatilhos re-desenhados (Bloco 1, G2) ----
+# Racional: canônico §2.11 [v2.0] — o consensual é MSS/CISD como gatilho;
+# rejeição é *alternativa*, não conjunção. A conjunção legada
+# ChoCH∧rejeição no mesmo candle é evento quase-nulo medido
+# (co-ocorrência 10,4/10k BTC, 5,7/10k ETH; 7–8 CONFIRMED em 2 anos
+# somando as 9 assinaturas — adendo §1). Selecionados em runtime por
+# `SetupConfig.confirmation_trigger`; o registro SIGNATURES não muda.
+
+def _confirm_choch(A: dict, direction: str) -> np.ndarray:
+    """G2 `trigger='choch'`: gatilho MSS puro (ChoCH internal da direção)."""
+    if direction == DIRECTION_LONG:
+        return A['choch_bull']
+    return A['choch_bear']
+
+
+def _confirm_choch_sweep(A: dict, direction: str) -> np.ndarray:
+    """G2 `trigger='choch'` p/ assinaturas com premissa de sweep:
+    MSS ∧ sweep_recent."""
+    if direction == DIRECTION_LONG:
+        return A['choch_bull'] & A['bull_sweep_recent']
+    return A['choch_bear'] & A['bear_sweep_recent']
+
+
+def _confirm_choch_or_rej(A: dict, direction: str) -> np.ndarray:
+    """G2 `trigger='choch_or_rej'`: (MSS ∨ rejeição)."""
+    if direction == DIRECTION_LONG:
+        return A['choch_bull'] | A['rej_bull']
+    return A['choch_bear'] | A['rej_bear']
+
+
+def _confirm_choch_or_rej_sweep(A: dict, direction: str) -> np.ndarray:
+    """G2 `trigger='choch_or_rej'` p/ assinaturas com premissa de sweep:
+    (MSS ∨ rejeição) ∧ sweep_recent."""
+    if direction == DIRECTION_LONG:
+        return (A['choch_bull'] | A['rej_bull']) & A['bull_sweep_recent']
+    return (A['choch_bear'] | A['rej_bear']) & A['bear_sweep_recent']
+
+
+# Assinaturas com premissa de sweep na armação (mantêm o ∧ sweep_recent
+# no mapeamento G2). A9 fica FORA do conjunto mesmo sendo sweep-based:
+# na variante `sweep_band` o sweep já é a armação (briefing §2.5).
+_SWEEP_PREMISE_SIGNATURE_IDS = ('A3', 'A2', 'A7')
+
+# trigger → (confirm_fn com premissa de sweep, confirm_fn demais).
+_CONFIRM_TRIGGER_FNS = {
+    CONFIRMATION_TRIGGER_CHOCH: (_confirm_choch_sweep, _confirm_choch),
+    CONFIRMATION_TRIGGER_CHOCH_OR_REJ: (
+        _confirm_choch_or_rej_sweep, _confirm_choch_or_rej,
+    ),
+}
 
 
 # ---- Registro das assinaturas (ordem de prioridade D3) ----
@@ -749,7 +976,17 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
         cols.append(f'swing_trend_bias_{ts}')
     seen = set(cols)
     for sig in signatures:
-        for kind in sig.required_kinds:
+        kinds = sig.required_kinds
+        # G5: A9 em `sweep_band` dispensa o kind 'ob' (o gate de OB é
+        # exatamente o removido) e exige os level_price do sweep (base).
+        if sig.id == 'A9' and config.a9_variant == A9_VARIANT_SWEEP_BAND:
+            kinds = tuple(k for k in kinds if k != 'ob')
+            for name in ('sweep_bullish_level_price',
+                         'sweep_bearish_level_price'):
+                if name not in seen:
+                    seen.add(name)
+                    cols.append(name)
+        for kind in kinds:
             for tmpl in _KIND_COLUMNS[kind]:
                 for pre in ('bull', 'bear'):
                     name = tmpl.format(pre=pre, zs=zs)
@@ -824,6 +1061,22 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
     A['bull_sweep_age'] = _recency_age(sweep_bull)
     A['bear_sweep_age'] = _recency_age(sweep_bear)
 
+    # Banda do sweep (Bloco 1, G5 — A9 `sweep_band`). Construída
+    # incondicionalmente (decisão declarada: arrays baratos, e manter o
+    # builder livre de branching por config): bull → [low_evt, level],
+    # bear → [level, high_evt], forward-fill do último evento. As colunas
+    # `sweep_*_level_price` são opcionais aqui (NaN se ausentes);
+    # `_required_columns` as exige quando a variante está selecionada.
+    bull_level = _opt_float_col(df, 'sweep_bullish_level_price', n)
+    bear_level = _opt_float_col(df, 'sweep_bearish_level_price', n)
+    (A['bull_sweepband_low'], A['bull_sweepband_high'],
+     A['bull_sweepband_id']) = _sweep_band_ffill(sweep_bull, A['low'], bull_level)
+    (A['bear_sweepband_low'], A['bear_sweepband_high'],
+     A['bear_sweepband_id']) = _sweep_band_ffill(sweep_bear, bear_level, A['h'])
+    # Idade do evento da banda == idade do último sweep (mesmo flag).
+    A['bull_sweepband_age'] = A['bull_sweep_age']
+    A['bear_sweepband_age'] = A['bear_sweep_age']
+
     rng = A['h'] - A['low']
     safe = rng > 0
     with np.errstate(invalid='ignore', divide='ignore'):
@@ -862,6 +1115,24 @@ def compute_setup_state(
     CONFIRMED, com caminhos de INVALIDATED. Fluxo `risk` (D2): ARMED →
     CONFIRMED direto na interseção da zona (sem PENDING). Modela um setup
     ativo por vez, re-armável após terminal.
+
+    Bloco 1 (config-gated; defaults = comportamento legado, byte-idêntico):
+    - G1 `arming_proximity_pct`: na varredura de armação, exige preço a
+      até `prox` da zona (long: `low <= zhigh*(1+prox)`; short:
+      `high >= zlow*(1-prox)`); falhou → segue para a próxima assinatura.
+      O gate é da FSM, não das `_arm_*` (as assinaturas não mudam).
+      Semântica resultante: com `prox <= armed_escape_pct`, nenhum setup
+      nasce além da linha de escape — `escaped` volta a medir fuga
+      pós-armação, não distância de nascença.
+    - G2 `confirmation_trigger`: substitui em memória o `confirm_fn` das
+      assinaturas selecionadas (registro SIGNATURES intocado).
+    - G3 `anchor_invalidation='frozen_band'`: remove a vigília de âncora
+      do ARMED (`mitigated` deixa de ser emitida). LIMITAÇÃO declarada:
+      decadência de premissa (ex.: FVG de confluência da A3/A6 sumir
+      durante ARMED) fica sem monitor neste modo — escolha do Bloco 1.
+    - G5 `a9_variant='sweep_band'`: zona/armação da A9 pela banda do
+      próprio sweep (sem OB); `_required_columns` passa a exigir os
+      `sweep_*_level_price` e dispensa o kind 'ob' da A9.
 
     Args:
         df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
@@ -903,17 +1174,35 @@ def compute_setup_state(
     escape_pct = config.armed_escape_pct
     armed_timeout = config.armed_timeout_candles
     pending_timeout = config.pending_timeout_candles
+    # Bloco 1: G1 (gate de proximidade na armação; None = desligado) e
+    # G3 (vigília de âncora só no modo legado 'promoted_id').
+    prox = config.arming_proximity_pct
+    check_anchor = config.anchor_invalidation == ANCHOR_INVALIDATION_PROMOTED_ID
 
     # Precompute, por assinatura e direção, os arrays de zona/arm/confirm.
     # prec: list de (Signature, dir_arr, {direction: (zlow, zhigh, anch, arm, conf)}).
+    # Bloco 1: overrides em memória, SEM tocar o registro SIGNATURES —
+    # G2 substitui o confirm_fn conforme `confirmation_trigger`; G5
+    # substitui zone_fn/arm_fn da A9 conforme `a9_variant`.
     prec = []
     for sig in signatures:
+        zone_fn = sig.zone_fn
+        arm_fn = sig.arm_fn
+        confirm_fn = sig.confirm_fn
+        if config.confirmation_trigger != CONFIRMATION_TRIGGER_LEGACY:
+            with_sweep, without_sweep = \
+                _CONFIRM_TRIGGER_FNS[config.confirmation_trigger]
+            confirm_fn = with_sweep \
+                if sig.id in _SWEEP_PREMISE_SIGNATURE_IDS else without_sweep
+        if sig.id == 'A9' and config.a9_variant == A9_VARIANT_SWEEP_BAND:
+            zone_fn = _zone_A9_sweep_band
+            arm_fn = _arm_A9_sweep_band
         dir_arr = sig.direction_fn(A)
         per = {}
         for d in (DIRECTION_LONG, DIRECTION_SHORT):
-            zlow, zhigh, anch = sig.zone_fn(A, d)
-            arm = sig.arm_fn(A, d)
-            conf = sig.confirm_fn(A, d)
+            zlow, zhigh, anch = zone_fn(A, d)
+            arm = arm_fn(A, d)
+            conf = confirm_fn(A, d)
             per[d] = (zlow, zhigh, anch, arm, conf)
         prec.append((sig, dir_arr, per))
 
@@ -957,6 +1246,18 @@ def compute_setup_state(
                     continue
                 zlow, zhigh, anch, arm, conf = per[d]
                 if arm[i]:
+                    # G1: gate de proximidade — setup só nasce a até
+                    # `prox` da zona; falhou → próxima assinatura da
+                    # varredura (não arma). Espelha a aritmética do
+                    # escape: com prox <= armed_escape_pct nenhum setup
+                    # nasce além da linha de escape (T3, por construção).
+                    if prox is not None:
+                        if d == DIRECTION_LONG:
+                            near = low[i] <= zhigh[i] * (1.0 + prox)
+                        else:
+                            near = h[i] >= zlow[i] * (1.0 - prox)
+                        if not near:
+                            continue
                     s_sig = sig
                     s_dir = d
                     s_zlow = zlow[i]
@@ -982,17 +1283,25 @@ def compute_setup_state(
                 _emit(i, STATE_INVALIDATED, REASON_TREND_CHANGED)
                 state = None
                 continue
-            # 2. mitigated (qualquer âncora NaN ou diferente da capturada)
-            cur = s_anch_arr[i]
-            mitigated = False
-            for a_now, a_cap in zip(cur, s_captured_anch):
-                if np.isnan(a_now) or a_now != a_cap:
-                    mitigated = True
-                    break
-            if mitigated:
-                _emit(i, STATE_INVALIDATED, REASON_MITIGATED)
-                state = None
-                continue
+            # 2. mitigated (qualquer âncora NaN ou diferente da capturada).
+            #    G3: pulado em anchor_invalidation='frozen_band' —
+            #    mitigação real exige o preço entrar na zona (se entra
+            #    com setup ARMED, o passo 3 dispara PENDING no mesmo
+            #    candle; atravessamento vira zone_crossed). A vigília de
+            #    id media troca de zona promovida por proximidade, não
+            #    mitigação (15/15 espúrios no golden; 65–100% em 2 anos).
+            #    `s_captured_anch` permanece só para o hash do setup_id.
+            if check_anchor:
+                cur = s_anch_arr[i]
+                mitigated = False
+                for a_now, a_cap in zip(cur, s_captured_anch):
+                    if np.isnan(a_now) or a_now != a_cap:
+                        mitigated = True
+                        break
+                if mitigated:
+                    _emit(i, STATE_INVALIDATED, REASON_MITIGATED)
+                    state = None
+                    continue
             # 3. intersecta zona → PENDING (confirmation) ou CONFIRMED (risk)
             if low[i] <= s_zhigh and h[i] >= s_zlow:
                 if entry_mode == ENTRY_MODE_RISK:
@@ -1055,4 +1364,59 @@ def compute_setup_state(
     out[COL_SETUP_ZONE_LOW] = out_zlow
     out[COL_SETUP_ZONE_HIGH] = out_zhigh
     out[COL_SETUP_INVALIDATION_REASON] = pd.array(out_reason, dtype='string')
+    return out
+
+
+def compute_setup_state_multi(
+    df: pd.DataFrame,
+    config: SetupConfig | None = None,
+) -> pd.DataFrame:
+    """FSM independente por assinatura selecionada (Bloco 1, G9).
+
+    OBJETIVO
+        Eliminar a starvation do slot único global: na FSM de
+        `compute_setup_state` com múltiplas assinaturas, prioridade D3 +
+        um-setup-ativo-por-vez + churn do G1 mascaram as assinaturas de
+        prioridade >= 5 (medido em 2 anos, slot ocupado em 99% dos
+        candles, 63–74% por setups de vida <= 1 candle; multi-9 vs solo:
+        A10 24.564→1, A7 2.064→3, A6 678→0 — adendo G9). Aqui cada
+        assinatura roda sua própria FSM (reuso: um `compute_setup_state`
+        por sid com `signature=sid` e o mesmo restante do config) e as 7
+        colunas de saída são anexadas sufixadas `__{sid}` (ex.:
+        `setup_state__A3`). Sem arbitragem de prioridade — a decisão D3
+        passa a ser do consumidor (camada IStrategy, wave futura).
+
+    FONTE DE DADOS
+        As mesmas colunas mergeadas de `compute_setup_state`, exigidas
+        assinatura a assinatura (cada execução solo valida as suas).
+
+    LIMITAÇÕES CONHECIDAS
+        - N execuções da FSM (custo linear no nº de assinaturas).
+        - Dentro de cada assinatura permanece um setup ativo por vez.
+        - Sem colunas agregadas `setup_*` (sem sufixo): qualquer
+          combinação entre assinaturas é decisão do consumidor.
+
+    NÃO FAZER
+        - Não arbitrar prioridade entre assinaturas aqui (D3 é do
+          consumidor nesta função).
+        - Não alterar `compute_setup_state` (a função antiga permanece
+          intocada — princípio de regressão do Bloco 1).
+
+    Args:
+        df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
+        config: SetupConfig; `signature` (str ou sequência) define as
+            assinaturas executadas. Se None, defaults (A3, confirmation).
+
+    Returns:
+        Cópia de `df` + 7 colunas por assinatura selecionada
+        (`{col}__{sid}` para col em `SETUP_OUTPUT_COLUMNS`), na ordem de
+        prioridade D3 (estável para layout de colunas, sem semântica).
+    """
+    if config is None:
+        config = SetupConfig()
+    out = df.copy()
+    for sig in _resolve_signatures(config):
+        res = compute_setup_state(df, replace(config, signature=sig.id))
+        for col in SETUP_OUTPUT_COLUMNS:
+            out[f'{col}__{sig.id}'] = res[col]
     return out

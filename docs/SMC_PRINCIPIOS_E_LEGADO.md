@@ -12,6 +12,10 @@
 > **não descrevem o comportamento histórico do código**. Na auditoria da Fase A Parte 2,
 > divergência código↔conceito em item `[v2.0]` classifica-se como *lacuna esperada*;
 > divergência em item sem a marca classifica-se como *candidato a bug de fidelidade*.
+>
+> **Revisão v2.1 (2026-07-04):** resolução da tensão G6 (gate direcional das reversões) e
+> incorporação da evidência da Fase A Parte 2 (`docs/RELATORIO_FASE_A_PARTE2_FIDELIDADE.md`,
+> `docs/ADENDO_FASE_A_PARTE2_MEDICAO_2Y.md`). Marcas `[v2.1]` seguem a mesma convenção.
 
 ---
 
@@ -128,6 +132,13 @@ não-mitigado para onde o preço tende a ser entregue (ver §2.9). A máquina de
 consome apenas a direção; o alvo-HTF é função declarada da hierarquia ainda não modelada.
 Fontes: backtrex.com/en/blog/ict-market-structure-shift-mss-guide;
 tradezella.com/learning-items/ict-model-4.
+
+**Escopo do gate direcional [v2.1 — resolução G6].** O gate de viés 4H do funil acima é
+obrigatório para as assinaturas de **continuação**. Assinaturas de **reversão** (A4a, A6,
+A9) declaram sua relação com o viés na Parte 9; a decisão ratificada é **independência do
+viés 4H** — a reversão opera na virada local, e o viés swing-4H flipa ~21 vezes em 2 anos
+(adendo §3), tarde demais para gatear a virada. A variante alinhada-ao-viés fica registrada
+como espaço de calibração (hyperopt sob gate treino/OOS), não como doutrina.
 
 ### 2.5 Invalidação é tão importante quanto entrada
 
@@ -647,7 +658,7 @@ qualificadora. Direção: reversão-do-sweep alinhada ao viés.
 intra-zona (OB e FVG sobrepostos) + sweep prévio → retorno → confirmação conforme §2.11
 (conjunção declarada). Tempo: qualificadora.
 
-**A4a — IFVG Retest** · Família I · reversão. FVG mitigado inverte o papel (definição PAC);
+**A4a — IFVG Retest** · Família I · reversão · viés 4H: independente [v2.1 — G6, calibrável]. FVG mitigado inverte o papel (definição PAC);
 retest da zona invertida com confirmação; a inversão vale com displacement no rompimento
 (§2.6). Tempo: qualificadora. Direção: a do papel invertido.
 
@@ -655,7 +666,7 @@ retest da zona invertida com confirmação; a inversão vale com displacement no
 zona sem confirmação LTF; exige zona de qualidade (volumetric como qualificador opcional).
 Tempo: qualificadora.
 
-**A6 — Unicorn (Breaker + FVG)** · fronteira I/II · reversão. Sequência do breaker: sweep no
+**A6 — Unicorn (Breaker + FVG)** · fronteira I/II · reversão · viés 4H: independente [v2.1 — G6, calibrável]. Sequência do breaker: sweep no
 extremo do OB → falha do OB (close além do extremo, não wick) → MSS confirmando → zona =
 sobreposição breaker+FVG do movimento que o quebrou → retest. Direção: a do breaker. Fonte:
 innercircletrader.net/tutorials/ict-breaker-block-trading. Tempo: qualificadora.
@@ -669,7 +680,7 @@ liquidez oposta da sessão. **Variante minoritária registrada** (sweep+FVG sem 
 corresponde à formulação anterior do catálogo e à implementação atual): fluxcharts.com. Fontes
 da majoritária: grandalgo.com; fxnx.com; tradingfinder.com/education/forex/ict-silver-bullet.
 
-**A9 — EQH/EQL Sweep + CHoCH** · Família II · reversão. Sweep de EQH/EQL → CHoCH com
+**A9 — EQH/EQL Sweep + CHoCH** · Família II · reversão · viés 4H: independente [v2.1 — G6, calibrável]. Sweep de EQH/EQL → CHoCH com
 displacement (§2.6) → entrada. Tempo: qualificadora. Direção: reversão-do-sweep.
 
 **A10 — OTE** · Família II (a retração arma sobre o impulso do MSS — coerente com o hook DTFX
