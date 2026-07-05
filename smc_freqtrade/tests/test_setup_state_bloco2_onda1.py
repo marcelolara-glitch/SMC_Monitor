@@ -237,16 +237,23 @@ def test_td3_choch_trigger_confirms_displaced() -> None:
 
 
 def test_td3_legacy_trigger_requires_choch_rej_disp() -> None:
-    """`legacy` + gate on ⇒ ChoCH ∧ rejeição ∧ displacement."""
+    """`legacy` + gate on ⇒ ChoCH ∧ rejeição ∧ displacement.
+
+    Exercitado com `rejection_wick_frac=0.2` (< displacement_wick_frac):
+    com o default 0,5 a combinação é rejeitada no `__post_init__` pela
+    guarda de config (co-ocorrência geometricamente vazia — ver
+    `test_guard_legacy_with_gate_and_default_frac_raises`)."""
     # Hammer: rejeição bull válida (wick inferior 87% do range, close no
     # topo) + ChoCH, mas corpo 0,2 com wick 2,8 ⇒ NÃO displaced.
     hammer = _cdl(99.0, 102.2, 102.0, open_=101.8,
                   choch_internal_bullish=True)
     df = _pending_rows(hammer)
-    res = compute_setup_state(df, SetupConfig(signature='A1'))
+    res = compute_setup_state(df, SetupConfig(
+        signature='A1', rejection_wick_frac=0.2,
+    ))
     assert _states(res) == [STATE_ARMED, STATE_PENDING, STATE_CONFIRMED]
     res = compute_setup_state(df, SetupConfig(
-        signature='A1',
+        signature='A1', rejection_wick_frac=0.2,
         displacement_gate='confirm', displacement_body_len=2,
     ))
     assert _states(res) == [STATE_ARMED, STATE_PENDING, STATE_PENDING]
@@ -256,7 +263,8 @@ def test_td3_legacy_trigger_confirms_choch_rej_disp() -> None:
     """Tripla conjunção satisfeita ⇒ confirma (rejeição com
     `rejection_wick_frac` reduzido — com o default 0,5 a co-ocorrência
     rejeição∧displacement é impossível por aritmética: wick inferior
-    >= 50% do range >= 50% do corpo > 36% do corpo)."""
+    >= 50% do range >= 50% do corpo > 36% do corpo — e a combinação é
+    rejeitada no `__post_init__` pela guarda de config)."""
     # Corpo 1,0; wick inferior 0,3 (22% do range, < 36% do corpo);
     # wick superior 0,05; close no topo ⇒ rejeição (frac 0,2) ∧ ChoCH
     # ∧ displacement.
@@ -350,3 +358,26 @@ def test_bloco2_config_fields_validated() -> None:
         SetupConfig(displacement_wick_frac=0.0)
     with pytest.raises(ValueError, match='displacement_wick_frac'):
         SetupConfig(displacement_wick_frac=1.5)
+
+
+def test_guard_legacy_with_gate_and_default_frac_raises() -> None:
+    """Emenda: `legacy` + gate on com rejection_wick_frac (0,5 default)
+    >= displacement_wick_frac (0,36) é combinação geometricamente vazia
+    ⇒ erro de config, não config válida silenciosamente morta."""
+    with pytest.raises(ValueError, match='combinação impossível'):
+        SetupConfig(confirmation_trigger='legacy',
+                    displacement_gate='confirm')
+
+
+def test_guard_is_conditional_on_fracs() -> None:
+    """Com rejection_wick_frac < displacement_wick_frac a co-ocorrência
+    volta a ser possível ⇒ a combinação é aceita."""
+    SetupConfig(confirmation_trigger='legacy',
+                displacement_gate='confirm',
+                rejection_wick_frac=0.30)
+
+
+def test_guard_does_not_touch_choch_trigger() -> None:
+    """Gatilhos sem o braço obrigatório de rejeição não são afetados."""
+    SetupConfig(confirmation_trigger='choch',
+                displacement_gate='confirm')

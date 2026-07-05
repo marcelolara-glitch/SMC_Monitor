@@ -321,6 +321,23 @@ class SetupConfig:
                 f'displacement_wick_frac deve estar em (0, 1], '
                 f'recebeu {self.displacement_wick_frac}'
             )
+        # Guarda condicional (emenda ao Bloco 2 / Onda 1): a combinação só
+        # é rejeitada enquanto a geometria a torna vazia; com
+        # rejection_wick_frac < displacement_wick_frac a co-ocorrência
+        # rejeição∧displacement volta a ser possível e a config é aceita.
+        if (self.displacement_gate == 'confirm'
+                and self.confirmation_trigger == 'legacy'
+                and self.rejection_wick_frac >= self.displacement_wick_frac):
+            raise ValueError(
+                "combinação impossível: confirmation_trigger='legacy' com "
+                "displacement_gate='confirm' exige rejeição e displacement no mesmo "
+                "candle, mas wick >= rejection_wick_frac*range >= "
+                "rejection_wick_frac*body (corpo <= range); com rejection_wick_frac "
+                ">= displacement_wick_frac isso viola wick < displacement_wick_frac"
+                "*body — nenhuma confirmação pode ocorrer (verificado: 0 CONFIRMED "
+                "no golden). Use confirmation_trigger='choch'/'choch_or_rej' ou "
+                "reduza rejection_wick_frac para abaixo de displacement_wick_frac."
+            )
         ids = [self.signature] if isinstance(self.signature, str) \
             else list(self.signature)
         if not ids:
