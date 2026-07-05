@@ -540,9 +540,11 @@ L_body = high - mx < body * 0.36 and mn - low < body * 0.36
 L_bodyUP = body > meanBody and L_body and close > open
 ```
 
-**Status:** Hook reservado. Pode substituir parcialmente
-`volatility_threshold` em filtro de qualidade FVG ou refinar
-detecção de Volumetric OB.
+**Status:** Absorvido parcialmente (Bloco 2 / Onda 1) — fórmula portada verbatim em
+`setup_state._displacement_flags` como gate de confirmação (`displacement_gate`,
+PRINCIPIOS §2.6-i). Usos remanescentes reservados: filtro de qualidade FVG
+(`volatility_threshold`) e refinamento de Volumetric OB; consumo pelo OB estratégico
+(§2.6-ii/§2.10) pertence à Onda 3.
 
 ### 10.6 Silver Bullet Sessions / Killzones
 

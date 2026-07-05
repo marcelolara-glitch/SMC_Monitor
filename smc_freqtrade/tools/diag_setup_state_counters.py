@@ -8,7 +8,10 @@ OBJETIVO
     escaped com vida <= 1 candle, distância de armação (med/p90),
     armações além de `prox`, distribuição de razões e o bloco multi vs
     solo (starvation G9). Serve de leitura informativa dos 4 mecanismos
-    do Bloco 1 (G1/G2/G3/G5) — os gates duros são os testes T1–T8.
+    do Bloco 1 (G1/G2/G3/G5) — os gates duros são os testes T1–T8 — e,
+    do Bloco 2 / Onda 1, do gate de displacement (§2.6-i): totais de
+    `disp_bull/bear`, taxa choch∧disp/choch por lado e CONFIRMED por
+    assinatura com o gate off vs confirm (gates duros: T-D1–T-D5).
 
 FONTE DE DADOS
     Uma de duas entradas:
@@ -35,7 +38,8 @@ NÃO FAZER
 
 USO
     python -m tools.diag_setup_state_counters --golden-dir tests/golden/data \
-        --prox 0.02 --trigger choch --anchor frozen_band --a9 sweep_band
+        --prox 0.02 --trigger choch --anchor frozen_band --a9 sweep_band \
+        --displacement confirm
 """
 from __future__ import annotations
 
@@ -50,6 +54,7 @@ from smc_engine.sessions import tag_sessions
 from smc_engine.setup_state import (
     _VALID_SIGNATURE_IDS,
     STATE_CONFIRMED,
+    _displacement_flags,
     compute_setup_state_multi,
 )
 from tools.mtf_align import align_informative
@@ -151,6 +156,10 @@ def main() -> None:
                     help='G3 anchor_invalidation (promoted_id|frozen_band)')
     ap.add_argument('--a9', default='legacy_ob',
                     help='G5 a9_variant (legacy_ob|sweep_band)')
+    # Bloco 2 / Onda 1 (default = legado, desligado):
+    ap.add_argument('--displacement', default='off',
+                    choices=('off', 'confirm'),
+                    help='Bloco 2 displacement_gate (off|confirm)')
     ap.add_argument('--no-multi', action='store_true',
                     help='pular o bloco multi vs solo')
     args = ap.parse_args()
@@ -166,16 +175,20 @@ def main() -> None:
         merged = build_merged_from_golden(args.golden_dir)
         print(f'input: golden {args.golden_dir} ({len(merged)} candles)')
     print(f'mecanismos: prox={args.prox}  trigger={args.trigger}  '
-          f'anchor={args.anchor}  a9={args.a9}')
+          f'anchor={args.anchor}  a9={args.a9}  '
+          f'displacement={args.displacement}')
     print(f'assinaturas={",".join(sids)}  modos={",".join(modes)}\n')
 
-    def cfg(signature, mode):
+    def cfg(signature, mode, displacement=None):
         return SetupConfig(
             signature=signature, entry_mode=mode,
             arming_proximity_pct=args.prox,
             confirmation_trigger=args.trigger,
             anchor_invalidation=args.anchor,
             a9_variant=args.a9,
+            displacement_gate=(
+                args.displacement if displacement is None else displacement
+            ),
         )
 
     solo_counts: dict[tuple[str, str], int] = {}
@@ -185,6 +198,47 @@ def main() -> None:
             solo_counts[(sid, mode)] = int(res['setup_id'].dropna().nunique())
             report_signature(res, f'{sid} / {mode} (solo)', prox_report)
         print()
+
+    # Bloco 2 / Onda 1: contadores de displacement (§2.6-i) — totais das
+    # flags, taxa choch∧disp/choch por lado e CONFIRMED solo por
+    # assinatura com o gate off vs confirm (demais mecanismos = args).
+    print('=== displacement (Bloco 2 / Onda 1) ===')
+    dcfg = cfg(sids[0], modes[0])
+    disp_bull, disp_bear = _displacement_flags(
+        merged['open'].to_numpy(dtype='float64'),
+        merged['high'].to_numpy(dtype='float64'),
+        merged['low'].to_numpy(dtype='float64'),
+        merged['close'].to_numpy(dtype='float64'),
+        dcfg.displacement_body_len, dcfg.displacement_wick_frac,
+    )
+    ch_bull = merged['choch_internal_bullish'] \
+        .fillna(False).to_numpy(dtype='bool')
+    ch_bear = merged['choch_internal_bearish'] \
+        .fillna(False).to_numpy(dtype='bool')
+    n_cand = len(merged)
+    nb, ns = int(disp_bull.sum()), int(disp_bear.sum())
+    print(f'  disp_bull={nb} ({nb / n_cand * 100:.1f}%)  '
+          f'disp_bear={ns} ({ns / n_cand * 100:.1f}%)  '
+          f'de {n_cand} candles')
+    for lado, ch, disp in (('bull', ch_bull, disp_bull),
+                           ('bear', ch_bear, disp_bear)):
+        n_ch = int(ch.sum())
+        n_both = int((ch & disp).sum())
+        rate = n_both / n_ch * 100 if n_ch else 0.0
+        print(f'  choch∧disp/choch [{lado}]: {n_both}/{n_ch} ({rate:.0f}%)')
+    for mode in modes:
+        print(f'  [{mode}] CONFIRMED por assinatura (gate off | confirm):')
+        for sid in sids:
+            n_off = int((
+                compute_setup_state(merged, cfg(sid, mode, 'off'))
+                ['setup_state'] == STATE_CONFIRMED
+            ).sum())
+            n_on = int((
+                compute_setup_state(merged, cfg(sid, mode, 'confirm'))
+                ['setup_state'] == STATE_CONFIRMED
+            ).sum())
+            print(f'    {sid:>4}: {n_off:>5} | {n_on:>5}')
+    print()
 
     if args.no_multi or len(sids) < 2:
         return

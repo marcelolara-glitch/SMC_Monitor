@@ -92,6 +92,17 @@ BLOCO 1 (Briefing 2, 2026-07-04) — mecanismos config-gated
       A10 24.564→1 em 2 anos — adendo G9). Função nova; a antiga fica
       intocada.
 
+BLOCO 2 / ONDA 1 (Briefing 3, 2026-07-05) — displacement como gate (§2.6-i)
+    `displacement_gate` (default 'off' = legado byte-idêntico): quando
+    'confirm', o ChoCH consumido pela confirmação só vale se o candle do
+    break é um displacement pela fórmula LuxAlgo
+    (CONCEITOS_LUXALGO_HOOKS §10.5; SMC_PRINCIPIOS §2.6, regra i).
+    Composição em ponto único nas arrays de ChoCH de `_build_arrays` —
+    todos os gatilhos G2 herdam o gate no componente ChoCH; o braço de
+    rejeição do `choch_or_rej` não é gateado; modo `risk` é inerte por
+    construção. Ver `_displacement_flags`. A regra ii do §2.6 (OB
+    estratégico) pertence à Onda 3 — fora do escopo.
+
 NÃO FAZER
     - Não usar `shift(-N)` (lookahead proibido).
     - Não importar `freqtrade` (engine é Python puro).
@@ -160,6 +171,11 @@ A9_VARIANT_LEGACY_OB = 'legacy_ob'
 A9_VARIANT_SWEEP_BAND = 'sweep_band'
 A9_VARIANTS = (A9_VARIANT_LEGACY_OB, A9_VARIANT_SWEEP_BAND)
 
+# === Gate de displacement (Bloco 2 / Onda 1, PRINCIPIOS §2.6-i) ===
+DISPLACEMENT_GATE_OFF = 'off'
+DISPLACEMENT_GATE_CONFIRM = 'confirm'
+DISPLACEMENT_GATES = (DISPLACEMENT_GATE_OFF, DISPLACEMENT_GATE_CONFIRM)
+
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
 # A3 > A2 > A4a > A5 > A1 > A9 > A6 > A7 > A10 (qualidade de evidência).
 # Decide só o empate "duas armam no mesmo candle"; é revisável (o backtest
@@ -227,6 +243,10 @@ class SetupConfig:
     confirmation_trigger: str = 'legacy'        # G2: legacy | choch | choch_or_rej
     anchor_invalidation: str = 'promoted_id'    # G3: promoted_id | frozen_band
     a9_variant: str = 'legacy_ob'               # G5: legacy_ob | sweep_band
+    # --- Bloco 2 / Onda 1: displacement como gate de confirmação (§2.6-i) ---
+    displacement_gate: str = 'off'         # off | confirm
+    displacement_body_len: int = 10        # SMA do corpo (Pine §10.5)
+    displacement_wick_frac: float = 0.36   # wicks < frac * body (Pine §10.5)
 
     def __post_init__(self) -> None:
         if self.armed_timeout_candles < 1:
@@ -284,6 +304,22 @@ class SetupConfig:
             raise ValueError(
                 f'a9_variant deve estar em {A9_VARIANTS}, '
                 f'recebeu {self.a9_variant!r}'
+            )
+        if self.displacement_gate not in DISPLACEMENT_GATES:
+            raise ValueError(
+                f'displacement_gate deve estar em {DISPLACEMENT_GATES}, '
+                f'recebeu {self.displacement_gate!r}'
+            )
+        if not isinstance(self.displacement_body_len, int) \
+                or self.displacement_body_len < 2:
+            raise ValueError(
+                f'displacement_body_len deve ser inteiro >= 2, '
+                f'recebeu {self.displacement_body_len!r}'
+            )
+        if not 0.0 < self.displacement_wick_frac <= 1.0:
+            raise ValueError(
+                f'displacement_wick_frac deve estar em (0, 1], '
+                f'recebeu {self.displacement_wick_frac}'
             )
         ids = [self.signature] if isinstance(self.signature, str) \
             else list(self.signature)
@@ -1003,6 +1039,59 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
     return cols
 
 
+def _displacement_flags(
+    o: np.ndarray, h: np.ndarray, low: np.ndarray, c: np.ndarray,
+    body_len: int, wick_frac: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Flags de displacement por candle (Bloco 2 / Onda 1, §2.6-i).
+
+    OBJETIVO
+        Portar verbatim a fórmula Pine do `ICT Concepts [LuxAlgo]`
+        (CONCEITOS_LUXALGO_HOOKS §10.5): candle é displacement se o corpo
+        supera a SMA dos últimos `body_len` corpos (incluindo o candle
+        corrente) E ambos os wicks são menores que `wick_frac * corpo`,
+        com a direção dada pelo sinal do corpo:
+            L_body   = high - mx < body * 0.36 and mn - low < body * 0.36
+            L_bodyUP = body > meanBody and L_body and close > open
+        (bearish simétrico com `close < open`). Consumido como critério
+        de validade do MSS/ChoCH de confirmação (SMC_PRINCIPIOS §2.6,
+        regra i) quando `SetupConfig.displacement_gate == 'confirm'`.
+
+    FONTE DE DADOS
+        Arrays OHLC da base 15m já extraídos por `_build_arrays`.
+
+    LIMITAÇÕES CONHECIDAS
+        - Comparações estritas (`<`, `>`) como no Pine: doji
+          (`body == 0`) ⇒ não-displacement; corpo igual à média ⇒ idem.
+        - Primeiros `body_len - 1` candles: SMA indefinida (janela
+          incompleta) ⇒ não-displacement.
+        - Variantes medidas no golden 15m e NÃO implementadas — espaço
+          de calibração futura, não escopo desta onda: janela
+          ChoCH∈{i-1,i} ∧ disp[i] cobre 57% dos chochs (vs 47% no mesmo
+          candle); caminho FVG (choch[i-1] ∧ fvg_created[i]) = 64 bull /
+          60 bear. Fundamento: o §2.6 ratificado define displacement
+          pela fórmula de corpo ("idealmente deixando FVG" é
+          qualificador, não alternativa).
+
+    NÃO FAZER
+        - Não afrouxar as comparações para `<=`/`>=` (semântica Pine).
+        - Não gatear o braço de rejeição do `choch_or_rej` com estas
+          flags: a regra §2.6-i qualifica o MSS, não a alternativa
+          candlestick (a composição fica em `_build_arrays`).
+    """
+    body = np.abs(c - o)
+    mx = np.maximum(o, c)
+    mn = np.minimum(o, c)
+    mean_body = pd.Series(body).rolling(body_len).mean().to_numpy()
+    with np.errstate(invalid='ignore'):
+        small_wicks = ((h - mx) < wick_frac * body) \
+            & ((mn - low) < wick_frac * body)
+        big_body = body > mean_body
+    disp_bull = big_body & small_wicks & (c > o)
+    disp_bear = big_body & small_wicks & (c < o)
+    return disp_bull, disp_bear
+
+
 def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
     """Empacota todos os arrays que os predicados das assinaturas consomem."""
     zs = config.zone_suffix
@@ -1045,6 +1134,23 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
 
     A['choch_bull'] = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
     A['choch_bear'] = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
+
+    # Bloco 2 / Onda 1 (§2.6-i): displacement como gate de confirmação.
+    # Ponto único de composição: as arrays de ChoCH acima alimentam
+    # exclusivamente as `_confirm_*` (premissa verificada no Briefing),
+    # então compor `choch ∧ disp` aqui faz `legacy`, `choch` e
+    # `choch_or_rej` herdarem o gate no componente ChoCH sem alterar
+    # nenhuma `_confirm_*`. No `choch_or_rej` o braço de rejeição NÃO é
+    # gateado (a regra qualifica o MSS, não a alternativa candlestick).
+    # Modo `risk` não avalia confirmação ⇒ gate inerte por construção.
+    # Gate off ⇒ nada é computado (custo zero, output byte-idêntico).
+    if config.displacement_gate == DISPLACEMENT_GATE_CONFIRM:
+        A['disp_bull'], A['disp_bear'] = _displacement_flags(
+            A['o'], A['h'], A['low'], A['c'],
+            config.displacement_body_len, config.displacement_wick_frac,
+        )
+        A['choch_bull'] = A['choch_bull'] & A['disp_bull']
+        A['choch_bear'] = A['choch_bear'] & A['disp_bear']
 
     sweep_bull = (
         df['sweep_bullish_wick'].fillna(False).to_numpy(dtype='bool')
@@ -1133,6 +1239,11 @@ def compute_setup_state(
     - G5 `a9_variant='sweep_band'`: zona/armação da A9 pela banda do
       próprio sweep (sem OB); `_required_columns` passa a exigir os
       `sweep_*_level_price` e dispensa o kind 'ob' da A9.
+
+    Bloco 2 / Onda 1 (config-gated; default off = legado byte-idêntico):
+    - `displacement_gate='confirm'`: compõe `choch ∧ disp` nas arrays de
+      ChoCH em `_build_arrays` (ponto único — todos os gatilhos G2
+      herdam no componente ChoCH). Ver `_displacement_flags` (§2.6-i).
 
     Args:
         df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
