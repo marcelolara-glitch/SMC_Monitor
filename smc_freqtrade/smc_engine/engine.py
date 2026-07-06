@@ -208,6 +208,7 @@ def analyze(
             'detect_liquidity_sweeps',
             'tag_sessions',
             'project_ote_zones',
+            'project_ote_zones_v2',
         ],
         'candle_count': len(work),
         'config_used': asdict(config),
