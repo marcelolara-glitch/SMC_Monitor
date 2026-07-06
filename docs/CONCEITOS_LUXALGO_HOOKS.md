@@ -512,9 +512,12 @@ Market Structure Shift, formando "DTFX zones".
 
 **Origem:** Pine LuxAlgo `DTFX Algo Zones`
 
-**Status:** **Habilita versão simplificada de A10 (OTE)** sem
-módulo Fibonacci complexo. Hook reservado para quando A10 for
-abordada (pós-9.5c).
+**Status:** Absorvido em duas etapas — Wave 9.5d materializou a banda
+0.62-0.79 (`fib_ote.project_ote_zones`); Bloco 2 / Onda 2 adicionou o
+ciclo de vida do dealing range (`project_ote_zones_v2`: zona única por
+lado, substituição em novo MSS, morte em MSS oposto, EQ tracking —
+PRINCIPIOS §2.7). Reservados: `mss_scope` internal/both (calibração) e
+os 5 níveis DTFX completos.
 
 ### 10.4 Camada IT (Intermediate Term)
 

@@ -35,6 +35,7 @@ from smc_engine import (
     STATE_CONFIRMED,
     STATE_PENDING,
 )
+from smc_engine.fib_ote import OTE_V2_COLUMNS
 from tools.mtf_align import align_informative
 
 GOLDEN_DIR = Path(__file__).resolve().parent / 'golden' / 'data'
@@ -101,9 +102,11 @@ def test_zone_active_20_to_26_and_ledgers_unchanged() -> None:
     assert len(ACTIVE_ZONE_COLUMNS) == 26
     n = len(ACTIVE_ZONE_COLUMNS)
     # Wave 9.5d anexou 9 hooks (3 Sessions + 6 OTE) após o bloco de zona
-    # ativa — este deixa de ser o tail literal, mas segue contíguo.
+    # ativa; Bloco 2 / Onda 2 anexou +12 OTE_V2_COLUMNS ao fim — o bloco
+    # de zona deixa de ser o tail literal, mas segue contíguo.
     h = len(SESSION_COLUMNS) + len(OTE_COLUMNS)
-    assert list(result.df.columns[-(n + h):-h]) == list(ACTIVE_ZONE_COLUMNS)
+    v = len(OTE_V2_COLUMNS)
+    assert list(result.df.columns[-(n + h + v):-(h + v)]) == list(ACTIVE_ZONE_COLUMNS)
     assert len(result.ledger_ob.columns) == 15
     assert len(result.ledger_fvg.columns) == 11
     assert len(result.ledger_bpr.columns) == 7

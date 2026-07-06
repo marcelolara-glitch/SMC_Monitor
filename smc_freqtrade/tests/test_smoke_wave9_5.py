@@ -48,6 +48,7 @@ from smc_engine import (
     STATE_PENDING,
     SetupConfig,
 )
+from smc_engine.fib_ote import OTE_V2_COLUMNS
 from smc_engine.setup_state import _make_setup_id
 from tools.mtf_align import align_informative
 
@@ -80,33 +81,39 @@ def _golden_pipeline() -> pd.DataFrame:
 # §6 — invariante de regressão: 66 → 78 colunas, aditivo ao fim
 # ============================================================
 
-def test_golden_4h_goes_66_to_101_columns() -> None:
-    """§6: no golden 4H (com volume), analyze() vai de 66 para 101 colunas.
+def test_golden_4h_goes_66_to_113_columns() -> None:
+    """§6: no golden 4H (com volume), analyze() vai de 66 para 113 colunas.
 
-    Wave 9.5c: a zona ativa passou de 20 → 26 colunas (breaker +6).
-    Wave 9.5d: +9 colunas de hook (3 Sessions §10.6 + 6 OTE §10.3),
-    aditivas ao fim, *após* o bloco de zona ativa. Aditivo ao fim — o
-    gate real do §7 é aditividade, não a contagem."""
+    Linhagem: 66 → 101 (Wave 9.5d: +26 zona, +9 hooks) → 113 (Bloco 2 /
+    Onda 2: +12 OTE_V2_COLUMNS, aditivas ao fim). Aditivo ao fim — o gate
+    real do §7 é aditividade, não a contagem."""
     result = analyze(_load_ohlcv('btc_usdt_swap_4h_window.csv'))
-    assert len(result.df.columns) == 101
+    assert len(result.df.columns) == 113
     n = len(ACTIVE_ZONE_COLUMNS)
     hooks = list(SESSION_COLUMNS) + list(OTE_COLUMNS)
     h = len(hooks)
-    # Bloco de zona ativa contíguo, seguido pelos hooks 9.5d (tail real).
-    assert list(result.df.columns[-(n + h):-h]) == list(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-h:]) == hooks
+    v2 = list(OTE_V2_COLUMNS)
+    v = len(v2)
+    # Bloco de zona ativa contíguo → hooks 9.5d → OTE_V2 (tail real).
+    assert list(result.df.columns[-(n + h + v):-(h + v)]) == list(ACTIVE_ZONE_COLUMNS)
+    assert list(result.df.columns[-(h + v):-v]) == hooks
+    assert list(result.df.columns[-v:]) == v2
 
 
 def test_analyze_adds_exactly_26_zone_columns(synthetic_df: pd.DataFrame) -> None:
     """As 26 colunas de zona são anexadas em bloco contíguo (ordem das
-    existentes preservada), seguidas pelos 9 hooks da Wave 9.5d.
-    synthetic_df não tem `volume` → 65 base + 26 + 9 = 100."""
+    existentes preservada), seguidas pelos 9 hooks da Wave 9.5d e pelas
+    12 OTE_V2_COLUMNS da Onda 2.
+    synthetic_df não tem `volume` → 65 base + 26 + 9 + 12 = 112."""
     result = analyze(synthetic_df)
     n = len(ACTIVE_ZONE_COLUMNS)
     hooks = list(SESSION_COLUMNS) + list(OTE_COLUMNS)
     h = len(hooks)
-    assert list(result.df.columns[-(n + h):-h]) == list(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-h:]) == hooks
+    v2 = list(OTE_V2_COLUMNS)
+    v = len(v2)
+    assert list(result.df.columns[-(n + h + v):-(h + v)]) == list(ACTIVE_ZONE_COLUMNS)
+    assert list(result.df.columns[-(h + v):-v]) == hooks
+    assert list(result.df.columns[-v:]) == v2
     # exatamente len(ACTIVE_ZONE_COLUMNS) colunas a mais que o set sem promoção.
     non_zone = [c for c in result.df.columns if c not in ACTIVE_ZONE_COLUMNS]
     assert len(non_zone) == len(result.df.columns) - n

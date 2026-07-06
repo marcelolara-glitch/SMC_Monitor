@@ -12,6 +12,11 @@ OBJETIVO
     do Bloco 2 / Onda 1, do gate de displacement (§2.6-i): totais de
     `disp_bull/bear`, taxa choch∧disp/choch por lado e CONFIRMED por
     assinatura com o gate off vs confirm (gates duros: T-D1–T-D5).
+    Do Bloco 2 / Onda 2 (§2.7), leitura do ciclo de vida v2 do OTE:
+    persistência por lado legacy vs v2 e zonas v2 criadas + razões de
+    kill (golden 1h), e A10 solo em 4 configurações
+    (legacy | v2 | v2+eq | v2+eq+conf) sobre a base Bloco-1-ON +
+    `displacement_gate='confirm'` (gates duros: T-O1–T-O7).
 
 FONTE DE DADOS
     Uma de duas entradas:
@@ -39,7 +44,7 @@ NÃO FAZER
 USO
     python -m tools.diag_setup_state_counters --golden-dir tests/golden/data \
         --prox 0.02 --trigger choch --anchor frozen_band --a9 sweep_band \
-        --displacement confirm
+        --displacement confirm --ote v2 --ote-eq --ote-conf
 """
 from __future__ import annotations
 
@@ -50,6 +55,7 @@ import numpy as np
 import pandas as pd
 
 from smc_engine import analyze, compute_setup_state, SetupConfig
+from smc_engine.fib_ote import project_ote_zones_v2
 from smc_engine.sessions import tag_sessions
 from smc_engine.setup_state import (
     _VALID_SIGNATURE_IDS,
@@ -160,6 +166,14 @@ def main() -> None:
     ap.add_argument('--displacement', default='off',
                     choices=('off', 'confirm'),
                     help='Bloco 2 displacement_gate (off|confirm)')
+    # Bloco 2 / Onda 2 (default = legado, desligado):
+    ap.add_argument('--ote', default='legacy',
+                    choices=('legacy', 'v2'),
+                    help='Bloco 2 / Onda 2 ote_lifecycle (legacy|v2)')
+    ap.add_argument('--ote-eq', action='store_true',
+                    help='ote_require_eq_cross (exige --ote v2)')
+    ap.add_argument('--ote-conf', action='store_true',
+                    help='ote_require_confluence (exige --ote v2)')
     ap.add_argument('--no-multi', action='store_true',
                     help='pular o bloco multi vs solo')
     args = ap.parse_args()
@@ -176,7 +190,8 @@ def main() -> None:
         print(f'input: golden {args.golden_dir} ({len(merged)} candles)')
     print(f'mecanismos: prox={args.prox}  trigger={args.trigger}  '
           f'anchor={args.anchor}  a9={args.a9}  '
-          f'displacement={args.displacement}')
+          f'displacement={args.displacement}  ote={args.ote}  '
+          f'ote_eq={args.ote_eq}  ote_conf={args.ote_conf}')
     print(f'assinaturas={",".join(sids)}  modos={",".join(modes)}\n')
 
     def cfg(signature, mode, displacement=None):
@@ -189,6 +204,9 @@ def main() -> None:
             displacement_gate=(
                 args.displacement if displacement is None else displacement
             ),
+            ote_lifecycle=args.ote,
+            ote_require_eq_cross=args.ote_eq,
+            ote_require_confluence=args.ote_conf,
         )
 
     solo_counts: dict[tuple[str, str], int] = {}
@@ -238,6 +256,52 @@ def main() -> None:
                 ['setup_state'] == STATE_CONFIRMED
             ).sum())
             print(f'    {sid:>4}: {n_off:>5} | {n_on:>5}')
+    print()
+
+    # Bloco 2 / Onda 2: leitura do ciclo de vida v2 do OTE (§2.7) —
+    # persistência por lado legacy vs v2 + zonas criadas e razões de
+    # kill (recomputados no golden 1h; indisponível em --parquet) e A10
+    # solo nas 4 configurações sobre a base Bloco-1-ON fixa do briefing
+    # + displacement_gate='confirm' (independente dos args).
+    print('=== OTE v2 (Bloco 2 / Onda 2) ===')
+    if args.golden_dir:
+        r1 = analyze(_load_ohlcv(args.golden_dir / 'btc_usdt_swap_1h_window.csv'))
+        _, ote_stats = project_ote_zones_v2(r1.df, with_stats=True)
+        for pre in ('bull', 'bear'):
+            legacy_p = float(r1.df[f'active_{pre}_ote_id'].notna().mean())
+            v2_p = float(r1.df[f'{pre}_ote_v2_id'].notna().mean())
+            st = ote_stats[pre]
+            kills = ', '.join(f'{k}={v}' for k, v in st['kills'].items())
+            print(f'  [{pre}] persistencia (1h): legacy={legacy_p:.1%}  '
+                  f'v2={v2_p:.1%}')
+            print(f'  [{pre}] zonas_v2_criadas={st["created"]}  '
+                  f'kills: {kills}')
+    else:
+        print('  persistencia/kills por lado: só em --golden-dir '
+              '(parquet não recomputa o 1h) — bloco pulado')
+    if 'bull_ote_v2_id_1h' in merged.columns:
+        print("  A10 solo (Bloco-1-ON + displacement='confirm'):")
+        ote_variants = (
+            ('legacy', {}),
+            ('v2', dict(ote_lifecycle='v2')),
+            ('v2+eq', dict(ote_lifecycle='v2', ote_require_eq_cross=True)),
+            ('v2+eq+conf', dict(ote_lifecycle='v2', ote_require_eq_cross=True,
+                                ote_require_confluence=True)),
+        )
+        for label, kw in ote_variants:
+            res = compute_setup_state(merged, SetupConfig(
+                signature='A10', entry_mode='confirmation',
+                arming_proximity_pct=0.02,
+                confirmation_trigger='choch',
+                anchor_invalidation='frozen_band',
+                a9_variant='sweep_band',
+                displacement_gate='confirm',
+                **kw,
+            ))
+            report_signature(res, f'A10 / {label}', prox_report)
+    else:
+        print('  A10 solo 4-config: colunas *_ote_v2_*_1h ausentes no '
+              'input — bloco pulado')
     print()
 
     if args.no_multi or len(sids) < 2:

@@ -103,6 +103,19 @@ BLOCO 2 / ONDA 1 (Briefing 3, 2026-07-05) — displacement como gate (§2.6-i)
     construção. Ver `_displacement_flags`. A regra ii do §2.6 (OB
     estratégico) pertence à Onda 3 — fora do escopo.
 
+BLOCO 2 / ONDA 2 (Briefing 4, 2026-07-06) — dealing range §2.7 (D1-D5)
+    `ote_lifecycle` (default 'legacy' = A10 byte-idêntica ao atual):
+    quando 'v2', a A10 troca em runtime (padrão G2/G5) a fonte de zona
+    para o ciclo de vida v2 do dealing range
+    (`fib_ote.project_ote_zones_v2` — zona única por lado, substituição
+    em novo MSS, morte em MSS oposto, EQ tracking; PRINCIPIOS §2.7),
+    lendo `{pre}_ote_v2_*_{zs}`. Gates D4 (exigem a fonte v2; guarda no
+    `__post_init__`): `ote_require_eq_cross` (só arma com EQ 0.5 já
+    tocado — sticky por zona) e `ote_require_confluence` (só arma com a
+    banda v2 sobrepondo OB swing ou FVG ativos do mesmo lado). Escopo
+    restrito à A10 (D5); tier segue swing (D2); registro SIGNATURES
+    intocado. Ver `_zone_A10_v2`/`_arm_A10_v2`.
+
 NÃO FAZER
     - Não usar `shift(-N)` (lookahead proibido).
     - Não importar `freqtrade` (engine é Python puro).
@@ -176,6 +189,11 @@ DISPLACEMENT_GATE_OFF = 'off'
 DISPLACEMENT_GATE_CONFIRM = 'confirm'
 DISPLACEMENT_GATES = (DISPLACEMENT_GATE_OFF, DISPLACEMENT_GATE_CONFIRM)
 
+# === Fonte do ciclo de vida OTE da A10 (Bloco 2 / Onda 2, §2.7, D3) ===
+OTE_LIFECYCLE_LEGACY = 'legacy'
+OTE_LIFECYCLE_V2 = 'v2'
+OTE_LIFECYCLES = (OTE_LIFECYCLE_LEGACY, OTE_LIFECYCLE_V2)
+
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
 # A3 > A2 > A4a > A5 > A1 > A9 > A6 > A7 > A10 (qualidade de evidência).
 # Decide só o empate "duas armam no mesmo candle"; é revisável (o backtest
@@ -247,6 +265,10 @@ class SetupConfig:
     displacement_gate: str = 'off'         # off | confirm
     displacement_body_len: int = 10        # SMA do corpo (Pine §10.5)
     displacement_wick_frac: float = 0.36   # wicks < frac * body (Pine §10.5)
+    # --- Bloco 2 / Onda 2: fonte e gates do OTE/A10 (§2.7, D3/D4) ---
+    ote_lifecycle: str = 'legacy'          # legacy | v2 (fonte consumida pela A10)
+    ote_require_eq_cross: bool = False     # exige ote_lifecycle='v2'
+    ote_require_confluence: bool = False   # exige ote_lifecycle='v2'
 
     def __post_init__(self) -> None:
         if self.armed_timeout_candles < 1:
@@ -337,6 +359,25 @@ class SetupConfig:
                 "*body — nenhuma confirmação pode ocorrer (verificado: 0 CONFIRMED "
                 "no golden). Use confirmation_trigger='choch'/'choch_or_rej' ou "
                 "reduza rejection_wick_frac para abaixo de displacement_wick_frac."
+            )
+        if self.ote_lifecycle not in OTE_LIFECYCLES:
+            raise ValueError(
+                f'ote_lifecycle deve estar em {OTE_LIFECYCLES}, '
+                f'recebeu {self.ote_lifecycle!r}'
+            )
+        # Guarda PR85-style (Bloco 2 / Onda 2): as colunas de gate
+        # (eq_crossed / confluência sobre a banda v2) só existem na
+        # fonte v2 — flag ligada com fonte legada é combinação
+        # incoerente e falha alto, não config silenciosamente morta.
+        if (self.ote_require_eq_cross or self.ote_require_confluence) \
+                and self.ote_lifecycle != OTE_LIFECYCLE_V2:
+            raise ValueError(
+                "ote_require_eq_cross/ote_require_confluence exigem "
+                "ote_lifecycle='v2': os gates da A10 leem colunas que só "
+                f"a fonte v2 emite; recebeu ote_lifecycle="
+                f"{self.ote_lifecycle!r} com "
+                f"ote_require_eq_cross={self.ote_require_eq_cross} e "
+                f"ote_require_confluence={self.ote_require_confluence}."
             )
         ids = [self.signature] if isinstance(self.signature, str) \
             else list(self.signature)
@@ -812,6 +853,71 @@ def _arm_A10(A: dict, direction: str) -> np.ndarray:
     return has & _outside(A, direction, ob, ot)
 
 
+def _zone_A10_v2(A: dict, direction: str):
+    """A10 fonte v2 (Bloco 2 / Onda 2, §2.7): zona = banda OTE v2.
+
+    OBJETIVO
+        Fornecer a banda (zlow, zhigh) e a âncora `(id,)` da A10 a
+        partir da zona v2 do dealing range (`project_ote_zones_v2`:
+        zona única por lado, substituição em novo MSS, morte em MSS
+        oposto). Selecionada em runtime quando
+        `SetupConfig.ote_lifecycle == 'v2'` (padrão de override G2/G5;
+        registro SIGNATURES intocado).
+    FONTE DE DADOS
+        `A['{pre}_ote_v2_{top,bottom,id}']` — materializados por
+        `_build_arrays` de `{pre}_ote_v2_*_{zs}` (default `_1h`).
+    LIMITAÇÕES
+        `id` = índice de barra da criação no TF da zona; um novo MSS da
+        mesma direção troca a âncora (relevante só em
+        `anchor_invalidation='promoted_id'`).
+    NÃO FAZER
+        Não inverter direção (D3 — bull → discount/long, bear →
+        premium/short, como no legado); não ler as colunas legadas
+        `active_{pre}_ote_*` aqui.
+    """
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    return (
+        A[f'{pre}_ote_v2_bottom'],
+        A[f'{pre}_ote_v2_top'],
+        A[f'{pre}_ote_v2_id'].reshape(-1, 1),
+    )
+
+
+def _arm_A10_v2(A: dict, direction: str) -> np.ndarray:
+    """A10 fonte v2: zona presente + preço fora + gates D4 opcionais.
+
+    OBJETIVO
+        Armar a A10 sobre o ciclo de vida v2 (§2.7): zona v2 da direção
+        presente ∧ `_outside` ∧ (`eq_crossed` se
+        `ote_require_eq_cross`) ∧ (`confluent` se
+        `ote_require_confluence`). Direção, proximidade (G1), gatilhos
+        (G2/Onda 1) e `frozen_band` (G3) compõem sem mudança.
+    FONTE DE DADOS
+        `A['{pre}_ote_v2_{top,bottom,id,eq_crossed}']`;
+        `A['{pre}_ote_confluent']` (overlap vetorizado banda v2 × OB
+        swing ∨ FVG ativos, computado em `_build_arrays` só quando a
+        flag está ligada).
+    LIMITAÇÕES
+        Gates default False (D4) — com ambos off a armação é o análogo
+        exato de `_arm_A10` sobre a fonte v2.
+    NÃO FAZER
+        Não aplicar os gates à fonte legada (a guarda do
+        `SetupConfig.__post_init__` já rejeita a combinação); não
+        inverter direção.
+    """
+    cfg = A['cfg']
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    top = A[f'{pre}_ote_v2_top']
+    bottom = A[f'{pre}_ote_v2_bottom']
+    oid = A[f'{pre}_ote_v2_id']
+    ok = (~np.isnan(oid)) & _outside(A, direction, bottom, top)
+    if cfg.ote_require_eq_cross:
+        ok = ok & A[f'{pre}_ote_v2_eq_crossed']
+    if cfg.ote_require_confluence:
+        ok = ok & A[f'{pre}_ote_confluent']
+    return ok
+
+
 def _zone_A9_sweep_band(A: dict, direction: str):
     """A9 variante `sweep_band` (G5): zona = banda do próprio sweep.
 
@@ -1014,6 +1120,16 @@ _KIND_COLUMNS = {
     'volpct': ('active_{pre}_swing_ob_volume_pct_{zs}',),
 }
 
+# Colunas da fonte v2 do OTE (Bloco 2 / Onda 2) consumidas pela A10
+# quando `ote_lifecycle='v2'` — sem prefixo `active_` (emitidas por
+# `fib_ote.project_ote_zones_v2` e mergeadas com sufixo de zona).
+_OTE_V2_ZONE_TEMPLATES = (
+    '{pre}_ote_v2_top_{zs}',
+    '{pre}_ote_v2_bottom_{zs}',
+    '{pre}_ote_v2_id_{zs}',
+)
+_OTE_V2_EQ_TEMPLATE = '{pre}_ote_v2_eq_crossed_{zs}'
+
 
 def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[str]:
     """Colunas exigidas: base + trend (se trend-gated) + kinds das sigs."""
@@ -1039,6 +1155,22 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
                 if name not in seen:
                     seen.add(name)
                     cols.append(name)
+        # Bloco 2 / Onda 2: A10 com ote_lifecycle='v2' troca o conjunto
+        # ote → ote_v2; com confluência, adiciona os kinds ob e fvg
+        # (mesmas colunas suffixadas já consumidas por A1/A3).
+        if sig.id == 'A10' and config.ote_lifecycle == OTE_LIFECYCLE_V2:
+            kinds = tuple(k for k in kinds if k != 'ote')
+            if config.ote_require_confluence:
+                kinds = kinds + ('ob', 'fvg')
+            tmpls = list(_OTE_V2_ZONE_TEMPLATES)
+            if config.ote_require_eq_cross:
+                tmpls.append(_OTE_V2_EQ_TEMPLATE)
+            for tmpl in tmpls:
+                for pre in ('bull', 'bear'):
+                    name = tmpl.format(pre=pre, zs=zs)
+                    if name not in seen:
+                        seen.add(name)
+                        cols.append(name)
         for kind in kinds:
             for tmpl in _KIND_COLUMNS[kind]:
                 for pre in ('bull', 'bear'):
@@ -1140,6 +1272,36 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
         A[f'{pre}_ote_top'] = _opt_float_col(df, f'active_{pre}_ote_top_{zs}', n)
         A[f'{pre}_ote_bottom'] = _opt_float_col(df, f'active_{pre}_ote_bottom_{zs}', n)
         A[f'{pre}_ote_id'] = _opt_float_col(df, f'active_{pre}_ote_id_{zs}', n)
+
+    # Bloco 2 / Onda 2 (§2.7): arrays da fonte v2 do OTE — só quando
+    # `ote_lifecycle='v2'` (com defaults nada é computado; a fonte
+    # legada acima permanece intocada). Quando `ote_require_confluence`,
+    # computa vetorizado o overlap banda v2 × (OB swing ∨ FVG) ativos do
+    # mesmo lado: overlap = max(bottoms) <= min(tops) (NaN ⇒ False).
+    if config.ote_lifecycle == OTE_LIFECYCLE_V2:
+        for pre in ('bull', 'bear'):
+            A[f'{pre}_ote_v2_top'] = _opt_float_col(
+                df, f'{pre}_ote_v2_top_{zs}', n)
+            A[f'{pre}_ote_v2_bottom'] = _opt_float_col(
+                df, f'{pre}_ote_v2_bottom_{zs}', n)
+            A[f'{pre}_ote_v2_id'] = _opt_float_col(
+                df, f'{pre}_ote_v2_id_{zs}', n)
+            A[f'{pre}_ote_v2_eq_crossed'] = _opt_bool_col(
+                df, f'{pre}_ote_v2_eq_crossed_{zs}', n)
+        if config.ote_require_confluence:
+            for pre in ('bull', 'bear'):
+                v2_top = A[f'{pre}_ote_v2_top']
+                v2_bot = A[f'{pre}_ote_v2_bottom']
+                with np.errstate(invalid='ignore'):
+                    ob_overlap = (
+                        np.maximum(v2_bot, A[f'{pre}_ob_bottom'])
+                        <= np.minimum(v2_top, A[f'{pre}_ob_top'])
+                    )
+                    fvg_overlap = (
+                        np.maximum(v2_bot, A[f'{pre}_fvg_bottom'])
+                        <= np.minimum(v2_top, A[f'{pre}_fvg_top'])
+                    )
+                A[f'{pre}_ote_confluent'] = ob_overlap | fvg_overlap
 
     # Gate de killzone Silver Bullet (A7): OR booleano das 3 colunas
     # `in_kz_silver_bullet_*` (base/sem sufixo, 9.5e D6.3), fallback
@@ -1262,6 +1424,13 @@ def compute_setup_state(
       ChoCH em `_build_arrays` (ponto único — todos os gatilhos G2
       herdam no componente ChoCH). Ver `_displacement_flags` (§2.6-i).
 
+    Bloco 2 / Onda 2 (config-gated; default 'legacy' = A10 byte-idêntica):
+    - `ote_lifecycle='v2'`: substitui em memória o zone_fn/arm_fn da A10
+      pelas variantes v2 (`_zone_A10_v2`/`_arm_A10_v2`) sobre o ciclo de
+      vida do dealing range (§2.7); `ote_require_eq_cross`/
+      `ote_require_confluence` (D4) compõem na armação — proximidade
+      (G1), gatilhos (G2/Onda 1) e `frozen_band` (G3) sem mudança.
+
     Args:
         df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
         config: SetupConfig. Se None, usa defaults (A3, confirmation).
@@ -1325,6 +1494,12 @@ def compute_setup_state(
         if sig.id == 'A9' and config.a9_variant == A9_VARIANT_SWEEP_BAND:
             zone_fn = _zone_A9_sweep_band
             arm_fn = _arm_A9_sweep_band
+        # Bloco 2 / Onda 2: A10 consome a fonte v2 quando
+        # ote_lifecycle='v2' (mesmo padrão de override em runtime do
+        # G2/G5; direção segue _direction_from_trend).
+        if sig.id == 'A10' and config.ote_lifecycle == OTE_LIFECYCLE_V2:
+            zone_fn = _zone_A10_v2
+            arm_fn = _arm_A10_v2
         dir_arr = sig.direction_fn(A)
         per = {}
         for d in (DIRECTION_LONG, DIRECTION_SHORT):

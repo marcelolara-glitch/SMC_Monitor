@@ -21,10 +21,13 @@ FONTE DE DADOS
       `low = trailing_bottom[T_mss]`, `high = trailing_top[T_mss]`
       (colunas densas de `trailing.py`, Onda 4). É exatamente a faixa
       que o engine já usa para Premium/Discount — reuso de conceito
-      existente, **OTE simplificada sobre o swing range ativo no MSS**
-      (simplificação de DTFX, ver HOOKS §10.3; o Pine `DTFX Algo Zones`
-      não está no repo). Se a fonte DTFX for fornecida e divergir desta
-      perna → PARAR e reportar (§0 do briefing).
+      existente. **Proveniência (v2.1, D1 da Onda 2): esta perna É o
+      dealing range do PRINCIPIOS §2.7 no tier swing** — o trailing
+      reseta apenas em pivô swing (trailing.py, Pine 156-161/174-179),
+      logo (trailing_bottom, trailing_top) no candle do MSS equivale por
+      construção à perna pivô-oposto→extremo (identidade 19/19 no golden
+      1h). A antiga cláusula de parada DTFX está revogada: não há mais
+      proxy; há definição canônica.
     - Predicado "ativa em T" reusa `zone_projection._project_group`:
       `t_creation <= T AND (t_invalidation is NaT OR t_invalidation > T)`.
       Lookahead-safe (só lê passado/presente; sem `shift(-N)`).
@@ -78,6 +81,28 @@ OTE_COLUMNS = (
 
 # Banda OTE canônica (D-D4). Mediana 0.705 só no teste unitário.
 OTE_RETRACE_LOW, OTE_RETRACE_HIGH = 0.62, 0.79
+
+# === Ciclo de vida v2 (Bloco 2 / Onda 2, PRINCIPIOS §2.7) ===
+# 12 colunas aditivas, {pre}_ote_v2_{campo} para pre ∈ {bull, bear}.
+OTE_V2_FIELDS = ('top', 'bottom', 'id', 'eq_level', 'origin', 'eq_crossed')
+OTE_V2_COLUMNS = tuple(
+    f'{pre}_ote_v2_{field}'
+    for pre in ('bull', 'bear')
+    for field in OTE_V2_FIELDS
+)
+
+# EQ = 0.5 da perna (equilibrium do dealing range, §2.7).
+OTE_EQ_RETRACE = 0.5
+
+# Razões de kill do ciclo de vida v2 (contadas por lado; diag §6).
+OTE_V2_KILL_REPLACED = 'replaced'          # novo MSS da mesma direção
+OTE_V2_KILL_OPPOSITE_MSS = 'opposite_mss'  # MSS da direção oposta
+OTE_V2_KILL_ORIGIN_BREAK = 'origin_break'  # close além da origem 0.0
+OTE_V2_KILL_REASONS = (
+    OTE_V2_KILL_REPLACED,
+    OTE_V2_KILL_OPPOSITE_MSS,
+    OTE_V2_KILL_ORIGIN_BREAK,
+)
 
 
 def _build_ote_ledger(df: pd.DataFrame) -> pd.DataFrame:
@@ -227,4 +252,217 @@ def project_ote_zones(df: pd.DataFrame) -> pd.DataFrame:
         out[col_bottom] = proj_bottom
         out[col_id] = pd.array(proj_id, dtype='Int64')
 
+    return out
+
+
+def project_ote_zones_v2(
+    df: pd.DataFrame,
+    *,
+    with_stats: bool = False,
+):
+    """Anexa as 12 colunas do ciclo de vida v2 do dealing range ao `df`.
+
+    OBJETIVO
+        Implementar o ciclo de vida da zona OTE do PRINCIPIOS §2.7
+        (Bloco 2 / Onda 2, decisões D1-D5): passo único O(n), causal,
+        estado por lado com **no máximo UMA zona ativa** — substituição
+        em novo MSS da mesma direção (`replaced`), morte em MSS oposto
+        (`opposite_mss`), morte por close além da origem 0.0
+        (`origin_break`, herdada do legado) e EQ tracking sticky por
+        zona. Função paralela ao `project_ote_zones` legado (interface
+        preservation — o legado fica intocado); o consumo pela A10 é
+        config-gated em `SetupConfig.ote_lifecycle` (default 'legacy').
+
+        Correção ao relatório da Fase A Parte 2: a invalidação por close
+        além da origem **já existe** no builder legado
+        (`_build_ote_ledger`, :147-156, com projeção causal — zona
+        inativa a partir do próprio candle da invalidação). A
+        persistência papel-de-parede do legado (61-95%) vem do que
+        falta lá: substituição em novo MSS da mesma direção, morte em
+        MSS oposto e a multiplicidade de zonas coexistindo (o tie-break
+        por proximidade mascara um acervo de pernas antigas vivas). A
+        v2 implementa exatamente isso e **herda** a regra existente.
+
+        Ordem no mesmo candle `t` (kills antes de criação):
+            1. zona ativa + MSS oposto em `t` → `opposite_mss`;
+            2. zona ativa + close além da origem → `origin_break`
+               (bull `close < origin`, bear `close > origin`; zona
+               inativa a partir do próprio candle, convenção do legado);
+            3. MSS da mesma direção em `t`: zona ativa → `replaced`;
+               zona nova nasce em `t` e emite a partir de `t` (sujeita
+               ao `origin_break` no próprio candle, como no legado j=t).
+
+    FONTE DE DADOS
+        Eventos e perna idênticos ao legado: MSS swing = BOS∪CHoCH swing
+        (`structure.py`), perna `(trailing_bottom[t], trailing_top[t])`
+        (`trailing.py`), guardas idênticas (finitos, `high > low`),
+        bandas direction-aware idênticas (0.62-0.79). Proveniência da
+        perna (D1): ver docstring do módulo — a perna É o dealing range
+        do §2.7 no tier swing (identidade 19/19 no golden 1h; taxas da
+        sondagem de 2026-07-05: EQ-cross ~53%, toque na banda ~42%,
+        n=19). Além do legado, consome `high`/`low` (EQ por toque de
+        pavio). `eq_level` = 0.5 da perna (bull `high − 0.5·span`, bear
+        `low + 0.5·span`); `origin` = 0.0 da perna (bull `low`, bear
+        `high`); `eq_crossed` sticky: bull vira True no primeiro candle
+        com `low <= eq_level`, bear com `high >= eq_level`; reseta em
+        zona nova.
+
+    LIMITAÇÕES CONHECIDAS
+        - `mss_scope` segue swing (D2); internal/both reservados
+          (calibração futura).
+        - EQ por toque de pavio; a variante por close é espaço de
+          calibração registrado, NÃO implementado (D-decisão da onda).
+        - Contador de criações/kills por lado é retorno auxiliar
+          (`with_stats=True`) para o diag §6 — **não** vira ledger em
+          `AnalyzeResult` (D-D6 preservada).
+
+    NÃO FAZER
+        - Não usar `shift(-N)` (lookahead proibido).
+        - Não mutar o `df` do caller — opera sobre cópia.
+        - Não tocar `project_ote_zones`/`_build_ote_ledger` legados.
+        - Não expor stats/ledger em `AnalyzeResult` (D-D6).
+
+    Args:
+        df: DataFrame com colunas `date`, `high`, `low`, `close`,
+            `trailing_top`, `trailing_bottom` e as 4 colunas
+            `*_swing_*` de structure.
+        with_stats: se True, retorna `(out, stats)` com
+            `stats[pre] = {'created': int, 'kills': {razão: int}}`.
+
+    Returns:
+        Cópia de `df` + 12 colunas (`OTE_V2_COLUMNS`). `*_top`,
+        `*_bottom`, `*_eq_level`, `*_origin` float64 (NaN sem zona);
+        `*_id` Int64 nullable (<NA> sem zona; valor = índice de barra
+        da criação); `*_eq_crossed` bool (False sem zona).
+    """
+    out = df.copy()
+    closes = df['close'].to_numpy(dtype='float64')
+    highs = df['high'].to_numpy(dtype='float64')
+    lows = df['low'].to_numpy(dtype='float64')
+    ttop = df[COL_TRAILING_TOP].to_numpy(dtype='float64')
+    tbot = df[COL_TRAILING_BOTTOM].to_numpy(dtype='float64')
+    bull_mss = (
+        df[COL_BOS_SWING_BULLISH].to_numpy()
+        | df[COL_CHOCH_SWING_BULLISH].to_numpy()
+    )
+    bear_mss = (
+        df[COL_BOS_SWING_BEARISH].to_numpy()
+        | df[COL_CHOCH_SWING_BEARISH].to_numpy()
+    )
+    n = len(df)
+
+    arrs = {
+        pre: {
+            'top': np.full(n, np.nan, dtype='float64'),
+            'bottom': np.full(n, np.nan, dtype='float64'),
+            'id': np.full(n, np.nan, dtype='float64'),
+            'eq_level': np.full(n, np.nan, dtype='float64'),
+            'origin': np.full(n, np.nan, dtype='float64'),
+            'eq_crossed': np.zeros(n, dtype='bool'),
+        }
+        for pre in ('bull', 'bear')
+    }
+    stats = {
+        pre: {'created': 0, 'kills': dict.fromkeys(OTE_V2_KILL_REASONS, 0)}
+        for pre in ('bull', 'bear')
+    }
+    # Estado por lado: None = sem zona; dict = zona ativa.
+    zone: dict[str, dict | None] = {'bull': None, 'bear': None}
+
+    def _kill(pre: str, reason: str) -> None:
+        stats[pre]['kills'][reason] += 1
+        zone[pre] = None
+
+    for t in range(n):
+        leg_low = tbot[t]
+        leg_high = ttop[t]
+        leg_ok = (
+            np.isfinite(leg_low) and np.isfinite(leg_high)
+            and leg_high > leg_low
+        )
+        bull_evt = bool(bull_mss[t]) and leg_ok
+        bear_evt = bool(bear_mss[t]) and leg_ok
+
+        # 1. MSS oposto mata a zona ativa do outro lado.
+        if zone['bull'] is not None and bear_evt:
+            _kill('bull', OTE_V2_KILL_OPPOSITE_MSS)
+        if zone['bear'] is not None and bull_evt:
+            _kill('bear', OTE_V2_KILL_OPPOSITE_MSS)
+
+        # 2. close além da origem (regra herdada de _build_ote_ledger
+        #    :147-156; inativa a partir do próprio candle).
+        if zone['bull'] is not None and closes[t] < zone['bull']['origin']:
+            _kill('bull', OTE_V2_KILL_ORIGIN_BREAK)
+        if zone['bear'] is not None and closes[t] > zone['bear']['origin']:
+            _kill('bear', OTE_V2_KILL_ORIGIN_BREAK)
+
+        # 3. MSS da mesma direção: substitui (kill antes de criar) e a
+        #    zona nova emite a partir de t — sujeita ao origin_break no
+        #    próprio candle de criação (legado varre j desde t).
+        if bull_evt:
+            if zone['bull'] is not None:
+                _kill('bull', OTE_V2_KILL_REPLACED)
+            span = leg_high - leg_low
+            zone['bull'] = {
+                'top': leg_high - OTE_RETRACE_LOW * span,
+                'bottom': leg_high - OTE_RETRACE_HIGH * span,
+                'eq_level': leg_high - OTE_EQ_RETRACE * span,
+                'origin': leg_low,
+                'id': float(t),
+                'eq_crossed': False,
+            }
+            stats['bull']['created'] += 1
+            if closes[t] < leg_low:
+                _kill('bull', OTE_V2_KILL_ORIGIN_BREAK)
+        if bear_evt:
+            if zone['bear'] is not None:
+                _kill('bear', OTE_V2_KILL_REPLACED)
+            span = leg_high - leg_low
+            zone['bear'] = {
+                'top': leg_low + OTE_RETRACE_HIGH * span,
+                'bottom': leg_low + OTE_RETRACE_LOW * span,
+                'eq_level': leg_low + OTE_EQ_RETRACE * span,
+                'origin': leg_high,
+                'id': float(t),
+                'eq_crossed': False,
+            }
+            stats['bear']['created'] += 1
+            if closes[t] > leg_high:
+                _kill('bear', OTE_V2_KILL_ORIGIN_BREAK)
+
+        # 4. EQ sticky (toque de pavio) + emissão do candle t.
+        zb = zone['bull']
+        if zb is not None:
+            if lows[t] <= zb['eq_level']:
+                zb['eq_crossed'] = True
+            a = arrs['bull']
+            a['top'][t] = zb['top']
+            a['bottom'][t] = zb['bottom']
+            a['id'][t] = zb['id']
+            a['eq_level'][t] = zb['eq_level']
+            a['origin'][t] = zb['origin']
+            a['eq_crossed'][t] = zb['eq_crossed']
+        zr = zone['bear']
+        if zr is not None:
+            if highs[t] >= zr['eq_level']:
+                zr['eq_crossed'] = True
+            a = arrs['bear']
+            a['top'][t] = zr['top']
+            a['bottom'][t] = zr['bottom']
+            a['id'][t] = zr['id']
+            a['eq_level'][t] = zr['eq_level']
+            a['origin'][t] = zr['origin']
+            a['eq_crossed'][t] = zr['eq_crossed']
+
+    for pre in ('bull', 'bear'):
+        a = arrs[pre]
+        out[f'{pre}_ote_v2_top'] = a['top']
+        out[f'{pre}_ote_v2_bottom'] = a['bottom']
+        out[f'{pre}_ote_v2_id'] = pd.array(a['id'], dtype='Int64')
+        out[f'{pre}_ote_v2_eq_level'] = a['eq_level']
+        out[f'{pre}_ote_v2_origin'] = a['origin']
+        out[f'{pre}_ote_v2_eq_crossed'] = a['eq_crossed']
+
+    if with_stats:
+        return out, stats
     return out
