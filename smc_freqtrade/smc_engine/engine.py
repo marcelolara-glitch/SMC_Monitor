@@ -34,6 +34,7 @@ from typing import Any
 
 import pandas as pd
 
+from . import fib_ote
 from .config import SMCConfig
 from .fib_ote import project_ote_zones
 from .fvg import compose_balanced_price_ranges, detect_fair_value_gaps
@@ -186,6 +187,12 @@ def analyze(
     # colunas (3 Sessions + 6 OTE). Consumidos por A7/A10 na Wave 9.5e.
     work = tag_sessions(work)
     work = project_ote_zones(work)
+    # Bloco 2 / Onda 2 (PRINCIPIOS §2.7) — ciclo de vida v2 do dealing
+    # range: zona única por lado, substituição em novo MSS, morte em MSS
+    # oposto, EQ tracking. Emissão incondicional (12 colunas aditivas
+    # baratas); o consumo pela A10 é config-gated em
+    # SetupConfig.ote_lifecycle (default 'legacy').
+    work = fib_ote.project_ote_zones_v2(work)
 
     from . import __version__
     meta: dict[str, Any] = {
