@@ -49,6 +49,7 @@ USO
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -56,10 +57,12 @@ import pandas as pd
 
 from smc_engine import analyze, compute_setup_state, SetupConfig
 from smc_engine.fib_ote import project_ote_zones_v2
-from smc_engine.sessions import tag_sessions
+from smc_engine.fvg import COL_FVG_BEARISH_CREATED, COL_FVG_BULLISH_CREATED
+from smc_engine.sessions import SESSION_COLUMNS, tag_sessions
 from smc_engine.setup_state import (
     _VALID_SIGNATURE_IDS,
     STATE_CONFIRMED,
+    _a7_chain_ffill,
     _displacement_flags,
     compute_setup_state_multi,
 )
@@ -83,6 +86,60 @@ def build_merged_from_golden(golden_dir: Path) -> pd.DataFrame:
     merged = align_informative(base15, r1.df, '15m', '1h', suffix='1h')
     merged = align_informative(merged, r4.df, '15m', '4h', suffix='4h')
     return merged
+
+
+def _in_kz_any(merged: pd.DataFrame) -> np.ndarray:
+    """OR booleano das 3 colunas de killzone Silver Bullet (base, sem sufixo)."""
+    n = len(merged)
+    out = np.zeros(n, dtype='bool')
+    for col in SESSION_COLUMNS:
+        if col in merged.columns:
+            out = out | merged[col].fillna(False).to_numpy(dtype='bool')
+    return out
+
+
+def _chain_ids(merged: pd.DataFrame, in_kz: np.ndarray, side: str,
+               recency: int, window: int) -> np.ndarray:
+    """Ids por candle da cadeia A7 (Bloco 2 / Onda 3a) — reuso de
+    `_a7_chain_ffill` sobre o merged (MSS-d = ChoCH cru ∧ displacement)."""
+    n = len(merged)
+    o = merged['open'].to_numpy(dtype='float64')
+    h = merged['high'].to_numpy(dtype='float64')
+    low = merged['low'].to_numpy(dtype='float64')
+    c = merged['close'].to_numpy(dtype='float64')
+    disp_bull, disp_bear = _displacement_flags(o, h, low, c, 10, 0.36)
+    if side == 'bull':
+        choch = merged['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
+        mss = choch & disp_bull
+        sweep = (merged['sweep_bullish_wick'].fillna(False)
+                 | merged['sweep_bullish_retest'].fillna(False)).to_numpy(dtype='bool')
+        fvg = merged[COL_FVG_BULLISH_CREATED].fillna(False).to_numpy(dtype='bool')
+    else:
+        choch = merged['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
+        mss = choch & disp_bear
+        sweep = (merged['sweep_bearish_wick'].fillna(False)
+                 | merged['sweep_bearish_retest'].fillna(False)).to_numpy(dtype='bool')
+        fvg = merged[COL_FVG_BEARISH_CREATED].fillna(False).to_numpy(dtype='bool')
+    _, _, zid = _a7_chain_ffill(mss, sweep, fvg, in_kz, h, low, c, side,
+                                window, recency)
+    return zid
+
+
+def _chain_births_kills(zid: np.ndarray) -> tuple[int, int, int]:
+    """(nascimentos, mortes por close-through, substituições) a partir do id."""
+    births = kills_close = replaces = 0
+    prev = np.nan
+    for v in zid:
+        if not np.isnan(v):
+            if np.isnan(prev):
+                births += 1
+            elif v != prev:
+                births += 1
+                replaces += 1
+        elif not np.isnan(prev):
+            kills_close += 1
+        prev = v
+    return births, kills_close, replaces
 
 
 def _per_setup_frame(res: pd.DataFrame) -> pd.DataFrame:
@@ -174,12 +231,20 @@ def main() -> None:
                     help='ote_require_eq_cross (exige --ote v2)')
     ap.add_argument('--ote-conf', action='store_true',
                     help='ote_require_confluence (exige --ote v2)')
+    # Bloco 2 / Onda 3a (default = legado, desligado):
+    ap.add_argument('--a7', default='legacy',
+                    choices=('legacy', 'chain_v2'),
+                    help='Bloco 2 / Onda 3a a7_variant (legacy|chain_v2)')
+    ap.add_argument('--kzq', default='',
+                    help='killzone_qualifier: ids separados por vírgula '
+                         '(default: vazio)')
     ap.add_argument('--no-multi', action='store_true',
                     help='pular o bloco multi vs solo')
     args = ap.parse_args()
 
     sids = tuple(s.strip() for s in args.signatures.split(',') if s.strip())
     modes = tuple(m.strip() for m in args.modes.split(',') if m.strip())
+    kzq = tuple(s.strip() for s in args.kzq.split(',') if s.strip())
     prox_report = args.prox if args.prox is not None else REPORT_PROX_DEFAULT
 
     if args.parquet:
@@ -191,7 +256,8 @@ def main() -> None:
     print(f'mecanismos: prox={args.prox}  trigger={args.trigger}  '
           f'anchor={args.anchor}  a9={args.a9}  '
           f'displacement={args.displacement}  ote={args.ote}  '
-          f'ote_eq={args.ote_eq}  ote_conf={args.ote_conf}')
+          f'ote_eq={args.ote_eq}  ote_conf={args.ote_conf}  '
+          f'a7={args.a7}  kzq={",".join(kzq) or "-"}')
     print(f'assinaturas={",".join(sids)}  modos={",".join(modes)}\n')
 
     def cfg(signature, mode, displacement=None):
@@ -207,6 +273,8 @@ def main() -> None:
             ote_lifecycle=args.ote,
             ote_require_eq_cross=args.ote_eq,
             ote_require_confluence=args.ote_conf,
+            a7_variant=args.a7,
+            killzone_qualifier=kzq,
         )
 
     solo_counts: dict[tuple[str, str], int] = {}
@@ -302,6 +370,57 @@ def main() -> None:
     else:
         print('  A10 solo 4-config: colunas *_ote_v2_*_1h ausentes no '
               'input — bloco pulado')
+    print()
+
+    # Bloco 2 / Onda 3a (§0/§4): cadeia da A7 + tempo transversal.
+    # Matriz da §0 (cadeias por L∈{4,8,16} × kz, F=2), zonas criadas/kills
+    # por lado (L=16), A7 solo legacy vs chain_v2 sobre Bloco-1-ON +
+    # displacement='confirm', e efeito do qualifier por assinatura listada.
+    print('=== A7 chain_v2 + tempo transversal (Bloco 2 / Onda 3a) ===')
+    in_kz = _in_kz_any(merged)
+    all_true = np.ones(len(merged), dtype='bool')
+    print('  matriz §0 (F=2) — cadeias bull/bear por L × kz:')
+    for L in (4, 8, 16):
+        for use_kz, tag in ((all_true, 'sem kz'), (in_kz, 'com kz')):
+            bull = _chain_ids(merged, use_kz, 'bull', L, 2)
+            bear = _chain_ids(merged, use_kz, 'bear', L, 2)
+            nb = int(pd.Series(bull).dropna().nunique())
+            ns = int(pd.Series(bear).dropna().nunique())
+            print(f'    L={L:>2}  {tag}: bull={nb:>3}  bear={ns:>3}')
+    print('  (variante estrita cadeia-inteira-na-janela: calibração, §8 — '
+          'fora deste bloco)')
+    print('  zonas criadas / kills por lado (L=16, F=2, com kz):')
+    for side in ('bull', 'bear'):
+        zid = _chain_ids(merged, in_kz, side, 16, 2)
+        births, kills_close, replaces = _chain_births_kills(zid)
+        print(f'    [{side}] criadas={births}  '
+              f'kills(close-through)={kills_close}  substituicoes={replaces}')
+    print("  A7 solo (Bloco-1-ON + displacement='confirm'): legacy | chain_v2")
+    for a7v in ('legacy', 'chain_v2'):
+        res = compute_setup_state(merged, SetupConfig(
+            signature='A7', entry_mode='confirmation',
+            arming_proximity_pct=0.02, confirmation_trigger='choch',
+            anchor_invalidation='frozen_band', a9_variant='sweep_band',
+            displacement_gate='confirm', a7_variant=a7v,
+        ))
+        report_signature(res, f'A7 / {a7v}', prox_report)
+    if kzq:
+        print(f'  efeito do qualifier (kzq={",".join(kzq)}) — armações '
+              f'dentro/fora de kz:')
+        for sid in kzq:
+            base = compute_setup_state(
+                merged, replace(cfg(sid, modes[0]), killzone_qualifier=()))
+            qual = compute_setup_state(
+                merged, replace(cfg(sid, modes[0]), killzone_qualifier=(sid,)))
+            for label, res in (('sem qual', base), ('com qual', qual)):
+                act = res.dropna(subset=['setup_id'])
+                idx = act.groupby('setup_id', sort=False).head(1).index.to_numpy()
+                inside = int(in_kz[idx].sum()) if len(idx) else 0
+                outside = int((~in_kz[idx]).sum()) if len(idx) else 0
+                print(f'    {sid:>4} {label}: dentro={inside:>5}  '
+                      f'fora={outside:>5}')
+    else:
+        print('  qualifier: use --kzq <ids> para o efeito por assinatura')
     print()
 
     if args.no_multi or len(sids) < 2:
