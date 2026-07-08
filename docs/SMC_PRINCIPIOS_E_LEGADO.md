@@ -16,6 +16,9 @@
 > **Revisão v2.1 (2026-07-04):** resolução da tensão G6 (gate direcional das reversões) e
 > incorporação da evidência da Fase A Parte 2 (`docs/RELATORIO_FASE_A_PARTE2_FIDELIDADE.md`,
 > `docs/ADENDO_FASE_A_PARTE2_MEDICAO_2Y.md`). Marcas `[v2.1]` seguem a mesma convenção.
+>
+> **Revisão v2.2 (2026-07-06):** precisão da janela da A7 (D3 da Onda 3a — o elemento
+> in-window é o MSS com displacement). Marcas `[v2.2]` seguem a mesma convenção.
 
 ---
 
@@ -679,6 +682,13 @@ diário — o rótulo "continuação" do catálogo de hooks refere-se ao viés, 
 liquidez oposta da sessão. **Variante minoritária registrada** (sweep+FVG sem MSS explícito —
 corresponde à formulação anterior do catálogo e à implementação atual): fluxcharts.com. Fontes
 da majoritária: grandalgo.com; fxnx.com; tradingfinder.com/education/forex/ict-silver-bullet.
+
+**Precisão [v2.2 — D3]:** o elemento que deve ocorrer **dentro da janela** é o MSS com
+displacement (o deslocamento na janela é o não-negociável — grandalgo.com); o sweep pode
+preceder a janela, limitado por `sweep_recency_candles`, e o primeiro FVG segue o impulso
+em ≤F candles. A variante estrita cadeia-inteira-na-janela fica registrada como espaço de
+calibração (medição no golden: 10 vs 3 cadeias/4 meses; reproduzível pelo bloco A7 do
+`tools/diag_setup_state_counters.py`).
 
 **A9 — EQH/EQL Sweep + CHoCH** · Família II · reversão · viés 4H: independente [v2.1 — G6, calibrável]. Sweep de EQH/EQL → CHoCH com
 displacement (§2.6) → entrada. Tempo: qualificadora. Direção: reversão-do-sweep.

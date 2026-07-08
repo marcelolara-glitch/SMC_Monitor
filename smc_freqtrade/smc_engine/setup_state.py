@@ -116,6 +116,20 @@ BLOCO 2 / ONDA 2 (Briefing 4, 2026-07-06) — dealing range §2.7 (D1-D5)
     restrito à A10 (D5); tier segue swing (D2); registro SIGNATURES
     intocado. Ver `_zone_A10_v2`/`_arm_A10_v2`.
 
+BLOCO 2 / ONDA 3a (Briefing 5, 2026-07-06) — A7 chain_v2 + tempo (§2.8)
+    `a7_variant` (default 'legacy' = A7 byte-idêntica ao atual): quando
+    'chain_v2', a A7 troca em runtime (padrão G2/G5) zona/armação para a
+    cadeia sweep→MSS-d(kz)→1º FVG do impulso no TF base — a zona é o FVG
+    recém-criado, reconstruído verbatim da geometria de `fvg.py`
+    (`_a7_chain_ffill`/`_zone_A7_chain`/`_arm_A7_chain`; PRINCIPIOS §2.8,
+    precisão D3 [v2.2]). O displacement passa a ser materializado também
+    quando a cadeia o exige (MSS-d = ChoCH cru ∧ displacement); a A7 sai
+    do conjunto de premissa-de-sweep (confirmação sem sweep — a cadeia já
+    o consumiu). `a7_fvg_window` (F, default 2) limita o 1º FVG após o
+    MSS-d. `killzone_qualifier` (default () — inócuo): assinaturas
+    listadas só armam com `in_kz_any` (tempo transversal, D5). Nenhuma
+    coluna nova no `analyze` (§5); arrays internos `{pre}_a7chain_*`.
+
 NÃO FAZER
     - Não usar `shift(-N)` (lookahead proibido).
     - Não importar `freqtrade` (engine é Python puro).
@@ -131,6 +145,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from .fvg import COL_FVG_BEARISH_CREATED, COL_FVG_BULLISH_CREATED
 from .sessions import SESSION_COLUMNS
 
 # === Valores de estado realizados na coluna ===
@@ -193,6 +208,15 @@ DISPLACEMENT_GATES = (DISPLACEMENT_GATE_OFF, DISPLACEMENT_GATE_CONFIRM)
 OTE_LIFECYCLE_LEGACY = 'legacy'
 OTE_LIFECYCLE_V2 = 'v2'
 OTE_LIFECYCLES = (OTE_LIFECYCLE_LEGACY, OTE_LIFECYCLE_V2)
+
+# === Variante da A7 (Bloco 2 / Onda 3a, §2.2, D0-D5) ===
+# `legacy` = A7 Silver Bullet byte-idêntica ao atual (FVG ativo 1h +
+# sweep + killzone). `chain_v2` = cadeia sweep→MSS-d(kz)→1º FVG do
+# impulso no TF base (a zona é o FVG recém-criado, reconstruído da
+# geometria de `fvg.py`); ver `_a7_chain_ffill`/`_zone_A7_chain`.
+A7_VARIANT_LEGACY = 'legacy'
+A7_VARIANT_CHAIN_V2 = 'chain_v2'
+A7_VARIANTS = (A7_VARIANT_LEGACY, A7_VARIANT_CHAIN_V2)
 
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
 # A3 > A2 > A4a > A5 > A1 > A9 > A6 > A7 > A10 (qualidade de evidência).
@@ -269,6 +293,10 @@ class SetupConfig:
     ote_lifecycle: str = 'legacy'          # legacy | v2 (fonte consumida pela A10)
     ote_require_eq_cross: bool = False     # exige ote_lifecycle='v2'
     ote_require_confluence: bool = False   # exige ote_lifecycle='v2'
+    # --- Bloco 2 / Onda 3a: A7 chain_v2 + tempo transversal (§2.8, D0-D5) ---
+    a7_variant: str = 'legacy'                   # legacy | chain_v2
+    a7_fvg_window: int = 2                        # F: candles após o MSS-d p/ 1º FVG
+    killzone_qualifier: tuple[str, ...] = ()     # sids que exigem in_kz_any na armação
 
     def __post_init__(self) -> None:
         if self.armed_timeout_candles < 1:
@@ -379,6 +407,23 @@ class SetupConfig:
                 f"ote_require_eq_cross={self.ote_require_eq_cross} e "
                 f"ote_require_confluence={self.ote_require_confluence}."
             )
+        # --- Bloco 2 / Onda 3a (§2.1): A7 chain_v2 + tempo transversal ---
+        if self.a7_variant not in A7_VARIANTS:
+            raise ValueError(
+                f'a7_variant deve estar em {A7_VARIANTS}, '
+                f'recebeu {self.a7_variant!r}'
+            )
+        if not isinstance(self.a7_fvg_window, int) or self.a7_fvg_window < 1:
+            raise ValueError(
+                f'a7_fvg_window deve ser inteiro >= 1, '
+                f'recebeu {self.a7_fvg_window!r}'
+            )
+        for sid in self.killzone_qualifier:
+            if sid not in _VALID_SIGNATURE_IDS:
+                raise ValueError(
+                    f'killzone_qualifier contém id inválido {sid!r}; '
+                    f'válidos: {_VALID_SIGNATURE_IDS}'
+                )
         ids = [self.signature] if isinstance(self.signature, str) \
             else list(self.signature)
         if not ids:
@@ -514,6 +559,85 @@ def _sweep_band_ffill(
         hi[i] = cur_hi
         bid[i] = cur_id
     return lo, hi, bid
+
+
+def _a7_chain_ffill(
+    mss: np.ndarray, sweep: np.ndarray, fvg_created: np.ndarray,
+    in_kz: np.ndarray, high: np.ndarray, low: np.ndarray, close: np.ndarray,
+    side: str, window: int, recency: int,
+):
+    """Máquina O(n) causal da cadeia A7 (Bloco 2 / Onda 3a, §2.2, D0-D5).
+
+    OBJETIVO
+        Materializar, por candle, a zona da cadeia sweep→MSS-d(kz)→1º FVG
+        do impulso no TF base, forward-filled desde o nascimento até a
+        morte. Por lado (`side ∈ {'bull','bear'}`), causal e lookahead-safe.
+
+    MÁQUINA
+        - Rastreia o último `sweep` (wick ∨ retest) do lado.
+        - Num `mss` (choch_internal ∧ displacement) em `t1` com
+          `t1 − último_sweep <= recency` **e** `in_kz[t1]` (D3): abre a
+          janela `[t1, t1 + window]` (um novo MSS-d qualificado reseta a
+          janela).
+        - No primeiro `fvg_created` em `t2` dentro da janela: nasce a zona
+          com a banda geométrica do FVG (premissa §1, verbatim `fvg.py`):
+          bull → (bottom=high[t2−2], top=low[t2]); bear → simétrico
+          (bottom=high[t2], top=low[t2−2]). `id = t2`.
+        - Ciclo de vida (mínimo §2.2): morre por (i) `close` além do lado
+          oposto da banda (bull: close < bottom; bear: close > top —
+          aproximação de mitigação, filosofia frozen_band) ou (ii)
+          substituição por nova cadeia do mesmo lado. No máximo UMA zona
+          ativa por lado (sem cap de idade — calibração, LIMITAÇÕES).
+
+    RETORNA
+        `(low, high, id)` por candle (NaN quando não há zona ativa),
+        onde `low`/`high` são o bottom/top da banda do FVG.
+
+    NÃO FAZER
+        - Não usar lookahead: a janela é [t1, t1+window] mas a zona só
+          nasce quando o FVG do candle t2 fecha (o flag é causal).
+        - Não normalizar/threshold a banda (deve bater com o ledger FVG —
+          premissa §1; T-A3 assere a igualdade).
+    """
+    n = len(mss)
+    zlo = np.full(n, np.nan, dtype='float64')
+    zhi = np.full(n, np.nan, dtype='float64')
+    zid = np.full(n, np.nan, dtype='float64')
+    last_sweep = -1
+    win_end = -1
+    win_open = False
+    cur_lo = cur_hi = cur_id = np.nan
+    active = False
+    for i in range(n):
+        if sweep[i]:
+            last_sweep = i
+        # (i) morte por close além do lado oposto da banda
+        if active:
+            dead = close[i] < cur_lo if side == 'bull' else close[i] > cur_hi
+            if dead:
+                active = False
+                cur_lo = cur_hi = cur_id = np.nan
+        # MSS-d qualificado (recência ∧ killzone) → abre/reseta a janela
+        if mss[i] and last_sweep >= 0 and (i - last_sweep) <= recency \
+                and in_kz[i]:
+            win_open = True
+            win_end = i + window
+        # 1º FVG do impulso na janela → nasce a zona (id = t2); (ii) uma
+        # nova cadeia substitui a ativa do mesmo lado.
+        if win_open and i <= win_end and fvg_created[i] and i >= 2:
+            if side == 'bull':
+                cur_lo = high[i - 2]
+                cur_hi = low[i]
+            else:
+                cur_lo = high[i]
+                cur_hi = low[i - 2]
+            cur_id = float(i)
+            active = True
+            win_open = False
+        zlo[i] = cur_lo
+        zhi[i] = cur_hi
+        zid[i] = cur_id
+    return zlo, zhi, zid
 
 
 def _zone_arrays(A: dict, kind: str, direction: str):
@@ -809,6 +933,56 @@ def _arm_A7(A: dict, direction: str) -> np.ndarray:
     sweep = A['bull_sweep_recent'] if direction == DIRECTION_LONG \
         else A['bear_sweep_recent']
     return has & sweep & A['in_kz_any'] & _outside(A, direction, fb, ft)
+
+
+def _zone_A7_chain(A: dict, direction: str):
+    """A7 `chain_v2` (Bloco 2 / Onda 3a, §2.3): zona = FVG da cadeia.
+
+    OBJETIVO
+        Fornecer a banda (zlow, zhigh) e a âncora `(id,)` da A7 a partir
+        da zona da cadeia (`{pre}_a7chain_*`, materializada por
+        `_a7_chain_ffill` em `_build_arrays`). Selecionada em runtime
+        quando `SetupConfig.a7_variant == 'chain_v2'` (padrão de override
+        G2/G5; registro SIGNATURES intocado).
+    FONTE DE DADOS
+        `A['{pre}_a7chain_{low,high,id}']` (long → bull, short → bear).
+        `low`/`high` já são bottom/top da banda do FVG do impulso.
+    LIMITAÇÕES
+        Espelha `_zone_A9_sweep_band`; não decide armação (`_arm_A7_chain`).
+    NÃO FAZER
+        Não ler o FVG ativo 1h aqui (a cadeia substitui essa fonte); não
+        inverter direção (cadeia bull → long).
+    """
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    return (
+        A[f'{pre}_a7chain_low'],
+        A[f'{pre}_a7chain_high'],
+        A[f'{pre}_a7chain_id'].reshape(-1, 1),
+    )
+
+
+def _arm_A7_chain(A: dict, direction: str) -> np.ndarray:
+    """A7 `chain_v2`: zona da cadeia presente + preço fora (§2.3).
+
+    OBJETIVO
+        Armar a A7 sobre a cadeia sweep→MSS-d(kz)→FVG: zona da cadeia da
+        direção presente e preço ainda fora da banda. Sweep e killzone já
+        foram consumidos na construção da cadeia (§2.2) — a armação **não**
+        os re-exige (confirmação sem sweep, §2.3). Direção via
+        `_direction_from_trend` (trend-gated; a cadeia do lado X só existe
+        com sweep+MSS-d do lado X — D4).
+    FONTE DE DADOS
+        `A['{pre}_a7chain_{low,high,id}']`; `_outside`.
+    NÃO FAZER
+        Não re-exigir sweep/killzone (a cadeia já os consumiu); não
+        inverter direção.
+    """
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    lo = A[f'{pre}_a7chain_low']
+    hi = A[f'{pre}_a7chain_high']
+    zid = A[f'{pre}_a7chain_id']
+    has = ~np.isnan(zid)
+    return has & _outside(A, direction, lo, hi)
 
 
 def _zone_A10(A: dict, direction: str):
@@ -1171,6 +1345,16 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
                     if name not in seen:
                         seen.add(name)
                         cols.append(name)
+        # Bloco 2 / Onda 3a (§2.3): A7 em `chain_v2` dispensa o kind
+        # fvg-1h (a zona vem da cadeia) e exige os flags `fvg_*_created`
+        # do TF base (sweeps, choch internal, killzones e OHLC já estão
+        # nas colunas de base / required_base da A7).
+        if sig.id == 'A7' and config.a7_variant == A7_VARIANT_CHAIN_V2:
+            kinds = tuple(k for k in kinds if k != 'fvg')
+            for name in (COL_FVG_BULLISH_CREATED, COL_FVG_BEARISH_CREATED):
+                if name not in seen:
+                    seen.add(name)
+                    cols.append(name)
         for kind in kinds:
             for tmpl in _KIND_COLUMNS[kind]:
                 for pre in ('bull', 'bear'):
@@ -1182,6 +1366,14 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
     # sem sufixo de TF (9.5e, D6.4).
     for sig in signatures:
         for name in sig.required_base:
+            if name not in seen:
+                seen.add(name)
+                cols.append(name)
+    # Bloco 2 / Onda 3a (§2.4): o qualificador transversal de killzone lê
+    # `in_kz_any` — quando não-vazio, as colunas de sessão passam a
+    # requeridas (materializam o gate; ausência ⇒ all-False silencioso).
+    if config.killzone_qualifier:
+        for name in SESSION_COLUMNS:
             if name not in seen:
                 seen.add(name)
                 cols.append(name)
@@ -1311,8 +1503,10 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
         in_kz_any = in_kz_any | _opt_bool_col(df, col, n)
     A['in_kz_any'] = in_kz_any
 
-    A['choch_bull'] = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
-    A['choch_bear'] = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
+    raw_choch_bull = df['choch_internal_bullish'].fillna(False).to_numpy(dtype='bool')
+    raw_choch_bear = df['choch_internal_bearish'].fillna(False).to_numpy(dtype='bool')
+    A['choch_bull'] = raw_choch_bull
+    A['choch_bear'] = raw_choch_bear
 
     # Bloco 2 / Onda 1 (§2.6-i): displacement como gate de confirmação.
     # Ponto único de composição: as arrays de ChoCH acima alimentam
@@ -1323,11 +1517,23 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
     # gateado (a regra qualifica o MSS, não a alternativa candlestick).
     # Modo `risk` não avalia confirmação ⇒ gate inerte por construção.
     # Gate off ⇒ nada é computado (custo zero, output byte-idêntico).
-    if config.displacement_gate == DISPLACEMENT_GATE_CONFIRM:
+    #
+    # Bloco 2 / Onda 3a (§2.2): dependência explícita — as flags de
+    # displacement passam a ser materializadas também quando a cadeia da
+    # A7 as exige (chain_v2 ∧ A7 selecionada); sem esta extensão o MSS-d
+    # (choch_internal ∧ displacement) falharia em silêncio. O MSS-d da
+    # cadeia usa o ChoCH **cru** (`raw_choch_*`), independente de o gate
+    # de confirmação estar ou não ligado.
+    sel_ids = {config.signature} if isinstance(config.signature, str) \
+        else set(config.signature)
+    a7_chain_on = (config.a7_variant == A7_VARIANT_CHAIN_V2
+                   and 'A7' in sel_ids)
+    if config.displacement_gate == DISPLACEMENT_GATE_CONFIRM or a7_chain_on:
         A['disp_bull'], A['disp_bear'] = _displacement_flags(
             A['o'], A['h'], A['low'], A['c'],
             config.displacement_body_len, config.displacement_wick_frac,
         )
+    if config.displacement_gate == DISPLACEMENT_GATE_CONFIRM:
         A['choch_bull'] = A['choch_bull'] & A['disp_bull']
         A['choch_bear'] = A['choch_bear'] & A['disp_bear']
 
@@ -1361,6 +1567,30 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
     # Idade do evento da banda == idade do último sweep (mesmo flag).
     A['bull_sweepband_age'] = A['bull_sweep_age']
     A['bear_sweepband_age'] = A['bear_sweep_age']
+
+    # Bloco 2 / Onda 3a (§2.2): precompute da cadeia da A7 — só quando
+    # `a7_variant='chain_v2'` e A7 selecionada (com defaults nada é
+    # computado; a A7 legada permanece intocada). MSS-d = ChoCH cru ∧
+    # displacement; sweep(pre) = wick ∨ retest (já em sweep_*); FVG do
+    # impulso = `fvg_{pre}_created` (base, sem sufixo). Arrays internos em
+    # `A` (`{pre}_a7chain_*`) — não são colunas de df (§2.2 / §5).
+    if a7_chain_on:
+        mss_bull = raw_choch_bull & A['disp_bull']
+        mss_bear = raw_choch_bear & A['disp_bear']
+        fvg_bull_created = _opt_bool_col(df, COL_FVG_BULLISH_CREATED, n)
+        fvg_bear_created = _opt_bool_col(df, COL_FVG_BEARISH_CREATED, n)
+        (A['bull_a7chain_low'], A['bull_a7chain_high'],
+         A['bull_a7chain_id']) = _a7_chain_ffill(
+            mss_bull, sweep_bull, fvg_bull_created, in_kz_any,
+            A['h'], A['low'], A['c'], 'bull',
+            config.a7_fvg_window, config.sweep_recency_candles,
+        )
+        (A['bear_a7chain_low'], A['bear_a7chain_high'],
+         A['bear_a7chain_id']) = _a7_chain_ffill(
+            mss_bear, sweep_bear, fvg_bear_created, in_kz_any,
+            A['h'], A['low'], A['c'], 'bear',
+            config.a7_fvg_window, config.sweep_recency_candles,
+        )
 
     rng = A['h'] - A['low']
     safe = rng > 0
@@ -1431,6 +1661,14 @@ def compute_setup_state(
       `ote_require_confluence` (D4) compõem na armação — proximidade
       (G1), gatilhos (G2/Onda 1) e `frozen_band` (G3) sem mudança.
 
+    Bloco 2 / Onda 3a (config-gated; default 'legacy' = A7 byte-idêntica):
+    - `a7_variant='chain_v2'`: substitui em memória o zone_fn/arm_fn da A7
+      pelas variantes da cadeia (`_zone_A7_chain`/`_arm_A7_chain`) e
+      remove a A7 da premissa-de-sweep (confirmação sem sweep). `a7_fvg_window`
+      (F) limita o 1º FVG após o MSS-d. Ver `_a7_chain_ffill` (§2.2/§2.3).
+    - `killzone_qualifier`: no scan de armação, `sid ∈ qualifier` só arma
+      com `in_kz_any[i]` (tempo transversal, §2.4/D5).
+
     Args:
         df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
         config: SetupConfig. Se None, usa defaults (A3, confirmation).
@@ -1475,6 +1713,12 @@ def compute_setup_state(
     # G3 (vigília de âncora só no modo legado 'promoted_id').
     prox = config.arming_proximity_pct
     check_anchor = config.anchor_invalidation == ANCHOR_INVALIDATION_PROMOTED_ID
+    # Bloco 2 / Onda 3a (§2.4, D5): qualificador transversal de killzone —
+    # assinaturas listadas só armam com `in_kz_any[i]`. A7 `chain_v2` não
+    # precisa dele (a killzone é intrínseca à cadeia); listar A7 aqui é
+    # redundante e inócuo.
+    kz_qualifier = set(config.killzone_qualifier)
+    in_kz_any = A['in_kz_any']
 
     # Precompute, por assinatura e direção, os arrays de zona/arm/confirm.
     # prec: list de (Signature, dir_arr, {direction: (zlow, zhigh, anch, arm, conf)}).
@@ -1486,11 +1730,21 @@ def compute_setup_state(
         zone_fn = sig.zone_fn
         arm_fn = sig.arm_fn
         confirm_fn = sig.confirm_fn
+        sweep_premise = sig.id in _SWEEP_PREMISE_SIGNATURE_IDS
+        # Bloco 2 / Onda 3a (§2.3): A7 `chain_v2` consome a zona da cadeia
+        # (sweep→MSS-d(kz)→FVG). Como a cadeia já consumiu o sweep, a A7
+        # sai do conjunto de premissa-de-sweep — confirmação **sem** sweep
+        # (remove a composição extra da Parte 2). Direção inalterada
+        # (`_direction_from_trend`, trend-gated — D4).
+        if sig.id == 'A7' and config.a7_variant == A7_VARIANT_CHAIN_V2:
+            zone_fn = _zone_A7_chain
+            arm_fn = _arm_A7_chain
+            sweep_premise = False
+            confirm_fn = _confirm_choch_rej   # legacy sem sweep (ChoCH+rej)
         if config.confirmation_trigger != CONFIRMATION_TRIGGER_LEGACY:
             with_sweep, without_sweep = \
                 _CONFIRM_TRIGGER_FNS[config.confirmation_trigger]
-            confirm_fn = with_sweep \
-                if sig.id in _SWEEP_PREMISE_SIGNATURE_IDS else without_sweep
+            confirm_fn = with_sweep if sweep_premise else without_sweep
         if sig.id == 'A9' and config.a9_variant == A9_VARIANT_SWEEP_BAND:
             zone_fn = _zone_A9_sweep_band
             arm_fn = _arm_A9_sweep_band
@@ -1549,6 +1803,12 @@ def compute_setup_state(
                     continue
                 zlow, zhigh, anch, arm, conf = per[d]
                 if arm[i]:
+                    # Bloco 2 / Onda 3a (§2.4, D5): tempo transversal —
+                    # se `sid ∈ killzone_qualifier` e o candle não está em
+                    # killzone, não arma (segue para a próxima assinatura).
+                    # Mesmo ponto do gate de proximidade.
+                    if sig.id in kz_qualifier and not in_kz_any[i]:
+                        continue
                     # G1: gate de proximidade — setup só nasce a até
                     # `prox` da zona; falhou → próxima assinatura da
                     # varredura (não arma). Espelha a aritmética do
