@@ -146,6 +146,11 @@ import numpy as np
 import pandas as pd
 
 from .fvg import COL_FVG_BEARISH_CREATED, COL_FVG_BULLISH_CREATED
+# Bloco 2 / Onda 3b (§2 D4): a fórmula de displacement mora agora em
+# `operators`; o nome legado `_displacement_flags` é preservado por alias
+# (interface preservation — consumidores e testes existentes intactos,
+# comportamento byte-idêntico).
+from .operators import displacement_flags as _displacement_flags
 from .sessions import SESSION_COLUMNS
 
 # === Valores de estado realizados na coluna ===
@@ -217,6 +222,15 @@ OTE_LIFECYCLES = (OTE_LIFECYCLE_LEGACY, OTE_LIFECYCLE_V2)
 A7_VARIANT_LEGACY = 'legacy'
 A7_VARIANT_CHAIN_V2 = 'chain_v2'
 A7_VARIANTS = (A7_VARIANT_LEGACY, A7_VARIANT_CHAIN_V2)
+
+# === Semântica de OB da A1 (Bloco 2 / Onda 3b, §2.10, D0/D1) ===
+# `primitive` = A1 byte-idêntica ao atual (OB swing primitivo LuxAlgo).
+# `strategic` = A1 lê o OB estratégico (§2.6-ii/§2.10) — as 6 colunas
+# `{pre}_sob_{top,bottom,id}` emitidas por `order_blocks.project_strategic_obs`
+# no tier 1h. Afeta APENAS a A1.
+OB_SEMANTIC_PRIMITIVE = 'primitive'
+OB_SEMANTIC_STRATEGIC = 'strategic'
+OB_SEMANTICS = (OB_SEMANTIC_PRIMITIVE, OB_SEMANTIC_STRATEGIC)
 
 # === Ids de assinatura válidos (D3, ordem de prioridade) ===
 # A3 > A2 > A4a > A5 > A1 > A9 > A6 > A7 > A10 (qualidade de evidência).
@@ -297,6 +311,8 @@ class SetupConfig:
     a7_variant: str = 'legacy'                   # legacy | chain_v2
     a7_fvg_window: int = 2                        # F: candles após o MSS-d p/ 1º FVG
     killzone_qualifier: tuple[str, ...] = ()     # sids que exigem in_kz_any na armação
+    # --- Bloco 2 / Onda 3b: semântica de OB da A1 (§2.10, D0/D1) ---
+    ob_semantics: str = 'primitive'   # primitive | strategic (afeta apenas a A1)
 
     def __post_init__(self) -> None:
         if self.armed_timeout_candles < 1:
@@ -424,6 +440,12 @@ class SetupConfig:
                     f'killzone_qualifier contém id inválido {sid!r}; '
                     f'válidos: {_VALID_SIGNATURE_IDS}'
                 )
+        # --- Bloco 2 / Onda 3b (§2.10): semântica de OB da A1 ---
+        if self.ob_semantics not in OB_SEMANTICS:
+            raise ValueError(
+                f'ob_semantics deve estar em {OB_SEMANTICS}, '
+                f'recebeu {self.ob_semantics!r}'
+            )
         ids = [self.signature] if isinstance(self.signature, str) \
             else list(self.signature)
         if not ids:
@@ -854,6 +876,47 @@ def _arm_A1(A: dict, direction: str) -> np.ndarray:
     ob_top, ob_bot, ob_id = _zone_arrays(A, 'ob', direction)
     has = ~np.isnan(ob_id)
     return has & _outside(A, direction, ob_bot, ob_top)
+
+
+def _zone_A1_strategic(A: dict, direction: str):
+    """A1 `ob_semantics='strategic'` (§2.10, D1): zona = banda do OB
+    estratégico; âncora = `(sob_id,)`.
+
+    OBJETIVO
+        Fornecer a banda (zlow, zhigh) e a âncora da A1 a partir do OB
+        estratégico ativo da `direction` (long → `bull_sob_*`, short →
+        `bear_sob_*`, sufixo de zona `_{zs}`). Selecionada em runtime
+        quando `SetupConfig.ob_semantics == 'strategic'` (padrão de override
+        G2/G5/A7; registro SIGNATURES intocado).
+    FONTE DE DADOS
+        `A['{pre}_sob_{top,bottom,id}']` — as 6 colunas de
+        `order_blocks.project_strategic_obs`, materializadas em
+        `_build_arrays` só quando `ob_semantics='strategic'`.
+    LIMITAÇÕES
+        Espelha `_zone_ob_only`; não decide armação (`_arm_A1_strategic`).
+    NÃO FAZER
+        Não ler o OB primitivo aqui (a semântica estratégica o substitui);
+        não inverter direção (sob bull → long).
+    """
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    return (
+        A[f'{pre}_sob_bottom'],
+        A[f'{pre}_sob_top'],
+        A[f'{pre}_sob_id'].reshape(-1, 1),
+    )
+
+
+def _arm_A1_strategic(A: dict, direction: str) -> np.ndarray:
+    """A1 `ob_semantics='strategic'` (§2.10): OB estratégico presente +
+    preço fora. Análogo exato de `_arm_A1` sobre a fonte estratégica —
+    direção (`_direction_from_trend`), confirmação, proximidade (G1),
+    gatilhos (G2/Onda 1) e `frozen_band` (G3) compõem sem mudança."""
+    pre = 'bull' if direction == DIRECTION_LONG else 'bear'
+    top = A[f'{pre}_sob_top']
+    bottom = A[f'{pre}_sob_bottom']
+    sid = A[f'{pre}_sob_id']
+    has = ~np.isnan(sid)
+    return has & _outside(A, direction, bottom, top)
 
 
 def _arm_A6(A: dict, direction: str) -> np.ndarray:
@@ -1355,6 +1418,16 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
                 if name not in seen:
                     seen.add(name)
                     cols.append(name)
+        # Bloco 2 / Onda 3b (§2.10): A1 estratégica troca o kind 'ob' pelas
+        # 6 colunas sob suffixadas (`{pre}_sob_{top,bottom,id}_{zs}`).
+        if sig.id == 'A1' and config.ob_semantics == OB_SEMANTIC_STRATEGIC:
+            kinds = tuple(k for k in kinds if k != 'ob')
+            for field in ('top', 'bottom', 'id'):
+                for pre in ('bull', 'bear'):
+                    name = f'{pre}_sob_{field}_{zs}'
+                    if name not in seen:
+                        seen.add(name)
+                        cols.append(name)
         for kind in kinds:
             for tmpl in _KIND_COLUMNS[kind]:
                 for pre in ('bull', 'bear'):
@@ -1380,57 +1453,9 @@ def _required_columns(config: SetupConfig, signatures: list[Signature]) -> list[
     return cols
 
 
-def _displacement_flags(
-    o: np.ndarray, h: np.ndarray, low: np.ndarray, c: np.ndarray,
-    body_len: int, wick_frac: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Flags de displacement por candle (Bloco 2 / Onda 1, §2.6-i).
-
-    OBJETIVO
-        Portar verbatim a fórmula Pine do `ICT Concepts [LuxAlgo]`
-        (CONCEITOS_LUXALGO_HOOKS §10.5): candle é displacement se o corpo
-        supera a SMA dos últimos `body_len` corpos (incluindo o candle
-        corrente) E ambos os wicks são menores que `wick_frac * corpo`,
-        com a direção dada pelo sinal do corpo:
-            L_body   = high - mx < body * 0.36 and mn - low < body * 0.36
-            L_bodyUP = body > meanBody and L_body and close > open
-        (bearish simétrico com `close < open`). Consumido como critério
-        de validade do MSS/ChoCH de confirmação (SMC_PRINCIPIOS §2.6,
-        regra i) quando `SetupConfig.displacement_gate == 'confirm'`.
-
-    FONTE DE DADOS
-        Arrays OHLC da base 15m já extraídos por `_build_arrays`.
-
-    LIMITAÇÕES CONHECIDAS
-        - Comparações estritas (`<`, `>`) como no Pine: doji
-          (`body == 0`) ⇒ não-displacement; corpo igual à média ⇒ idem.
-        - Primeiros `body_len - 1` candles: SMA indefinida (janela
-          incompleta) ⇒ não-displacement.
-        - Variantes medidas no golden 15m e NÃO implementadas — espaço
-          de calibração futura, não escopo desta onda: janela
-          ChoCH∈{i-1,i} ∧ disp[i] cobre 57% dos chochs (vs 47% no mesmo
-          candle); caminho FVG (choch[i-1] ∧ fvg_created[i]) = 64 bull /
-          60 bear. Fundamento: o §2.6 ratificado define displacement
-          pela fórmula de corpo ("idealmente deixando FVG" é
-          qualificador, não alternativa).
-
-    NÃO FAZER
-        - Não afrouxar as comparações para `<=`/`>=` (semântica Pine).
-        - Não gatear o braço de rejeição do `choch_or_rej` com estas
-          flags: a regra §2.6-i qualifica o MSS, não a alternativa
-          candlestick (a composição fica em `_build_arrays`).
-    """
-    body = np.abs(c - o)
-    mx = np.maximum(o, c)
-    mn = np.minimum(o, c)
-    mean_body = pd.Series(body).rolling(body_len).mean().to_numpy()
-    with np.errstate(invalid='ignore'):
-        small_wicks = ((h - mx) < wick_frac * body) \
-            & ((mn - low) < wick_frac * body)
-        big_body = body > mean_body
-    disp_bull = big_body & small_wicks & (c > o)
-    disp_bear = big_body & small_wicks & (c < o)
-    return disp_bull, disp_bear
+# Bloco 2 / Onda 3b (§2 D4): `_displacement_flags` foi extraído para
+# `operators.displacement_flags` (importado no topo por alias). O breadcrumb
+# fica aqui, onde a função vivia, para quem procura pelo nome legado.
 
 
 def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
@@ -1494,6 +1519,17 @@ def _build_arrays(df: pd.DataFrame, config: SetupConfig) -> dict:
                         <= np.minimum(v2_top, A[f'{pre}_fvg_top'])
                     )
                 A[f'{pre}_ote_confluent'] = ob_overlap | fvg_overlap
+
+    # Bloco 2 / Onda 3b (§2.10): arrays do OB estratégico — só quando
+    # `ob_semantics='strategic'` (com defaults nada é lido; a A1 primitiva
+    # permanece intocada). As 6 colunas `{pre}_sob_{top,bottom,id}` chegam
+    # do tier 1h com sufixo de zona `_{zs}`.
+    if config.ob_semantics == OB_SEMANTIC_STRATEGIC:
+        for pre in ('bull', 'bear'):
+            A[f'{pre}_sob_top'] = _opt_float_col(df, f'{pre}_sob_top_{zs}', n)
+            A[f'{pre}_sob_bottom'] = _opt_float_col(
+                df, f'{pre}_sob_bottom_{zs}', n)
+            A[f'{pre}_sob_id'] = _opt_float_col(df, f'{pre}_sob_id_{zs}', n)
 
     # Gate de killzone Silver Bullet (A7): OR booleano das 3 colunas
     # `in_kz_silver_bullet_*` (base/sem sufixo, 9.5e D6.3), fallback
@@ -1669,6 +1705,17 @@ def compute_setup_state(
     - `killzone_qualifier`: no scan de armação, `sid ∈ qualifier` só arma
       com `in_kz_any[i]` (tempo transversal, §2.4/D5).
 
+    Bloco 2 / Onda 3b (config-gated; default 'primitive' = A1 byte-idêntica):
+    - `ob_semantics='strategic'`: substitui em memória o zone_fn/arm_fn da
+      A1 pelas variantes que leem o OB estratégico
+      (`_zone_A1_strategic`/`_arm_A1_strategic`, colunas `{pre}_sob_*_{zs}`
+      de `order_blocks.project_strategic_obs`, §2.6-ii/§2.10). Direção,
+      confirmação, proximidade (G1), gatilhos (G2/Onda 1) e `frozen_band`
+      (G3) compõem sem mudança; afeta APENAS a A1. QUIRK herdado: com
+      `anchor_invalidation='promoted_id'` (legado), a substituição da zona
+      sob (novo evento-âncora) aparece como `mitigated` — a vigília de
+      âncora vê o `sob_id` trocar; o modo `frozen_band` ignora a vigília.
+
     Args:
         df: DataFrame base 15m mergeado (ver FONTE DE DADOS do módulo).
         config: SetupConfig. Se None, usa defaults (A3, confirmation).
@@ -1748,6 +1795,13 @@ def compute_setup_state(
         if sig.id == 'A9' and config.a9_variant == A9_VARIANT_SWEEP_BAND:
             zone_fn = _zone_A9_sweep_band
             arm_fn = _arm_A9_sweep_band
+        # Bloco 2 / Onda 3b (§2.10, D0/D1): A1 consome o OB estratégico
+        # quando ob_semantics='strategic' (mesmo padrão de override em
+        # runtime do G2/G5/A7; direção segue _direction_from_trend,
+        # confirmação inalterada). Registro SIGNATURES intocado.
+        if sig.id == 'A1' and config.ob_semantics == OB_SEMANTIC_STRATEGIC:
+            zone_fn = _zone_A1_strategic
+            arm_fn = _arm_A1_strategic
         # Bloco 2 / Onda 2: A10 consome a fonte v2 quando
         # ote_lifecycle='v2' (mesmo padrão de override em runtime do
         # G2/G5; direção segue _direction_from_trend).

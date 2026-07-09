@@ -138,7 +138,11 @@ def test_to1_default_regression_digest(merged_golden) -> None:
 def test_to1_analyze_additive_and_preexisting_untouched(golden_1h) -> None:
     """As 12 colunas novas presentes no analyze() com dtypes corretos;
     colunas pré-existentes inalteradas (reaplicar a v2 sobre o frame sem
-    as 12 reproduz o frame do analyze byte-idêntico)."""
+    as 12 reproduz o frame do analyze byte-idêntico).
+
+    Ordem de colunas normalizada explicitamente: o tail do `analyze` evolui
+    por ondas (Onda 3b: `SOB_COLUMNS`); a invariante deste teste é
+    conjunto+valores+dtypes, não posição."""
     for col in OTE_V2_COLUMNS:
         assert col in golden_1h.columns, col
     for pre in ('bull', 'bear'):
@@ -151,6 +155,10 @@ def test_to1_analyze_additive_and_preexisting_untouched(golden_1h) -> None:
     # Não muta o caller.
     pd.testing.assert_frame_equal(base, base_snapshot)
     # Pré-existentes intocadas + 12 novas idênticas às do engine.
+    # `project_ote_zones_v2` reanexa a v2 ao fim; com o tail do analyze já
+    # evoluído (Onda 3b: SOB_COLUMNS após OTE_V2), normaliza-se a ordem de
+    # colunas pela referência antes do assert estrito (conjunto+valores+dtypes).
+    redone = redone[golden_1h.columns]
     pd.testing.assert_frame_equal(redone, golden_1h)
 
 

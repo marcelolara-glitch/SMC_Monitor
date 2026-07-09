@@ -17,6 +17,12 @@ OBJETIVO
     kill (golden 1h), e A10 solo em 4 configurações
     (legacy | v2 | v2+eq | v2+eq+conf) sobre a base Bloco-1-ON +
     `displacement_gate='confirm'` (gates duros: T-O1–T-O7).
+    Do Bloco 2 / Onda 3a (§0/§4), a cadeia da A7 + tempo transversal
+    (`--a7`, `--kzq`). Do Bloco 2 / Onda 3b (§0/§4), o OB estratégico
+    (`--ob`): a tabela da §0 no tier 1h (zonas/kills/persistência por lado;
+    co-presença e delta do centro vs primitivo) e A1 solo primitive vs
+    strategic sobre Bloco-1-ON + `displacement_gate='confirm'` (gates duros:
+    T-B1–T-B7).
 
 FONTE DE DADOS
     Uma de duas entradas:
@@ -44,7 +50,8 @@ NÃO FAZER
 USO
     python -m tools.diag_setup_state_counters --golden-dir tests/golden/data \
         --prox 0.02 --trigger choch --anchor frozen_band --a9 sweep_band \
-        --displacement confirm --ote v2 --ote-eq --ote-conf
+        --displacement confirm --ote v2 --ote-eq --ote-conf --a7 chain_v2 \
+        --ob strategic
 """
 from __future__ import annotations
 
@@ -238,6 +245,10 @@ def main() -> None:
     ap.add_argument('--kzq', default='',
                     help='killzone_qualifier: ids separados por vírgula '
                          '(default: vazio)')
+    # Bloco 2 / Onda 3b (default = legado, primitivo):
+    ap.add_argument('--ob', default='primitive',
+                    choices=('primitive', 'strategic'),
+                    help='Bloco 2 / Onda 3b ob_semantics (primitive|strategic)')
     ap.add_argument('--no-multi', action='store_true',
                     help='pular o bloco multi vs solo')
     args = ap.parse_args()
@@ -257,7 +268,7 @@ def main() -> None:
           f'anchor={args.anchor}  a9={args.a9}  '
           f'displacement={args.displacement}  ote={args.ote}  '
           f'ote_eq={args.ote_eq}  ote_conf={args.ote_conf}  '
-          f'a7={args.a7}  kzq={",".join(kzq) or "-"}')
+          f'a7={args.a7}  kzq={",".join(kzq) or "-"}  ob={args.ob}')
     print(f'assinaturas={",".join(sids)}  modos={",".join(modes)}\n')
 
     def cfg(signature, mode, displacement=None):
@@ -275,6 +286,7 @@ def main() -> None:
             ote_require_confluence=args.ote_conf,
             a7_variant=args.a7,
             killzone_qualifier=kzq,
+            ob_semantics=args.ob,
         )
 
     solo_counts: dict[tuple[str, str], int] = {}
@@ -421,6 +433,57 @@ def main() -> None:
                       f'fora={outside:>5}')
     else:
         print('  qualifier: use --kzq <ids> para o efeito por assinatura')
+    print()
+
+    # Bloco 2 / Onda 3b (§0/§4): OB estratégico + consumo pela A1. A tabela
+    # da §0 (zonas/kills/persistência por lado; co-presença e delta vs
+    # primitivo) é reproduzida sobre o tier 1h (analyze do golden 1h), onde
+    # foi medida; A1 solo primitive vs strategic sobre Bloco-1-ON +
+    # displacement='confirm'.
+    print('=== OB estratégico (Bloco 2 / Onda 3b) ===')
+    df1h = None
+    if args.golden_dir is not None:
+        df1h = analyze(_load_ohlcv(
+            args.golden_dir / 'btc_usdt_swap_1h_window.csv')).df
+    if df1h is None:
+        print('  tabela §0 (tier 1h): requer --golden-dir (analyze do 1h)')
+    else:
+        print('  tabela §0 (golden 1h) — zonas/kills/persistência por lado:')
+        close1h = df1h['close'].to_numpy(dtype='float64')
+        for pre in ('bull', 'bear'):
+            sid = df1h[f'{pre}_sob_id']
+            zid = np.array(
+                [np.nan if pd.isna(v) else float(v) for v in sid])
+            births, kills_close, replaces = _chain_births_kills(zid)
+            persist = float(sid.notna().mean()) * 100
+            # Co-presença com o primitivo promovido (swing OB ativo 1h) e
+            # delta mediano do centro da banda (frac. do preço).
+            copres = (sid.notna()
+                      & df1h[f'active_{pre}_swing_ob_id'].notna()).to_numpy()
+            sc = (df1h[f'{pre}_sob_top'].to_numpy(dtype='float64')
+                  + df1h[f'{pre}_sob_bottom'].to_numpy(dtype='float64')) / 2
+            oc = (df1h[f'active_{pre}_swing_ob_top'].to_numpy(dtype='float64')
+                  + df1h[f'active_{pre}_swing_ob_bottom'].to_numpy(
+                      dtype='float64')) / 2
+            identical = int((copres & (sc == oc)).sum())
+            delta = np.abs(sc - oc) / close1h
+            dmed = float(np.median(delta[copres])) * 100 if copres.any() else 0.0
+            print(f'    [{pre}] criadas={births}  '
+                  f'kills(close-through)={kills_close}  '
+                  f'substituicoes={replaces}  persist={persist:.1f}%')
+            print(f'          co-presenca={int(copres.sum())}  '
+                  f'banda_identica={identical}  '
+                  f'delta_centro_med={dmed:.2f}% do preco')
+    print("  A1 solo (Bloco-1-ON + displacement='confirm'): "
+          'primitive | strategic')
+    for obsem in ('primitive', 'strategic'):
+        res = compute_setup_state(merged, SetupConfig(
+            signature='A1', entry_mode='confirmation',
+            arming_proximity_pct=0.02, confirmation_trigger='choch',
+            anchor_invalidation='frozen_band', a9_variant='sweep_band',
+            displacement_gate='confirm', ob_semantics=obsem,
+        ))
+        report_signature(res, f'A1 / {obsem}', prox_report)
     print()
 
     if args.no_multi or len(sids) < 2:

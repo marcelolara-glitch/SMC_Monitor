@@ -49,6 +49,7 @@ from smc_engine import (
     SetupConfig,
 )
 from smc_engine.fib_ote import OTE_V2_COLUMNS
+from smc_engine.order_blocks import SOB_COLUMNS
 from smc_engine.setup_state import _make_setup_id
 from tools.mtf_align import align_informative
 
@@ -81,39 +82,41 @@ def _golden_pipeline() -> pd.DataFrame:
 # §6 — invariante de regressão: 66 → 78 colunas, aditivo ao fim
 # ============================================================
 
-def test_golden_4h_goes_66_to_113_columns() -> None:
-    """§6: no golden 4H (com volume), analyze() vai de 66 para 113 colunas.
+def test_golden_4h_goes_66_to_119_columns() -> None:
+    """§6: no golden 4H (com volume), analyze() vai de 66 para 119 colunas.
 
-    Linhagem: 66 → 101 (Wave 9.5d: +26 zona, +9 hooks) → 113 (Bloco 2 /
-    Onda 2: +12 OTE_V2_COLUMNS, aditivas ao fim). Aditivo ao fim — o gate
-    real do §7 é aditividade, não a contagem."""
+    Linhagem: 66 → 101 (9.5d) → 113 (Onda 2) → 119 (Onda 3b: +6
+    SOB_COLUMNS, aditivas ao fim). Aditivo ao fim — o gate real do §7 é
+    aditividade, não a contagem."""
     result = analyze(_load_ohlcv('btc_usdt_swap_4h_window.csv'))
-    assert len(result.df.columns) == 113
+    assert len(result.df.columns) == 119
     n = len(ACTIVE_ZONE_COLUMNS)
     hooks = list(SESSION_COLUMNS) + list(OTE_COLUMNS)
     h = len(hooks)
-    v2 = list(OTE_V2_COLUMNS)
-    v = len(v2)
-    # Bloco de zona ativa contíguo → hooks 9.5d → OTE_V2 (tail real).
-    assert list(result.df.columns[-(n + h + v):-(h + v)]) == list(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-(h + v):-v]) == hooks
-    assert list(result.df.columns[-v:]) == v2
+    v = len(OTE_V2_COLUMNS)
+    s = len(SOB_COLUMNS)
+    # zona ativa contígua → hooks 9.5d → OTE_V2 (Onda 2) → SOB (tail real).
+    assert list(result.df.columns[-(n + h + v + s):-(h + v + s)]) == list(ACTIVE_ZONE_COLUMNS)
+    assert list(result.df.columns[-(h + v + s):-(v + s)]) == hooks
+    assert list(result.df.columns[-(v + s):-s]) == list(OTE_V2_COLUMNS)
+    assert list(result.df.columns[-s:]) == list(SOB_COLUMNS)
 
 
 def test_analyze_adds_exactly_26_zone_columns(synthetic_df: pd.DataFrame) -> None:
     """As 26 colunas de zona são anexadas em bloco contíguo (ordem das
-    existentes preservada), seguidas pelos 9 hooks da Wave 9.5d e pelas
-    12 OTE_V2_COLUMNS da Onda 2.
-    synthetic_df não tem `volume` → 65 base + 26 + 9 + 12 = 112."""
+    existentes preservada), seguidas pelos 9 hooks da Wave 9.5d, pelas
+    12 OTE_V2_COLUMNS da Onda 2 e pelas 6 SOB_COLUMNS da Onda 3b.
+    synthetic_df não tem `volume` → 65 base + 26 + 9 + 12 + 6 = 118."""
     result = analyze(synthetic_df)
     n = len(ACTIVE_ZONE_COLUMNS)
     hooks = list(SESSION_COLUMNS) + list(OTE_COLUMNS)
     h = len(hooks)
-    v2 = list(OTE_V2_COLUMNS)
-    v = len(v2)
-    assert list(result.df.columns[-(n + h + v):-(h + v)]) == list(ACTIVE_ZONE_COLUMNS)
-    assert list(result.df.columns[-(h + v):-v]) == hooks
-    assert list(result.df.columns[-v:]) == v2
+    v = len(OTE_V2_COLUMNS)
+    s = len(SOB_COLUMNS)
+    assert list(result.df.columns[-(n + h + v + s):-(h + v + s)]) == list(ACTIVE_ZONE_COLUMNS)
+    assert list(result.df.columns[-(h + v + s):-(v + s)]) == hooks
+    assert list(result.df.columns[-(v + s):-s]) == list(OTE_V2_COLUMNS)
+    assert list(result.df.columns[-s:]) == list(SOB_COLUMNS)
     # exatamente len(ACTIVE_ZONE_COLUMNS) colunas a mais que o set sem promoção.
     non_zone = [c for c in result.df.columns if c not in ACTIVE_ZONE_COLUMNS]
     assert len(non_zone) == len(result.df.columns) - n

@@ -35,6 +35,7 @@ from typing import Any
 import pandas as pd
 
 from . import fib_ote
+from . import order_blocks
 from .config import SMCConfig
 from .fib_ote import project_ote_zones
 from .fvg import compose_balanced_price_ranges, detect_fair_value_gaps
@@ -193,6 +194,12 @@ def analyze(
     # baratas); o consumo pela A10 é config-gated em
     # SetupConfig.ote_lifecycle (default 'legacy').
     work = fib_ote.project_ote_zones_v2(work)
+    # Bloco 2 / Onda 3b (PRINCIPIOS §2.10 + §2.6-ii) — OB estratégico:
+    # detector paralelo ao primitivo, ancorado em (BOS∨ChoCH internal) ∧
+    # displacement, com UMA zona por lado. Emissão incondicional (6 colunas
+    # aditivas baratas, `SOB_COLUMNS`); o consumo pela A1 é config-gated em
+    # SetupConfig.ob_semantics (default 'primitive'). Fecha a regra §2.6-ii.
+    work = order_blocks.project_strategic_obs(work)
 
     from . import __version__
     meta: dict[str, Any] = {
@@ -209,6 +216,7 @@ def analyze(
             'tag_sessions',
             'project_ote_zones',
             'project_ote_zones_v2',
+            'project_strategic_obs',
         ],
         'candle_count': len(work),
         'config_used': asdict(config),
