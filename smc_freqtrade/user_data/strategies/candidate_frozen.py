@@ -62,6 +62,56 @@ SIDS_GRUPO_R: tuple = ('A5', 'A7')
 # Resulta em: A3=0 > A2=1 > A4a=2 > A5=3 > A1=4 > A9=5 > A6=6 > A7=7 > A10=8.
 D3_PRIORITY: dict[str, int] = {sid: i for i, sid in enumerate(SIGNATURES)}
 
+# === Colunas exigidas pela entrada (fail-loud, §2 da emenda) ===
+# As 2 colunas que `populate_entry_trend` consome por sid — estado e direção —
+# para cada sid da candidata (Grupo C depois Grupo R, 9 sids → 18 nomes).
+# Após `populate_indicators`, `compute_setup_state_multi` emite as 7 colunas
+# `{col}__{sid}` de cada sid; estas 2 são obrigatórias e sua ausência só pode
+# ser bug de fiação. Construída por comprehension (não hardcodada nome a nome).
+CANDIDATE_REQUIRED_COLUMNS: tuple[str, ...] = tuple(
+    f'{col}__{sid}'
+    for sid in (SIDS_GRUPO_C + SIDS_GRUPO_R)
+    for col in ('setup_state', 'setup_direction')
+)
+
+
+def require_candidate_columns(columns) -> None:
+    """Falha alto se faltar qualquer coluna sufixada exigida pela entrada.
+
+    OBJETIVO
+        Trocar o silêncio pelo erro: após `populate_indicators`, as colunas
+        `setup_state__{sid}`/`setup_direction__{sid}` dos 9 sids são
+        **obrigatórias**. Tolerá-las ausentes (fallback all-None) produziria um
+        backtest limpo com zero entradas — indistinguível de "sem edge" — e
+        parkearia assinaturas espuriamente no GE-1. Este helper levanta
+        `ValueError` listando TODAS as ausentes (não só a primeira) e apontando
+        a causa provável.
+
+    FONTE DE DADOS
+        `columns`: qualquer iterável de nomes de coluna (ex.: `df.columns`).
+        `CANDIDATE_REQUIRED_COLUMNS` (as 18 exigidas).
+
+    LIMITAÇÕES CONHECIDAS
+        Verifica apenas presença de nome (não dtype/valores). Precedente: a
+        guarda PR85-style do `SetupConfig.__post_init__` (flag ligada com fonte
+        que não emite a coluna ⇒ falha alto, não config silenciosamente morta).
+
+    NÃO FAZER
+        Não importar pandas/freqtrade; não tolerar coluna ausente como "sid
+        inativo" (na Candidate isso é bug de fiação, não estado de mercado).
+    """
+    present = set(columns)
+    missing = [c for c in CANDIDATE_REQUIRED_COLUMNS if c not in present]
+    if missing:
+        raise ValueError(
+            f'colunas sufixadas obrigatórias ausentes ({len(missing)}): '
+            f'{missing}. Após populate_indicators, as colunas '
+            f'setup_state__{{sid}}/setup_direction__{{sid}} dos 9 sids da '
+            f'candidata são obrigatórias — a ausência só pode ser bug de '
+            f'fiação de compute_setup_state_multi em populate_indicators (não '
+            f'"sid inativo": na Candidate isso não é estado de mercado).'
+        )
+
 
 def build_cfg_c() -> SetupConfig:
     """Grupo C — habitat confirmation congelado (doc §1.1).

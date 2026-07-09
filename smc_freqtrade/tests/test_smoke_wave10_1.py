@@ -51,10 +51,13 @@ from smc_engine import (  # noqa: E402
 from smc_engine.setup_state import compute_setup_state_multi  # noqa: E402
 from tools.mtf_align import align_informative  # noqa: E402
 
+import pytest  # noqa: E402
+
 from candidate_frozen import (  # noqa: E402
     build_cfg_c,
     build_cfg_r,
     arbitrate_d3,
+    require_candidate_columns,
     D3_PRIORITY,
     SIDS_GRUPO_C,
     SIDS_GRUPO_R,
@@ -262,3 +265,30 @@ def test_t4_confirmed_counts_per_sid_report() -> None:
     # Sanity estrutural: todas as 9 colunas de estado existem.
     for sid in SIDS_GRUPO_C + SIDS_GRUPO_R:
         assert f"setup_state__{sid}" in res.columns
+
+
+# ============================================================
+# T5 — fail-loud em coluna sufixada ausente (emenda de auditoria)
+# ============================================================
+
+def test_t5_require_columns_passes_on_wired_df() -> None:
+    """Sobre o df já processado pelas duas chamadas de multi (fiação
+    completa), `require_candidate_columns` não levanta."""
+    golden = _merged_golden()
+    res = compute_setup_state_multi(golden, build_cfg_c())
+    res = compute_setup_state_multi(res, build_cfg_r())
+    # Não deve levantar (todas as 18 colunas exigidas presentes).
+    require_candidate_columns(res.columns)
+
+
+def test_t5_require_columns_fails_loud_listing_missing() -> None:
+    """Dropar 2 colunas de sids distintos ⇒ ValueError citando AMBAS."""
+    golden = _merged_golden()
+    res = compute_setup_state_multi(golden, build_cfg_c())
+    res = compute_setup_state_multi(res, build_cfg_r())
+    dropped = res.drop(columns=["setup_state__A3", "setup_direction__A7"])
+    with pytest.raises(ValueError) as excinfo:
+        require_candidate_columns(dropped.columns)
+    msg = str(excinfo.value)
+    assert "setup_state__A3" in msg
+    assert "setup_direction__A7" in msg

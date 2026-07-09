@@ -72,6 +72,7 @@ from candidate_frozen import (  # noqa: E402
     build_cfg_c,
     build_cfg_r,
     arbitrate_d3,
+    require_candidate_columns,
     SIDS_GRUPO_C,
     SIDS_GRUPO_R,
 )
@@ -158,9 +159,14 @@ class SMCStrategyCandidate(SMCStrategy):
             `entry_mode='hybrid'` é stub (`NotImplementedError` herdado). Só
             velas com >=1 CONFIRMED entram no laço (as demais são varridas
             vetorialmente) — custo dominado pela esparsidade dos CONFIRMED.
+            As colunas `setup_state__{sid}`/`setup_direction__{sid}` dos 9 sids
+            são **obrigatórias** aqui: `require_candidate_columns` falha alto se
+            faltar qualquer uma (bug de fiação, não "sid inativo") — sem
+            fallback silencioso (emenda de auditoria, precedente PR #85).
         NÃO FAZER
             Não entrar fora de CONFIRMED; não arbitrar por outra ordem que não
-            a prioridade D3; não emitir quando as direções conflitam.
+            a prioridade D3; não emitir quando as direções conflitam; não
+            tolerar coluna sufixada ausente.
         """
         if self.entry_mode == "hybrid":
             raise NotImplementedError(
@@ -169,29 +175,25 @@ class SMCStrategyCandidate(SMCStrategy):
                 "entry_mode='strict'."
             )
 
+        # Fail-loud: as 18 colunas sufixadas consumidas abaixo são obrigatórias
+        # após populate_indicators; ausência é bug de fiação, não sid inativo.
+        require_candidate_columns(dataframe.columns)
+
         n = len(dataframe)
         enter_long = np.zeros(n, dtype="int64")
         enter_short = np.zeros(n, dtype="int64")
         enter_tag = np.array([""] * n, dtype=object)
         conflict = np.zeros(n, dtype="int64")
 
-        # Extrai estado/direção por sid (colunas ausentes → all-None: sid
-        # inativo, não erro — coerente com o multi de assinaturas disjuntas).
+        # Extrai estado/direção por sid (colunas garantidas presentes pela
+        # guarda `require_candidate_columns` acima — acesso direto, sem fallback).
         states: dict = {}
         dirs: dict = {}
         for sid in _ALL_SIDS:
             scol = f"setup_state__{sid}"
             dcol = f"setup_direction__{sid}"
-            states[sid] = (
-                dataframe[scol].to_numpy(dtype=object)
-                if scol in dataframe.columns
-                else np.array([None] * n, dtype=object)
-            )
-            dirs[sid] = (
-                dataframe[dcol].to_numpy(dtype=object)
-                if dcol in dataframe.columns
-                else np.array([None] * n, dtype=object)
-            )
+            states[sid] = dataframe[scol].to_numpy(dtype=object)
+            dirs[sid] = dataframe[dcol].to_numpy(dtype=object)
 
         # Máscara vetorizada: velas com pelo menos um sid CONFIRMED.
         any_confirmed = np.zeros(n, dtype=bool)
