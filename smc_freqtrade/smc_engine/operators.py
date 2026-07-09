@@ -243,3 +243,50 @@ def cross_under(a: pd.Series, b: pd.Series) -> pd.Series:
         em casos de igualdade prévia.
     """
     return (a < b) & (a.shift(1) >= b.shift(1))
+
+
+def displacement_flags(
+    o: np.ndarray, h: np.ndarray, low: np.ndarray, c: np.ndarray,
+    body_len: int, wick_frac: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Flags de displacement por candle (CONCEITOS_LUXALGO_HOOKS §10.5,
+    SMC_PRINCIPIOS §2.6).
+
+    OBJETIVO
+        Portar verbatim a fórmula Pine do `ICT Concepts [LuxAlgo]`
+        (CONCEITOS_LUXALGO_HOOKS §10.5): candle é displacement se o corpo
+        supera a SMA dos últimos `body_len` corpos (incluindo o candle
+        corrente) E ambos os wicks são menores que `wick_frac * corpo`,
+        com a direção dada pelo sinal do corpo:
+            L_body   = high - mx < body * 0.36 and mn - low < body * 0.36
+            L_bodyUP = body > meanBody and L_body and close > open
+        (bearish simétrico com `close < open`). Fundação compartilhada
+        pelo gate de confirmação da A1/MSS (SMC_PRINCIPIOS §2.6-i, via
+        alias `setup_state._displacement_flags`) e pelo evento-âncora do
+        OB estratégico (§2.6-ii/§2.10, `order_blocks.project_strategic_obs`).
+
+    FONTE DE DADOS
+        Arrays OHLC (`o`, `h`, `low`, `c`) do mesmo índice/comprimento.
+
+    LIMITAÇÕES CONHECIDAS
+        - Comparações estritas (`<`, `>`) como no Pine: doji
+          (`body == 0`) ⇒ não-displacement; corpo igual à média ⇒ idem.
+        - Primeiros `body_len - 1` candles: SMA indefinida (janela
+          incompleta) ⇒ não-displacement.
+
+    NÃO FAZER
+        - Não afrouxar as comparações para `<=`/`>=` (semântica Pine).
+        - Não introduzir dependência da camada SMC — a fórmula é
+          geometria de candle pura (corpo/pavios vs média de corpo).
+    """
+    body = np.abs(c - o)
+    mx = np.maximum(o, c)
+    mn = np.minimum(o, c)
+    mean_body = pd.Series(body).rolling(body_len).mean().to_numpy()
+    with np.errstate(invalid='ignore'):
+        small_wicks = ((h - mx) < wick_frac * body) \
+            & ((mn - low) < wick_frac * body)
+        big_body = body > mean_body
+    disp_bull = big_body & small_wicks & (c > o)
+    disp_bear = big_body & small_wicks & (c < o)
+    return disp_bull, disp_bear

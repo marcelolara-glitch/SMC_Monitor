@@ -75,12 +75,14 @@ def test_analyze_meta_fields(synthetic_df: pd.DataFrame) -> None:
     assert result.meta['engine_version'] == __version__
     # Wave 9.5d: +tag_sessions +project_ote_zones (hooks §10.6/§10.3).
     # Bloco 2 / Onda 2: +project_ote_zones_v2 (ciclo de vida §2.7).
-    assert len(result.meta['modules_run']) == 11
+    # Bloco 2 / Onda 3b: +project_strategic_obs (OB estratégico §2.10).
+    assert len(result.meta['modules_run']) == 12
     assert 'detect_eqh_eql' in result.meta['modules_run']
     assert 'compose_balanced_price_ranges' in result.meta['modules_run']
     assert 'tag_sessions' in result.meta['modules_run']
     assert 'project_ote_zones' in result.meta['modules_run']
     assert 'project_ote_zones_v2' in result.meta['modules_run']
+    assert 'project_strategic_obs' in result.meta['modules_run']
     assert result.meta['candle_count'] == len(synthetic_df)
     assert isinstance(result.meta['config_used'], dict)
     assert 'pivot_swings_length' in result.meta['config_used']

@@ -57,6 +57,17 @@ LIMITAÇÕES CONHECIDAS
     Cap de 100 OBs do Pine (linhas 234-235) NÃO portado — bound de
     implementação Pine, não regra semântica (briefing §2 P10).
 
+    Onda 3b (Bloco 2, §2.10 + §2.6-ii) adiciona `project_strategic_obs`
+    (detector paralelo, aditivo) — ver docstring da função. G7 (paridade
+    do parsed-extreme, D6): o flip `parsed_high=low`/`parsed_low=high` de
+    `_compute_parsed_high_low` em barras de alta volatilidade
+    (`high − low ≥ 2·volatility`, modo default `'Atr'` com
+    `atr_wilder(200)`; Pine linhas 126-128) é **paridade Pine verbatim**.
+    OBs de ledger com `bar_high ≤ bar_low` (4 casos no golden 15m, todos
+    `internal`) são artefato **contido** dessa paridade: zonas promovidas
+    swing e breaker NÃO são afetadas; consumidores futuros de OBs
+    `internal` devem normalizar com `max/min`. Nenhuma mudança de código.
+
 NÃO FAZER
     Não usar shift(-N) em ponto algum.
     Não recomputar BOS/CHoCH — consumir as 8 booleans da Onda 5.
@@ -80,7 +91,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from .operators import atr_wilder, cum_sum, true_range
+from .operators import atr_wilder, cum_sum, displacement_flags, true_range
 from .pivots import (
     COL_INTERNAL_HIGH_IDX,
     COL_INTERNAL_LOW_IDX,
@@ -113,6 +124,28 @@ COL_OB_INTERNAL_BULLISH_MITIGATED = 'ob_internal_bullish_mitigated'
 COL_OB_INTERNAL_BEARISH_MITIGATED = 'ob_internal_bearish_mitigated'
 COL_OB_SWING_BULLISH_MITIGATED = 'ob_swing_bullish_mitigated'
 COL_OB_SWING_BEARISH_MITIGATED = 'ob_swing_bearish_mitigated'
+
+
+# ============================================================
+# OB estratégico (Bloco 2 / Onda 3b, §2.10 + §2.6-ii). As 6 colunas
+# aditivas emitidas por `project_strategic_obs`, na ordem de emissão.
+# Consumidores (engine, testes, A1 estratégica) referenciam a tupla —
+# não inline-ar as strings (padrão dos §4.2 e OTE_V2_COLUMNS).
+# ============================================================
+_SOB_FIELDS = ('top', 'bottom', 'id')
+SOB_COLUMNS = tuple(
+    f'{pre}_sob_{field}'
+    for pre in ('bull', 'bear')
+    for field in _SOB_FIELDS
+)
+
+# Parâmetros do displacement do evento-âncora (§10.5, verbatim do gate de
+# confirmação da Onda 1). Não expostos em SMCConfig nesta onda (§11).
+_SOB_DISPLACEMENT_BODY_LEN = 10
+_SOB_DISPLACEMENT_WICK_FRAC = 0.36
+# K: candles retrocedidos a partir de t−1 na busca da vela do OB (§3.1).
+# Parâmetro de calibração futura; não exposto em SMCConfig (§11).
+_SOB_LOOKBACK_K = 5
 
 
 # Ordem canônica de processamento por candle (briefing §2 P7):
@@ -594,3 +627,153 @@ def detect_order_blocks(
 
     ledger = _build_ledger(records)
     return df_per_candle, ledger
+
+
+def project_strategic_obs(
+    df: pd.DataFrame,
+    *,
+    k_lookback: int = _SOB_LOOKBACK_K,
+    body_len: int = _SOB_DISPLACEMENT_BODY_LEN,
+    wick_frac: float = _SOB_DISPLACEMENT_WICK_FRAC,
+) -> pd.DataFrame:
+    """Projeta o OB **estratégico** (Bloco 2 / Onda 3b, §2.10 + §2.6-ii).
+
+    OBJETIVO
+        Detector paralelo (aditivo, independente do primitivo LuxAlgo) do
+        OB estratégico: objeto genuinamente distinto (F5/P-4 quantificada —
+        banda idêntica ao primitivo 0/839 bull, 0/1.147 bear na
+        co-presença; delta mediano do centro 2,92%/5,07% do preço), que
+        permite à A1 testar a semântica ICT sob a mesma FSM. Fecha a regra
+        §2.6-ii: OB estratégico válido **apenas** com displacement —
+        satisfeita por construção (o evento-âncora exige displacement).
+
+        Passo único O(n), causal (sem `shift(-N)`), estado por lado com
+        **no máximo UMA zona ativa** (D3):
+
+        - Evento-âncora (D2): `(bos_internal_{pre} ∨ choch_internal_{pre})
+          ∧ displacement_{pre}` — estrutura-tomada interna + displacement
+          (via `operators.displacement_flags`, §10.5).
+        - Vela do OB: a partir de `t−1`, retrocede até `K` (default 5)
+          candles procurando a primeira vela de **corpo oposto** (bull:
+          `close < open`; bear: `close > open`; doji `close == open` é
+          pulado). Não encontrada em K ⇒ o evento não gera zona.
+        - Banda: range integral da vela do OB `[low_j, high_j]`. `id` =
+          índice de barra da vela do OB.
+        - Ordem no mesmo candle (kill antes de criar, como o OTE v2):
+          (i) zona ativa + close além do lado oposto (bull: `close <
+          bottom`; bear: `close > top`) ⇒ morre (`mitigated`);
+          (ii) novo evento-âncora ⇒ a zona ativa morre (`replaced`) e a
+          nova nasce em `t`, emitindo a partir de `t`.
+
+    FONTE DE DADOS
+        DataFrame com OHLC (`open`,`high`,`low`,`close`) e as 4 booleans de
+        estrutura internal (`bos_internal_*`, `choch_internal_*`) já
+        materializadas por `detect_structure` — presentes no ponto do
+        detector no `analyze` (estrutura roda antes dos OBs).
+
+    LIMITAÇÕES CONHECIDAS
+        - Refinamento mean-threshold 50% da banda: NÃO implementado
+          (calibração futura registrada — §11); a banda é o range integral.
+        - `K` é parâmetro da função (default 5), NÃO exposto em SMCConfig
+          nesta onda (calibração futura — §11).
+        - Lookahead-safe: só consome colunas já materializadas (estrutura
+          + OHLC do próprio candle e anteriores); o scan da vela do OB
+          retrocede (nunca avança).
+
+    NÃO FAZER
+        - Não expor `K` em SMCConfig; não implementar mean-threshold,
+          multiplicidade de zonas nem consumo por A2/A3/A5 (§11).
+        - Não tocar o primitivo (`detect_order_blocks`) nem o parsed-extreme
+          (G7 é documental — ver LIMITAÇÕES do módulo).
+        - Não mutar o `df` do caller — opera sobre cópia.
+
+    Args:
+        df: DataFrame (ver FONTE DE DADOS).
+        k_lookback: candles retrocedidos a partir de `t−1` na busca da
+            vela do OB (default `K=5`).
+        body_len: janela da SMA de corpo do displacement (§10.5, default 10).
+        wick_frac: fração máxima dos wicks vs corpo (§10.5, default 0.36).
+
+    Returns:
+        Cópia de `df` + 6 colunas (`SOB_COLUMNS`). `*_top`/`*_bottom`
+        float64 (NaN sem zona); `*_id` Int64 nullable (<NA> sem zona;
+        valor = índice de barra da vela do OB).
+    """
+    out = df.copy()
+    o = df['open'].to_numpy(dtype='float64')
+    h = df['high'].to_numpy(dtype='float64')
+    low = df['low'].to_numpy(dtype='float64')
+    c = df['close'].to_numpy(dtype='float64')
+
+    disp_bull, disp_bear = displacement_flags(o, h, low, c, body_len, wick_frac)
+    bos_bull = df[COL_BOS_INTERNAL_BULLISH].fillna(False).to_numpy(dtype='bool')
+    bos_bear = df[COL_BOS_INTERNAL_BEARISH].fillna(False).to_numpy(dtype='bool')
+    choch_bull = (
+        df[COL_CHOCH_INTERNAL_BULLISH].fillna(False).to_numpy(dtype='bool')
+    )
+    choch_bear = (
+        df[COL_CHOCH_INTERNAL_BEARISH].fillna(False).to_numpy(dtype='bool')
+    )
+    event = {
+        'bull': (bos_bull | choch_bull) & disp_bull,
+        'bear': (bos_bear | choch_bear) & disp_bear,
+    }
+
+    n = len(df)
+    arrs = {
+        pre: {
+            'top': np.full(n, np.nan, dtype='float64'),
+            'bottom': np.full(n, np.nan, dtype='float64'),
+            'id': np.full(n, np.nan, dtype='float64'),
+        }
+        for pre in ('bull', 'bear')
+    }
+    # Estado por lado: None = sem zona; dict = zona ativa (UMA por lado).
+    zone: dict[str, dict | None] = {'bull': None, 'bear': None}
+
+    def _find_ob_candle(pre: str, t: int) -> int | None:
+        """Primeira vela de corpo oposto em [t−1, t−K] (doji pulado)."""
+        for j in range(t - 1, t - 1 - k_lookback, -1):
+            if j < 0:
+                break
+            body = c[j] - o[j]
+            if body == 0.0:
+                continue          # doji: pulado
+            if pre == 'bull' and body < 0.0:
+                return j          # bull: vela de corpo bear (close < open)
+            if pre == 'bear' and body > 0.0:
+                return j          # bear: vela de corpo bull (close > open)
+        return None
+
+    for t in range(n):
+        for pre in ('bull', 'bear'):
+            z = zone[pre]
+            # (i) mitigação: close além do lado oposto ⇒ morre.
+            if z is not None:
+                if pre == 'bull' and c[t] < z['bottom']:
+                    zone[pre] = None
+                elif pre == 'bear' and c[t] > z['top']:
+                    zone[pre] = None
+            # (ii) novo evento-âncora: substitui (kill) + cria em t.
+            if event[pre][t]:
+                j = _find_ob_candle(pre, t)
+                if j is not None:
+                    zone[pre] = {
+                        'top': h[j],
+                        'bottom': low[j],
+                        'id': float(j),
+                    }
+            # Emissão do candle t (zona vigente após kill/create).
+            z = zone[pre]
+            if z is not None:
+                a = arrs[pre]
+                a['top'][t] = z['top']
+                a['bottom'][t] = z['bottom']
+                a['id'][t] = z['id']
+
+    for pre in ('bull', 'bear'):
+        a = arrs[pre]
+        out[f'{pre}_sob_top'] = a['top']
+        out[f'{pre}_sob_bottom'] = a['bottom']
+        out[f'{pre}_sob_id'] = pd.array(a['id'], dtype='Int64')
+    return out

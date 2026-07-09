@@ -546,8 +546,10 @@ L_bodyUP = body > meanBody and L_body and close > open
 **Status:** Absorvido parcialmente (Bloco 2 / Onda 1) — fórmula portada verbatim em
 `setup_state._displacement_flags` como gate de confirmação (`displacement_gate`,
 PRINCIPIOS §2.6-i). Usos remanescentes reservados: filtro de qualidade FVG
-(`volatility_threshold`) e refinamento de Volumetric OB; consumo pelo OB estratégico
-(§2.6-ii/§2.10) pertence à Onda 3.
+(`volatility_threshold`) e refinamento de Volumetric OB. Consumo pelo OB estratégico:
+**absorvido (Bloco 2 / Onda 3b)** — `order_blocks.project_strategic_obs` ancora a
+detecção em (BOS∨ChoCH internal) ∧ displacement, fechando a regra §2.6-ii; fórmula
+compartilhada via `operators.displacement_flags`.
 
 ### 10.6 Silver Bullet Sessions / Killzones
 
