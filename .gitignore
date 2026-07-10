@@ -230,3 +230,8 @@ user_data/plot/
 # Golden dataset — artefatos parquet gerados pelo pipeline da Wave 6.2
 # (JSONs ratificados continuam versionados; .parquet é build artifact)
 smc_freqtrade/tests/golden/golden/*.parquet
+
+# Screens pré-congelamento — caches de indicadores (reprodutíveis, binários
+# grandes); os 7 scripts .py ficam versionados, os parquets não
+# (ver docs/DISCLOSURE_E_EMENDA_UNIVERSO_OOS.md)
+smc_freqtrade/experiments/screens-pre-congelamento/*.parquet
