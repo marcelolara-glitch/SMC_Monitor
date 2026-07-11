@@ -5,6 +5,7 @@
     "tradable_balance_ratio": 1.0,
     "fiat_display_currency": "USD",
     "timeframe": "15m",
+    "fee": 0.0005,
     "dry_run": true,
     "dry_run_wallet": 1000,
     "cancel_open_orders_on_exit": false,
@@ -68,8 +69,8 @@
     "internals": {
         "process_throttle_secs": 5
     },
-    "strategy": "SampleStrategy",
+    "strategy": "SMCStrategyCandidate",
     "strategy_path": "user_data/strategies/",
     "user_data_dir": "user_data",
-    "stoploss": -0.10
+    "stoploss": -0.99
 }
