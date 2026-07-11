@@ -44,7 +44,9 @@
         "pair_blacklist": []
     },
     "pairlists": [
-        {"method": "StaticPairList"}
+        {
+            "method": "StaticPairList"
+        }
     ],
     "telegram": {
         "enabled": false,
@@ -72,5 +74,6 @@
     "strategy": "SMCStrategyCandidate",
     "strategy_path": "user_data/strategies/",
     "user_data_dir": "user_data",
-    "stoploss": -0.99
+    "stoploss": -0.99,
+    "futures_funding_rate": 0
 }
