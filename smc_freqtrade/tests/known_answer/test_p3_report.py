@@ -53,7 +53,9 @@ from ka_data import (  # noqa: E402
     STAKE, DIRECTION_LONG, DIRECTION_SHORT,
     sl_anchor, profit_abs as hand_profit,
 )
-from tools.p3_report import compute_report, render_markdown, MIN_TRADES  # noqa: E402
+from tools.p3_report import (  # noqa: E402
+    compute_report, render_markdown, filter_window, MIN_TRADES,
+)
 
 _PRICE_TICK = 0.01     # espelha o market sintético (precision.price) da 10.2
 _ENTRY = 1000.0        # entrada = open[2] em todos os cenários KA
@@ -292,3 +294,104 @@ def test_skips_are_counted_not_silenced():
     assert rep["skipped_no_sid"] == 1
     assert rep["skipped_no_R"] == 1
     assert rep["sids"]["A3"].n == 1        # só o trade válido entra
+
+
+# ==========================================================================
+# Recorte de janela — `--window-start` (Wave 10.4): descarta pré-janela
+# ANTES da agregação; sem a flag, tudo entra (regressão do atual).
+# ==========================================================================
+
+def _synthetic_trades_dated(sid: str, dated_profits: list) -> pd.DataFrame:
+    """DataFrame sintético COM `open_date` por trade (para `--window-start`).
+
+    `dated_profits`: lista de `(open_date_str, profit_R)`. Espelha o padrão de
+    `_synthetic_trades` (entry=1000, stop=990 → amount*R_unit=1.0, logo
+    profit_abs == profit_R), acrescentando `open_date` tz-aware (UTC), como no
+    export real do freqtrade (`BT_DATA_COLUMNS`).
+    """
+    entry, sl, amount = 1000.0, 990.0, 0.1     # amount*|entry-sl| = 1.0
+    rows = []
+    for od, pr in dated_profits:
+        rows.append({
+            "enter_tag": f"{sid}_long",
+            "open_rate": entry,
+            "stop_loss_abs": sl,
+            "amount": amount,
+            "profit_abs": pr,                   # == profit_R
+            "is_short": False,
+            "open_date": pd.Timestamp(od, tz="UTC"),
+        })
+    return pd.DataFrame(rows)
+
+
+def test_window_start_excludes_pre_window_from_aggregates():
+    """Trades pré-janela NÃO entram em `n`/expectância; a contagem de descartados
+    é exata e o intervalo (min/max de open_date) dos descartados é reportado.
+    """
+    df = _synthetic_trades_dated("A3", [
+        ("2022-01-01", 0.5),    # pré-janela → descartado
+        ("2022-06-30", -0.2),   # pré-janela → descartado
+        ("2023-01-01", 1.0),    # na janela (== corte, inclusivo)
+        ("2023-05-01", 0.8),    # na janela
+    ])
+    kept, info = filter_window(df, "2023-01-01")
+
+    # (ii) contagem de descartados exata + intervalo dos descartados.
+    assert info["total"] == 4
+    assert info["discarded"] == 2
+    assert str(info["discarded_min"])[:10] == "2022-01-01"
+    assert str(info["discarded_max"])[:10] == "2022-06-30"
+
+    # (i) os pré-janela não entram em n/expectância (só os 2 da janela).
+    rep = compute_report(kept)
+    r = rep["sids"]["A3"]
+    assert r.n == 2
+    assert rep["n_trades"] == 2
+    assert r.soma_R == pytest.approx(1.8, abs=1e-9)          # 1.0 + 0.8
+    assert r.expectancy_R == pytest.approx(0.9, abs=1e-9)
+
+
+def test_window_start_boundary_is_inclusive():
+    """O corte é `open_date < window_start`: um trade exatamente em window_start
+    permanece na janela; um tick antes é descartado.
+    """
+    df = _synthetic_trades_dated("A3", [
+        ("2023-01-01", 0.5),    # == corte → entra
+        ("2022-12-31", 0.5),    # antes → descartado
+    ])
+    kept, info = filter_window(df, "2023-01-01")
+    assert info["discarded"] == 1
+    assert str(info["discarded_min"])[:10] == "2022-12-31"
+    assert compute_report(kept)["sids"]["A3"].n == 1
+
+
+def test_no_window_flag_keeps_all_trades():
+    """Sem `--window-start`, tudo entra (regressão do comportamento atual):
+    `compute_report` direto sobre o df completo conta todos os trades.
+    """
+    df = _synthetic_trades_dated("A3", [
+        ("2022-01-01", 0.5),    # seria pré-janela, mas sem flag entra
+        ("2023-01-01", 1.0),
+    ])
+    rep = compute_report(df)
+    assert rep["n_trades"] == 2
+    assert rep["sids"]["A3"].n == 2
+    assert rep["sids"]["A3"].soma_R == pytest.approx(1.5, abs=1e-9)
+
+
+def test_window_header_omits_pnl_of_discarded():
+    """O cabeçalho de transparência reporta total/descartados/intervalo, mas NÃO
+    imprime P&L dos descartados (§2.2 do briefing).
+    """
+    from tools.p3_report import render_window_header
+    df = _synthetic_trades_dated("A3", [
+        ("2022-01-01", 0.5),
+        ("2023-01-01", 1.0),
+    ])
+    _kept, info = filter_window(df, "2023-01-01")
+    header = render_window_header(info)
+    assert "trades no export: 2" in header
+    assert "descartados (pré-janela): 1" in header
+    assert "2022-01-01" in header               # intervalo dos descartados
+    # Nenhum P&L dos descartados vaza no cabeçalho.
+    assert "0.5" not in header and "profit" not in header.lower()

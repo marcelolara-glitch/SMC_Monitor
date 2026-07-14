@@ -243,6 +243,72 @@ def render_markdown(report: dict[str, Any], gates: bool = False) -> str:
     return "\n".join(lines + footer)
 
 
+def filter_window(trades: "Any", window_start: str):
+    """Recorta trades com `open_date < window_start` (pré-janela) ANTES da agregação.
+
+    OBJETIVO
+        Congelar a janela de avaliação do P3 no relatório: o warm-up é garantido
+        por timerange estendido (a `analyze()` é stateless sobre o df inteiro), e
+        os trades abertos antes da janela congelada são o "aquecimento" — não
+        entram em `n`/expectância. O corte é `open_date < window_start` (a data de
+        corte é inclusiva: `open_date == window_start` permanece na janela).
+    FONTE DE DADOS
+        Coluna `open_date` do export (`BT_DATA_COLUMNS` do `load_backtest_data`;
+        tz-aware UTC no export real). `window_start` = `YYYY-MM-DD` da CLI.
+    DEVOLVE
+        `(kept, info)` onde `kept` é o DataFrame só com trades na janela e `info`
+        traz `total`, `discarded` (contagem pré-janela) e o intervalo
+        `discarded_min`/`discarded_max` de `open_date` dos descartados (ou `None`
+        se nenhum) — transparência do recorte, SEM P&L dos descartados.
+    NÃO FAZER
+        Não tocar a fórmula de `compute_report` (agregação sobre `kept`).
+    """
+    import pandas as pd  # import diferido: só o caminho de CLI usa pandas aqui.
+
+    open_dates = pd.to_datetime(trades["open_date"])
+    cut = pd.Timestamp(window_start)
+    # Alinha tz do corte à coluna (export real é tz-aware UTC): evita o
+    # TypeError de comparar tz-aware com tz-naive.
+    col_tz = getattr(open_dates.dt, "tz", None)
+    if col_tz is not None and cut.tz is None:
+        cut = cut.tz_localize(col_tz)
+    elif col_tz is None and cut.tz is not None:
+        cut = cut.tz_localize(None)
+
+    pre_mask = open_dates < cut
+    discarded = trades[pre_mask]
+    kept = trades[~pre_mask]
+    info = {
+        "window_start": cut,
+        "total": int(len(trades)),
+        "discarded": int(pre_mask.sum()),
+        "discarded_min": (discarded["open_date"].min() if len(discarded) else None),
+        "discarded_max": (discarded["open_date"].max() if len(discarded) else None),
+    }
+    return kept, info
+
+
+def render_window_header(info: dict[str, Any]) -> str:
+    """Cabeçalho de transparência do recorte de janela (impresso no topo da saída).
+
+    Reporta o total de trades no export, quantos foram descartados como pré-janela
+    e o intervalo (min/max de `open_date`) dos descartados. Sem P&L dos
+    descartados (§2.2 do briefing 10.4). Só é emitido quando `--window-start` é
+    passado — sem a flag a saída é byte-idêntica à anterior.
+    """
+    lines = [
+        f"# Recorte de janela (Wave 10.4): mantém open_date >= {info['window_start']}",
+        f"# trades no export: {info['total']} · "
+        f"descartados (pré-janela): {info['discarded']}",
+    ]
+    if info["discarded"]:
+        lines.append(
+            "# intervalo dos descartados (open_date): "
+            f"{info['discarded_min']} … {info['discarded_max']}"
+        )
+    return "\n".join(lines)
+
+
 def load_trades(path: "str | Path"):
     """Carrega o export de trades via `load_backtest_data` (freqtrade 2026.3).
 
@@ -269,9 +335,23 @@ def main(argv: "list[str] | None" = None) -> int:
         action="store_true",
         help="anexa colunas de veredito GE-1/GE-2 (doc §3)",
     )
+    parser.add_argument(
+        "--window-start",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help=(
+            "recorta a janela congelada do P3: descarta trades com "
+            "open_date < YYYY-MM-DD (pré-janela / warm-up) antes de qualquer "
+            "agregação; imprime um cabeçalho de transparência do recorte. Sem "
+            "a flag, comportamento inalterado."
+        ),
+    )
     args = parser.parse_args(argv)
 
     trades = load_trades(args.export)
+    if args.window_start:
+        trades, info = filter_window(trades, args.window_start)
+        print(render_window_header(info))
     report = compute_report(trades)
     print(render_markdown(report, gates=args.gates))
     return 0
