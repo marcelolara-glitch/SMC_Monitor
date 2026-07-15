@@ -106,6 +106,27 @@ class SMCStrategyCandidate(SMCStrategy):
     # candidata NÃO reabre `hybrid` nesta wave.
     entry_mode: str = "strict"
 
+    # Warm-up (Wave 10.4 — ratificação; base `SMCStrategy` intocada em 3200).
+    # Sobrescrito SÓ na Candidate para caber no teto de startup da OKX:
+    #   (i) teto OKX 5×300 — `freqtrade/exchange/okx.py:78-79` retorna 300
+    #       (`if candle_type in (CandleType.FUTURES, CandleType.SPOT): return
+    #       300`) e `freqtrade/exchange/exchange.py:873`
+    #       (`validate_required_startup_candles`, linhas ~887-897) só admite 5
+    #       chamadas por par ⇒ máx. `candle_limit*5 − 1` = 300*5 − 1 = 1499
+    #       (versão instalada: freqtrade 2026.3). O antigo 3200 estourava esse
+    #       teto e reprovava na validação de startup do freqtrade.
+    #   (ii) a convergência do ATR(200) 4H NÃO depende mais do startup: ela é
+    #       garantida operacionalmente pelo **timerange estendido** do P3 (início
+    #       ≥ 466 dias antes da janela congelada), já que `analyze()` é stateless
+    #       sobre o dataframe carregado inteiro — o warm-up de 3200 candles 15m
+    #       (≈200 candles 4H) era insuficiente para os ~2,8k candles 4H de
+    #       convergência de qualquer forma. A janela congelada é recortada no
+    #       relatório (`tools/p3_report.py --window-start`).
+    #   (iii) ratificação: Wave 10.4; docs/AUDITORIA_CAUSALIDADE_W10.0.md §6.3
+    #       (ratificação concluída — a fixação empírica do startup deixa de ser
+    #       o mecanismo de warm-up).
+    startup_candle_count: int = 1499
+
     # ------------------------------------------------------------------
     # Indicadores — analyze → tag_sessions → multi(Grupo C) → multi(Grupo R)
     # ------------------------------------------------------------------
