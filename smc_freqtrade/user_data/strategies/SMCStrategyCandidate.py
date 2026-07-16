@@ -14,9 +14,12 @@ OBJETIVO
     colunas sufixadas `{col}__{sid}` com `sid` parseado do `enter_tag`.
 
 FONTE DE DADOS
-    - Indicadores: `smc_engine.analyze` (base 15m sobre o df já mergeado com
-      `_1h`/`_4h` pelo `@informative` herdado), `smc_engine.tag_sessions` (as
-      3 killzones que a A7 exige em `required_base`) e
+    - Indicadores: `smc_engine.analyze` chamado 3× (base 15m + informativos 1h e
+      4h obtidos por `self.dp.get_pair_dataframe`), mergeados pelo pipeline de
+      paridade golden (`tools.mtf_align.align_informative`, sufixos `_1h`/`_4h`)
+      — NÃO mais pelo `@informative` herdado (neutralizado nesta wave, §1 do
+      briefing 10.5); `smc_engine.tag_sessions` (as 3 killzones que a A7 exige em
+      `required_base`) e
       `smc_engine.setup_state.compute_setup_state_multi` (uma chamada por
       grupo; anexa `{col}__{sid}` para as 7 `SETUP_OUTPUT_COLUMNS`, sids
       disjuntos entre grupos → sem colisão).
@@ -64,6 +67,17 @@ from smc_engine.setup_state import (  # noqa: E402
     DIRECTION_LONG,
     DIRECTION_SHORT,
 )
+
+# Pipeline de paridade teste↔produção (Wave 10.5): a Candidate monta o MTF pelo
+# MESMO helper que TODOS os testes golden/engine usam (`align_informative`,
+# espelho de `merge_informative_pair`) em vez do merge herdado do `@informative`.
+# Importado pelo mesmo mecanismo `_SUBPROJECT_ROOT` já usado para `smc_engine`
+# (o resolver do Freqtrade só adiciona o diretório da estratégia ao path). A nota
+# "não usar em produção" na docstring de `tools/mtf_align.py` reflete a
+# arquitetura Wave 10 (@informative herdado) e é superada por esta wave — ver a
+# adjudicação §1 do briefing 10.5 (paridade teste↔produção) e a docstring de
+# `populate_indicators` abaixo. `tools/mtf_align.py` NÃO é tocado (§4).
+from tools.mtf_align import align_informative  # noqa: E402
 
 # Import da base e das configs congeladas (mesmo diretório de estratégias, que
 # o resolver do Freqtrade adiciona ao path).
@@ -128,36 +142,141 @@ class SMCStrategyCandidate(SMCStrategy):
     startup_candle_count: int = 1499
 
     # ------------------------------------------------------------------
-    # Indicadores — analyze → tag_sessions → multi(Grupo C) → multi(Grupo R)
+    # Neutralização dos `@informative` herdados (Wave 10.5, §2.1 do briefing)
+    #
+    # A base `SMCStrategy` decora `populate_indicators_4h`/`populate_indicators_1h`
+    # com `@informative`, o que registra os informativos em `_ft_informative` (o
+    # Freqtrade coleta os informativos varrendo `dir(self.__class__)` por métodos
+    # com o atributo `_ft_informative`). Sobrescrevendo esses métodos SEM o
+    # decorador, a versão do filho não carrega `_ft_informative` e o registro sai
+    # de `SMCStrategyCandidate._ft_informative` (fica vazio) — mecanismo já provado
+    # na `KnownAnswerStrategy`. Assim o merge `@informative` herdado (e seu branch
+    # de preenchimento de head em `merge_informative_pair`, que crashou o P3 em
+    # `freqtrade/strategy/strategy_helper.py:96-109` com warm-up de 1499) sai do
+    # grafo de execução; o MTF passa a ser montado pelo pipeline golden em
+    # `populate_indicators`. Corpos no-op (não fazem merge nem tocam o df).
+    # ------------------------------------------------------------------
+
+    def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        """No-op — substituído pelo pipeline de paridade (ver populate_indicators).
+
+        Sobrescreve o método `@informative('4h')` da base SEM decorador para
+        esvaziar `_ft_informative` (§2.1). O 4H passa a entrar pela chamada
+        `analyze(dp.get_pair_dataframe(pair, '4h')).df` +
+        `align_informative(..., suffix='4h')` em `populate_indicators`.
+        """
+        return dataframe
+
+    def populate_indicators_1h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        """No-op — substituído pelo pipeline de paridade (ver populate_indicators).
+
+        Sobrescreve o método `@informative('1h')` da base SEM decorador para
+        esvaziar `_ft_informative` (§2.1). O 1H passa a entrar pela chamada
+        `analyze(dp.get_pair_dataframe(pair, '1h')).df` +
+        `align_informative(..., suffix='1h')` em `populate_indicators`.
+        """
+        return dataframe
+
+    def informative_pairs(self):
+        """Registra os informativos 1h/4h do par corrente (mecanismo clássico).
+
+        OBJETIVO
+            Como os `@informative` herdados foram neutralizados (§2.1), o
+            Freqtrade precisa saber quais pares/TFs pré-carregar para que
+            `self.dp.get_pair_dataframe(pair, '1h'|'4h')` (consumido em
+            `populate_indicators`) tenha dados. Retorna as tuplas
+            `(pair, '1h')`/`(pair, '4h')` para cada par da whitelist corrente —
+            o formato canônico do Freqtrade ("The pairs need to be specified as
+            tuples in the format `("pair", "timeframe")`" — doc verificado em
+            `docs/VERIFICACAO_FREQTRADE.md §2.1`, verbatim da versão instalada).
+        FONTE DE DADOS
+            `self.dp.current_whitelist()` (padrão canônico do `informative_pairs`
+            clássico — cobre backtest/live sem hardcodar o par).
+        LIMITAÇÕES CONHECIDAS
+            Sem `self.dp` (não injetado ainda) → lista vazia; o fail-loud da
+            ausência de informativo fica em `populate_indicators` (guarda §2.4).
+        NÃO FAZER
+            Não retornar TFs fora de {'1h','4h'} (os únicos que a candidata
+            mergeia); não reativar o `@informative` herdado.
+        """
+        if self.dp is None:
+            return []
+        pairs = self.dp.current_whitelist()
+        return [(pair, tf) for pair in pairs for tf in ("1h", "4h")]
+
+    # ------------------------------------------------------------------
+    # Indicadores — pipeline de paridade golden:
+    #   analyze(15m) → analyze(1h) → analyze(4h)
+    #   → align_informative(_1h) → align_informative(_4h)
+    #   → tag_sessions → multi(Grupo C) → multi(Grupo R)
     # ------------------------------------------------------------------
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        """Engine base 15m + killzones + FSM multi por grupo congelado.
+        """Pipeline MTF de paridade teste↔produção + FSM multi por grupo.
 
         OBJETIVO
-            Sobre o df já mergeado com `_1h`/`_4h` (`@informative` herdado):
-            (1) `analyze()` para as colunas base 15m; (2) `tag_sessions()`
-            para as 3 killzones Silver Bullet (a A7 do Grupo R as exige em
-            `required_base`, e a base `SMCStrategy` não as taggeia); (3)
-            `compute_setup_state_multi(df, build_cfg_c())` e, sobre o df já
-            contendo as colunas do Grupo C, `compute_setup_state_multi(df,
-            build_cfg_r())`. Os sids são disjuntos entre grupos, então as
-            colunas `{col}__{sid}` não colidem (a função copia e anexa).
+            Montar o input multi-TF pelo MESMO pipeline que TODOS os testes
+            golden/engine usam (§1 do briefing 10.5), abandonando o merge
+            `@informative` herdado (neutralizado em `populate_indicators_1h/4h`):
+            (1) `analyze()` na base 15m; (2) `analyze()` nos informativos 1h e 4h
+            (`self.dp.get_pair_dataframe(pair, '1h'|'4h')`); (3)
+            `align_informative` (espelho de `merge_informative_pair`,
+            lookahead-safe) mergeando 1h e depois 4h com sufixos `_1h`/`_4h`
+            idênticos aos dos testes; (4) `tag_sessions()` para as 3 killzones
+            Silver Bullet (a A7 do Grupo R as exige em `required_base`, e a base
+            não as taggeia); (5) `compute_setup_state_multi(df, build_cfg_c())` e,
+            sobre o df já com as colunas do Grupo C,
+            `compute_setup_state_multi(df, build_cfg_r())`. Sids disjuntos entre
+            grupos → colunas `{col}__{sid}` não colidem (a função copia e anexa).
         FONTE DE DADOS
-            `analyze(dataframe).df`, `tag_sessions(df)`,
-            `compute_setup_state_multi` (uma chamada por grupo, configs
-            congeladas de `candidate_frozen`).
+            `analyze(dataframe).df` (base 15m); `analyze(dp.get_pair_dataframe(
+            pair, '1h'|'4h')).df` (informativos); `align_informative` (de
+            `tools.mtf_align`); `tag_sessions`; `compute_setup_state_multi` (uma
+            chamada por grupo, configs congeladas de `candidate_frozen`). `pair`
+            vem de `metadata['pair']`.
         LIMITAÇÕES CONHECIDAS
             Não emite colunas `setup_*` agregadas (sem sufixo): a decisão D3 é
             de `populate_entry_trend`. Ledgers descartados (idioma da base).
         NÃO FAZER
-            Não arbitrar prioridade aqui; não setar sinais (é na entrada).
+            Não arbitrar prioridade aqui; não setar sinais (é na entrada); não
+            prosseguir com informativo ausente (guarda fail-loud abaixo — §2.4).
         """
-        dataframe = analyze(dataframe).df
-        dataframe = tag_sessions(dataframe)
-        dataframe = compute_setup_state_multi(dataframe, build_cfg_c())
-        dataframe = compute_setup_state_multi(dataframe, build_cfg_r())
-        return dataframe
+        pair = metadata["pair"]
+
+        # Guarda fail-loud (§2.4): sem `dp` ou informativo vazio, PARAR — nunca
+        # prosseguir com colunas `_1h`/`_4h` ausentes (o merge silencioso
+        # produziria um df sem viés/zona e uma candidata muda, indistinguível de
+        # "sem edge"). `require_candidate_columns` cobre a jusante, mas aqui a
+        # causa é a fonte de dados, não a fiação da FSM.
+        if self.dp is None:
+            raise RuntimeError(
+                "SMCStrategyCandidate.populate_indicators: self.dp indisponível — "
+                "o pipeline de paridade (Wave 10.5) exige os informativos 1h/4h "
+                "via dp.get_pair_dataframe; sem DataProvider não há como montar o "
+                "MTF (§2.4). Verifique informative_pairs()/config."
+            )
+
+        inf_1h = self.dp.get_pair_dataframe(pair, "1h")
+        inf_4h = self.dp.get_pair_dataframe(pair, "4h")
+        for tf, inf in (("1h", inf_1h), ("4h", inf_4h)):
+            if inf is None or len(inf) == 0:
+                raise RuntimeError(
+                    f"SMCStrategyCandidate.populate_indicators: informativo {tf} "
+                    f"vazio/ausente para {pair!r} — o pipeline de paridade exige "
+                    f"1h e 4h não-vazios para align_informative (§2.4). Verifique "
+                    f"informative_pairs() e o histórico disponível do par."
+                )
+
+        base = analyze(dataframe).df
+        res_1h = analyze(inf_1h).df
+        res_4h = analyze(inf_4h).df
+
+        merged = align_informative(base, res_1h, "15m", "1h", suffix="1h")
+        merged = align_informative(merged, res_4h, "15m", "4h", suffix="4h")
+        merged = tag_sessions(merged)
+        merged = compute_setup_state_multi(merged, build_cfg_c())
+        merged = compute_setup_state_multi(merged, build_cfg_r())
+        return merged
 
     # ------------------------------------------------------------------
     # Entrada — coleta CONFIRMED por sid, arbitra D3, emite vencedor

@@ -70,6 +70,20 @@ def _merged_base() -> pd.DataFrame:
     return merged
 
 
+class _StubDataProvider:
+    """dp duck-typed para o novo contrato de `populate_indicators` (Wave 10.5).
+
+    A partir da Wave 10.5 a Candidate monta o MTF pelo pipeline de paridade
+    golden e busca os informativos 1h/4h por `dp.get_pair_dataframe` (§2.3 do
+    briefing 10.5) — o merge `@informative` herdado foi neutralizado. Este stub
+    devolve o golden 1h/4h para o par de teste, permitindo rodar o
+    `populate_indicators` real ponta a ponta a partir da base 15m crua.
+    """
+
+    def get_pair_dataframe(self, pair: str, timeframe: str) -> pd.DataFrame:
+        return _load_golden(timeframe)
+
+
 def _strategy() -> SMCStrategyCandidate:
     from freqtrade.enums import CandleType
 
@@ -112,8 +126,13 @@ def test_t1_strategy_loads_strict():
 # ============================================================
 
 def test_t2_populate_indicators_appends_nine_state_columns():
+    # Wave 10.5: `populate_indicators` passou a montar o MTF pelo pipeline de
+    # paridade golden, buscando 1h/4h via `dp.get_pair_dataframe` (§2.3). Injeta
+    # o stub de dp e passa a base 15m CRUA (não mais pré-mergeada) — o merge
+    # `_1h`/`_4h` agora é interno ao método.
     strat = _strategy()
-    out = strat.populate_indicators(_merged_base(), {"pair": "BTC/USDT:USDT"})
+    strat.dp = _StubDataProvider()
+    out = strat.populate_indicators(_load_golden("15m"), {"pair": "BTC/USDT:USDT"})
     for sid in _ALL_SIDS:
         assert f"setup_state__{sid}" in out.columns
         assert f"setup_zone_low__{sid}" in out.columns
