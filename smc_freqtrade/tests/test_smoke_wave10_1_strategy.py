@@ -98,11 +98,16 @@ def _entry_df(rows: list[dict], n: int) -> pd.DataFrame:
     """df sintético com as 9 colunas `setup_state__{sid}`/`setup_direction__{sid}`.
 
     `rows` é uma lista de dicts `{sid: (state, direction)}` por vela; sids não
-    citados ficam neutros (None/None)."""
+    citados ficam neutros (`pd.NA`/`pd.NA`).
+
+    DTYPE (Wave 10.7): estado/direção são pandas StringDtype (sentinela `pd.NA`),
+    espelhando a saída real de `compute_setup_state_multi` (`setup_state.py:1977-
+    1983`) — NÃO object/`None`. Sem essa paridade de dtype o crash do P3
+    (`boolean value of NA is ambiguous`) não se manifesta no sintético."""
     data: dict = {"date": [_dt(i) for i in range(n)]}
     for sid in _ALL_SIDS:
-        data[f"setup_state__{sid}"] = [None] * n
-        data[f"setup_direction__{sid}"] = [None] * n
+        data[f"setup_state__{sid}"] = pd.array([None] * n, dtype="string")
+        data[f"setup_direction__{sid}"] = pd.array([None] * n, dtype="string")
     df = pd.DataFrame(data)
     for i, row in enumerate(rows):
         for sid, (state, direction) in row.items():
