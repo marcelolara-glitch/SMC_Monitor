@@ -177,9 +177,23 @@ def align_informative(
                 first_valid_date_merge = out.at[first_valid_idx, date_merge_col]
                 prior = inf[inf[date_merge_col] < first_valid_date_merge]
                 if not prior.empty:
+                    # Preenche NaN do head com o último candle informative
+                    # anterior à janela. Entradas `None` são excluídas do
+                    # mapa de fill: preencher NaN com `None` é no-op por
+                    # definição — pular a entrada é idêntico ao pretendido, e
+                    # evita o `ValueError: Must specify a fill 'value' or
+                    # 'method'` que o `fillna` dict-like levanta ao receber
+                    # `None` por coluna (colunas object como
+                    # equal_{high,low}_pivot_indices sem pivot acumulado).
+                    # Semântica: colunas cujo valor prévio é `None`
+                    # permanecem vazias no head (estado correto — não havia
+                    # pivot equal acumulado antes do primeiro candle fechado).
+                    fill = {
+                        k: v for k, v in prior.iloc[-1].items() if v is not None
+                    }
                     out.loc[: first_valid_idx - 1] = out.loc[
                         : first_valid_idx - 1
-                    ].fillna(prior.iloc[-1])
+                    ].fillna(fill)
     else:
         out = pd.merge(
             base, inf, left_on=date_column, right_on=date_merge_col, how='left'
