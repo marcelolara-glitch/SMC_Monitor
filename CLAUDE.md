@@ -34,3 +34,6 @@ copiável direto pelo Termius mobile.
 
 Ao abrir o PR, sempre informar no chat o **nome exato** da branch
 criada e o número do PR.
+
+## Proibição permanente
+- NUNCA oferecer monitoramento de PR, inscrição em eventos ou autofix. Adjudicação e emendas ocorrem exclusivamente via chat com o Marcelo/analista.
