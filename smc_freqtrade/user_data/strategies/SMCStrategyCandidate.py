@@ -99,6 +99,21 @@ _ALL_SIDS: tuple = SIDS_GRUPO_C + SIDS_GRUPO_R
 COL_SETUP_CONFLICT_DIRS = "setup_conflict_dirs"
 
 
+def _na_to_none(v):
+    """Coerção NA-safe de um valor escalar lido de coluna da engine → `None`.
+
+    A engine emite `setup_state/direction/id/signature/invalidation_reason` como
+    pandas StringDtype (`setup_state.py:1977-1983`), cujo sentinela de ausência é
+    `pd.NA`; as zonas (`setup_zone_low/high`) são float64 (sentinela `NaN`). Um
+    `pd.NA`/`NaN` avaliado em contexto booleano (`if v`, `v in (...)`) ou
+    formatado numa tag levanta `TypeError: boolean value of NA is ambiguous`. Esta
+    coerção normaliza qualquer nulo (`pd.NA`/`NaN`/`None`) para `None` — que é
+    falsy e comparável sem ambiguidade — preservando o valor real quando presente.
+    Escalar apenas (as 7 `SETUP_OUTPUT_COLUMNS` são escalares por vela).
+    """
+    return None if pd.isna(v) else v
+
+
 class SMCStrategyCandidate(SMCStrategy):
     """Executa a candidata congelada (2 grupos) com arbitragem D3 no consumidor.
 
@@ -327,24 +342,34 @@ class SMCStrategyCandidate(SMCStrategy):
 
         # Extrai estado/direção por sid (colunas garantidas presentes pela
         # guarda `require_candidate_columns` acima — acesso direto, sem fallback).
-        states: dict = {}
+        #
+        # `setup_state__{sid}` é StringDtype (sentinela `pd.NA`); a máscara
+        # CONFIRMED é derivada na **Series**, com `.fillna(False)` — nunca no
+        # ndarray object — para não propagar `pd.NA` até o `|=` (que chamaria
+        # `NAType.__bool__` e levantaria `boolean value of NA is ambiguous`).
+        # Mesmo padrão NA-safe da engine (`setup_state.py:533`), robusto a
+        # object/None e string/NA. A direção é lida por valor e coagida com
+        # `_na_to_none` antes de qualquer teste booleano (`in (...)`).
+        confirmed: dict = {}
         dirs: dict = {}
         for sid in _ALL_SIDS:
             scol = f"setup_state__{sid}"
             dcol = f"setup_direction__{sid}"
-            states[sid] = dataframe[scol].to_numpy(dtype=object)
+            confirmed[sid] = (
+                (dataframe[scol] == STATE_CONFIRMED).fillna(False).to_numpy(dtype=bool)
+            )
             dirs[sid] = dataframe[dcol].to_numpy(dtype=object)
 
         # Máscara vetorizada: velas com pelo menos um sid CONFIRMED.
         any_confirmed = np.zeros(n, dtype=bool)
         for sid in _ALL_SIDS:
-            any_confirmed |= states[sid] == STATE_CONFIRMED
+            any_confirmed |= confirmed[sid]
 
         for i in np.nonzero(any_confirmed)[0]:
             cands: list = []
             for sid in _ALL_SIDS:
-                if states[sid][i] == STATE_CONFIRMED:
-                    d = dirs[sid][i]
+                if confirmed[sid][i]:
+                    d = _na_to_none(dirs[sid][i])
                     if d in (DIRECTION_LONG, DIRECTION_SHORT):
                         cands.append((sid, d))
             winner_sid, direction, reason = arbitrate_d3(cands)
@@ -414,7 +439,10 @@ class SMCStrategyCandidate(SMCStrategy):
         rows = causal[causal[idcol].notna()]
         if rows.empty:
             return None
-        return rows.iloc[-1][idcol]
+        # `setup_id__{sid}` é StringDtype: coage o escalar (`pd.NA`→`None`) antes
+        # de virar chave de `custom_data` (§2.1). `.notna()` já filtrou nulos, mas
+        # a coerção mantém o contrato de valor limpo (nunca devolver `pd.NA`).
+        return _na_to_none(rows.iloc[-1][idcol])
 
     def _causal_setup_row(self, pair, trade, current_time):
         """Última linha causal do sid do trade, normalizada para nomes base.
@@ -447,13 +475,21 @@ class SMCStrategyCandidate(SMCStrategy):
         if setup_id is None:
             return None
         causal = df[df["date"] <= current_time]
-        rows = causal[causal[idcol] == setup_id]
+        # `setup_id__{sid} == setup_id` sobre StringDtype devolve um BooleanArray
+        # anulável (NA onde o id é `pd.NA`); indexar com NA levantaria
+        # `cannot mask with array containing NA`. `.fillna(False)` densifica a
+        # máscara (mesmo padrão NA-safe do consumo de estado, §2.1).
+        mask = (causal[idcol] == setup_id).fillna(False).to_numpy(dtype=bool)
+        rows = causal[mask]
         if rows.empty:
             return None
         row = rows.iloc[-1]
-        # Normaliza `{col}__{sid}` → `{col}` para os helpers herdados.
+        # Normaliza `{col}__{sid}` → `{col}` para os helpers herdados, coagindo
+        # nulos StringDtype/float (`pd.NA`/`NaN`) para `None` antes que os helpers
+        # da base os avaliem em contexto booleano (`setup_state == INVALIDATED`,
+        # checagem NaN da zona) — §2.1.
         return pd.Series(
-            {col: row.get(f"{col}__{sid}") for col in SETUP_OUTPUT_COLUMNS}
+            {col: _na_to_none(row.get(f"{col}__{sid}")) for col in SETUP_OUTPUT_COLUMNS}
         )
 
     def order_filled(self, pair, trade, order, current_time, **kwargs):

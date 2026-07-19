@@ -249,6 +249,21 @@ def build_ohlcv(name: str) -> pd.DataFrame:
     return df
 
 
+def _string_col(value, n: int) -> pd.array:
+    """Coluna StringDtype de `n` linhas — espelha o dtype REAL da engine.
+
+    A engine emite `setup_id/signature/state/direction/invalidation_reason` como
+    pandas StringDtype (`pd.array(..., dtype='string')`, `setup_state.py:1977-1983`),
+    cujo sentinela de ausência é `pd.NA` — NÃO `None`/object. Os fixtures antigos
+    injetavam essas colunas como object/`None`, obtendo paridade de VALOR sem
+    paridade de DTYPE: o crash do P3 (`boolean value of NA is ambiguous`) só surge
+    com `pd.NA`, então os testes nunca o pegavam (§1 do briefing 10.7). Este helper
+    fecha o gap. `value` escalar é broadcast; lista é usada verbatim.
+    """
+    values = value if isinstance(value, list) else [value] * n
+    return pd.array(values, dtype="string")
+
+
 def build_setup_columns(name: str, dataframe: pd.DataFrame) -> pd.DataFrame:
     """Injeta as 7 `SETUP_OUTPUT_COLUMNS` sufixadas (`{col}__{sid}`) dos 9 sids.
 
@@ -259,20 +274,28 @@ def build_setup_columns(name: str, dataframe: pd.DataFrame) -> pd.DataFrame:
     a partir de `invalidate_idx` (se houver), `PENDING_CONFIRMATION` nas demais.
     Sids sem evento ficam inteiramente inativos (estado/valores nulos) — mas
     presentes, satisfazendo `require_candidate_columns`.
+
+    DTYPE (Wave 10.7): as colunas de string (`id/signature/state/direction/
+    invalidation_reason`) são injetadas como pandas StringDtype (sentinela
+    `pd.NA`) via `_string_col`, espelhando a saída real de
+    `compute_setup_state_multi`; as zonas são float64 (sentinela `NaN`). Assim o
+    harness exercita o MESMO material de dtype que a produção alimenta a
+    `populate_entry_trend`.
     """
     sc = SCENARIOS[name]
     n = len(dataframe)
     df = dataframe.copy()
 
-    # Default: todos os sids inativos (colunas presentes, valores nulos).
+    # Default: todos os sids inativos (colunas presentes, valores nulos) — string
+    # cols como StringDtype/`pd.NA`, zonas como float64/`NaN` (paridade de dtype).
     for sid in ALL_SIDS:
-        df[f"setup_id__{sid}"] = None
-        df[f"setup_signature__{sid}"] = None
-        df[f"setup_state__{sid}"] = None
-        df[f"setup_direction__{sid}"] = None
+        df[f"setup_id__{sid}"] = _string_col(None, n)
+        df[f"setup_signature__{sid}"] = _string_col(None, n)
+        df[f"setup_state__{sid}"] = _string_col(None, n)
+        df[f"setup_direction__{sid}"] = _string_col(None, n)
         df[f"setup_zone_low__{sid}"] = np.nan
         df[f"setup_zone_high__{sid}"] = np.nan
-        df[f"setup_invalidation_reason__{sid}"] = None
+        df[f"setup_invalidation_reason__{sid}"] = _string_col(None, n)
 
     for sid, ev in sc["sids"].items():
         sig_idx = ev["signal_idx"]
@@ -282,10 +305,10 @@ def build_setup_columns(name: str, dataframe: pd.DataFrame) -> pd.DataFrame:
         if inval_idx is not None:
             for i in range(inval_idx, n):
                 state[i] = STATE_INVALIDATED
-        df[f"setup_id__{sid}"] = ev["setup_id"]
-        df[f"setup_signature__{sid}"] = sid
-        df[f"setup_state__{sid}"] = state
-        df[f"setup_direction__{sid}"] = ev["direction"]
+        df[f"setup_id__{sid}"] = _string_col(ev["setup_id"], n)
+        df[f"setup_signature__{sid}"] = _string_col(sid, n)
+        df[f"setup_state__{sid}"] = _string_col(state, n)
+        df[f"setup_direction__{sid}"] = _string_col(ev["direction"], n)
         df[f"setup_zone_low__{sid}"] = ev["zone_low"]
         df[f"setup_zone_high__{sid}"] = ev["zone_high"]
     return df
